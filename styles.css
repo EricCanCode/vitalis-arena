@@ -1363,12 +1363,48 @@ body {
 
 /* Responsive Design */
 @media (max-width: 768px) {
+    #characterSelect {
+        padding: 20px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
     #characterSelect h1 {
-        font-size: 2em;
+        font-size: 1.8em;
+        margin-bottom: 5px;
+    }
+    
+    .game-subtitle {
+        font-size: 1em;
+        margin-bottom: 15px;
     }
     
     .character-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 15px;
+        padding: 10px;
+    }
+    
+    .character-card {
+        padding: 15px;
+    }
+    
+    .character-sprite {
+        width: 80px;
+        height: 80px;
+    }
+    
+    .character-card h2 {
+        font-size: 1.2em;
+    }
+    
+    .character-ability,
+    .character-desc {
+        font-size: 0.8em;
+    }
+    
+    .character-stats {
+        font-size: 0.75em;
     }
     
     .hud-top {
@@ -1474,6 +1510,76 @@ body {
     .screen {
         height: 100vh;
         height: 100dvh;
+    }
+}
+
+/* Landscape mobile optimization */
+@media (max-height: 500px) and (orientation: landscape) {
+    #characterSelect {
+        padding: 10px 20px;
+    }
+    
+    #characterSelect h1 {
+        font-size: 1.5em;
+        margin-bottom: 3px;
+    }
+    
+    .game-subtitle {
+        font-size: 0.9em;
+        margin-bottom: 10px;
+    }
+    
+    .achievements-button,
+    .menu-shop-button {
+        top: 10px;
+        left: 10px;
+        padding: 8px 16px;
+        font-size: 0.85em;
+    }
+    
+    .inventory-button {
+        bottom: 10px;
+        padding: 8px 16px;
+        font-size: 0.85em;
+    }
+    
+    .character-grid {
+        grid-template-columns: repeat(5, 1fr);
+        gap: 10px;
+        max-width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .character-card {
+        padding: 10px;
+        min-width: 140px;
+    }
+    
+    .character-sprite {
+        width: 60px;
+        height: 60px;
+    }
+    
+    .character-card h2 {
+        font-size: 1em;
+        margin-bottom: 5px;
+    }
+    
+    .character-ability {
+        font-size: 0.7em;
+        margin-bottom: 3px;
+    }
+    
+    .character-desc {
+        font-size: 0.65em;
+        margin-bottom: 5px;
+        min-height: auto;
+    }
+    
+    .character-stats {
+        font-size: 0.6em;
+        gap: 2px;
     }
 }
 
