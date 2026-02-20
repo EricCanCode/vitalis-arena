@@ -218,7 +218,14 @@ class Game {
         this.canvas.style.width = width + 'px';
         this.canvas.style.height = height + 'px';
         
-        // Ensure parent containers are also sized correctly
+        // Resize ALL screens to match viewport (fixes Safari browser chrome issue)
+        const screens = document.querySelectorAll('.screen');
+        screens.forEach(screen => {
+            screen.style.width = width + 'px';
+            screen.style.height = height + 'px';
+        });
+        
+        // Ensure game screen container is also sized correctly
         const gameScreen = document.getElementById('gameScreen');
         if (gameScreen && gameScreen.classList.contains('active')) {
             gameScreen.style.width = width + 'px';
