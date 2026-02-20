@@ -154,11 +154,53 @@ class Game {
         this.loadSavedEquipment();
         
         window.addEventListener('resize', () => this.resizeCanvas());
+        
+        // Mobile orientation and fullscreen handling
+        this.setupMobileDisplay();
+    }
+    
+    setupMobileDisplay() {
+        // Detect if on mobile
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        if (isMobile) {
+            // Request fullscreen when game starts
+            const requestFullscreen = () => {
+                const elem = document.documentElement;
+                if (elem.requestFullscreen) {
+                    elem.requestFullscreen().catch(err => console.log('Fullscreen error:', err));
+                } else if (elem.webkitRequestFullscreen) {
+                    elem.webkitRequestFullscreen();
+                } else if (elem.msRequestFullscreen) {
+                    elem.msRequestFullscreen();
+                }
+                
+                // Lock to landscape orientation
+                if (screen.orientation && screen.orientation.lock) {
+                    screen.orientation.lock('landscape').catch(err => console.log('Orientation lock error:', err));
+                }
+            };
+            
+            // Wait for user interaction before requesting fullscreen
+            const startGameHandler = () => {
+                requestFullscreen();
+                document.removeEventListener('touchstart', startGameHandler);
+            };
+            document.addEventListener('touchstart', startGameHandler, { once: true });
+        }
     }
     
     resizeCanvas() {
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
+        // Use actual device dimensions
+        const width = window.innerWidth || document.documentElement.clientWidth;
+        const height = window.innerHeight || document.documentElement.clientHeight;
+        
+        this.canvas.width = width;
+        this.canvas.height = height;
+        
+        // Force canvas to fill screen on mobile
+        this.canvas.style.width = width + 'px';
+        this.canvas.style.height = height + 'px';
     }
     
     setupInputHandlers() {
