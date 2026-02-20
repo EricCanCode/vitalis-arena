@@ -187,12 +187,35 @@ class Game {
                 }
             };
             
-            // Wait for user interaction before requesting fullscreen
-            const startGameHandler = () => {
-                requestFullscreen();
-                document.removeEventListener('touchstart', startGameHandler);
-            };
-            document.addEventListener('touchstart', startGameHandler, { once: true });
+            // Request fullscreen on any touch interaction
+            document.addEventListener('touchstart', () => {
+                if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                    requestFullscreen();
+                }
+            }, { once: true });
+            
+            // Re-request fullscreen if user exits it
+            document.addEventListener('fullscreenchange', () => {
+                if (!document.fullscreenElement) {
+                    // Give a short delay before re-requesting
+                    setTimeout(() => {
+                        if (!document.fullscreenElement) {
+                            requestFullscreen();
+                        }
+                    }, 1000);
+                }
+            });
+            
+            // Listen for webkit fullscreen changes (Safari)
+            document.addEventListener('webkitfullscreenchange', () => {
+                if (!document.webkitFullscreenElement) {
+                    setTimeout(() => {
+                        if (!document.webkitFullscreenElement) {
+                            requestFullscreen();
+                        }
+                    }, 1000);
+                }
+            });
         }
     }
     
