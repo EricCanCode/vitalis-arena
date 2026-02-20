@@ -742,12 +742,11 @@ class Game {
             if (this.bossWarningTime <= 0) {
                 this.bossWarning = false;
                 document.getElementById('bossWarning').classList.remove('active');
+                // Spawn boss immediately when warning timer ends
+                if (!this.bossActive) {
+                    this.spawnBoss();
+                }
             }
-        }
-        
-        // Spawn boss when stage time limit is reached
-        if (!this.bossActive && stageTime >= this.stageTimeLimit) {
-            this.spawnBoss();
         }
         
         // Check if boss is defeated
