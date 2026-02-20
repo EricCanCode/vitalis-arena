@@ -395,7 +395,7 @@ body {
 /* Hide desktop ultimate button on mobile/touch devices */
 @media (hover: none) and (pointer: coarse) {
     .ultimate-button {
-        display: none;
+        display: none !important;
     }
 }
 
@@ -1773,6 +1773,65 @@ body {
     .pause-panel h2 {
         font-size: 1.3em;
         margin-bottom: 10px;
+    }
+    
+    /* Stage Complete Mobile Optimization */
+    .stage-complete-panel {
+        padding: 10px;
+        max-height: 90vh;
+    }
+    
+    .stage-rewards {
+        gap: 10px;
+        margin-bottom: 15px;
+    }
+    
+    .reward-item {
+        padding: 10px;
+    }
+    
+    .reward-label {
+        font-size: 0.95em;
+        margin-bottom: 5px;
+    }
+    
+    .reward-value {
+        font-size: 1.1em;
+    }
+    
+    .equipment-reward {
+        padding: 10px;
+        gap: 10px;
+    }
+    
+    .equipment-icon {
+        font-size: 2em;
+        min-width: 40px;
+    }
+    
+    .equipment-name {
+        font-size: 1em;
+        margin-bottom: 3px;
+    }
+    
+    .equipment-rarity {
+        font-size: 0.8em;
+        margin-bottom: 5px;
+    }
+    
+    .equipment-stats {
+        font-size: 0.85em;
+    }
+    
+    .equipment-level-display {
+        font-size: 0.75em;
+        top: 5px;
+        right: 5px;
+    }
+    
+    .btn-large {
+        padding: 12px 25px;
+        font-size: 1em;
     }
     
     .upgrade-grid {
