@@ -395,11 +395,10 @@ body {
 .boss-warning {
     display: none;
     position: absolute;
-    top: 50%;
+    top: 15%;
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translateX(-50%);
     z-index: 200;
-    animation: bossWarningPulse 1s ease-in-out infinite;
 }
 
 .boss-warning.active {
@@ -407,63 +406,59 @@ body {
 }
 
 .boss-warning.victory {
-    animation: victoryPulse 0.5s ease-in-out;
+    animation: victoryBounce 0.3s ease-in-out 3;
 }
 
 .boss-warning-content {
-    background: rgba(139, 0, 0, 0.5);
-    border: 4px solid rgba(255, 0, 0, 0.7);
-    border-radius: 20px;
-    padding: 40px 60px;
+    background: rgba(139, 0, 0, 0.3);
+    border: 2px solid rgba(255, 0, 0, 0.8);
+    border-radius: 10px;
+    padding: 8px 20px;
     text-align: center;
-    box-shadow: 0 0 50px rgba(255, 0, 0, 0.5),
-                inset 0 0 30px rgba(255, 0, 0, 0.2);
+    box-shadow: 0 0 20px rgba(255, 0, 0, 0.6);
 }
 
 .boss-warning.victory .boss-warning-content {
-    background: rgba(0, 139, 0, 0.95);
-    border-color: #00ff00;
-    box-shadow: 0 0 50px rgba(0, 255, 0, 0.8),
-                inset 0 0 30px rgba(0, 255, 0, 0.3);
+    background: rgba(0, 139, 0, 0.3);
+    border-color: rgba(0, 255, 0, 0.8);
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.6);
 }
 
 .boss-warning-icon {
-    font-size: 5em;
-    margin-bottom: 20px;
-    animation: warningBounce 0.5s ease-in-out infinite alternate;
+    display: inline;
+    font-size: 1.2em;
+    margin-right: 5px;
 }
 
 .boss-warning-text {
-    font-size: 2.5em;
+    display: inline;
+    font-size: 1.3em;
     font-weight: bold;
     color: #fff;
-    text-shadow: 0 0 20px rgba(255, 0, 0, 0.8),
-                 0 4px 10px rgba(0, 0, 0, 0.9);
-    letter-spacing: 3px;
+    text-shadow: 0 0 10px rgba(255, 0, 0, 0.8),
+                 0 2px 5px rgba(0, 0, 0, 0.9);
+    letter-spacing: 2px;
+    animation: textFlash 0.5s ease-in-out infinite;
 }
 
 .boss-warning.victory .boss-warning-text {
-    text-shadow: 0 0 20px rgba(0, 255, 0, 0.8),
-                 0 4px 10px rgba(0, 0, 0, 0.9);
+    text-shadow: 0 0 10px rgba(0, 255, 0, 0.8),
+                 0 2px 5px rgba(0, 0, 0, 0.9);
+    animation: none;
 }
 
-@keyframes bossWarningPulse {
+@keyframes textFlash {
     0%, 100% { 
-        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
     }
     50% { 
-        transform: translate(-50%, -50%) scale(1.05);
+        opacity: 0.3;
     }
 }
 
-@keyframes warningBounce {
-    from { transform: translateY(0); }
-    to { transform: translateY(-10px); }
-}
-
-@keyframes victoryPulse {
-    0%, 100% { transform: translate(-50%, -50%) scale(1); }
-    50% { transform: translate(-50%, -50%) scale(1.2); }
+@keyframes victoryBounce {
+    0%, 100% { transform: translateX(-50%) scale(1); }
+    50% { transform: translateX(-50%) scale(1.15); }
 }
 
 /* Boss Health Bar */
@@ -1607,6 +1602,23 @@ body {
     
     .pause-icon {
         font-size: 1.5em;
+    }
+    
+    .boss-warning {
+        top: 10%;
+    }
+    
+    .boss-warning-content {
+        padding: 5px 12px;
+    }
+    
+    .boss-warning-text {
+        font-size: 0.9em;
+        letter-spacing: 1px;
+    }
+    
+    .boss-warning-icon {
+        font-size: 1em;
     }
     
     #characterSelect {
