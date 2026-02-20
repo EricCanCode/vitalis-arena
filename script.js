@@ -155,6 +155,12 @@ class Game {
         
         window.addEventListener('resize', () => this.resizeCanvas());
         
+        // Listen for visual viewport changes (mobile browser chrome show/hide)
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', () => this.resizeCanvas());
+            window.visualViewport.addEventListener('scroll', () => this.resizeCanvas());
+        }
+        
         // Mobile orientation and fullscreen handling
         this.setupMobileDisplay();
     }
@@ -191,16 +197,33 @@ class Game {
     }
     
     resizeCanvas() {
-        // Use actual device dimensions
-        const width = window.innerWidth || document.documentElement.clientWidth;
-        const height = window.innerHeight || document.documentElement.clientHeight;
+        // Use visual viewport for mobile browsers (accounts for browser chrome)
+        const viewport = window.visualViewport;
+        let width, height;
+        
+        if (viewport) {
+            // Visual viewport available (modern mobile browsers)
+            width = viewport.width;
+            height = viewport.height;
+        } else {
+            // Fallback for older browsers
+            width = window.innerWidth || document.documentElement.clientWidth;
+            height = window.innerHeight || document.documentElement.clientHeight;
+        }
         
         this.canvas.width = width;
         this.canvas.height = height;
         
-        // Force canvas to fill screen on mobile
+        // Force canvas to fill screen
         this.canvas.style.width = width + 'px';
         this.canvas.style.height = height + 'px';
+        
+        // Ensure parent containers are also sized correctly
+        const gameScreen = document.getElementById('gameScreen');
+        if (gameScreen && gameScreen.classList.contains('active')) {
+            gameScreen.style.width = width + 'px';
+            gameScreen.style.height = height + 'px';
+        }
     }
     
     setupInputHandlers() {
