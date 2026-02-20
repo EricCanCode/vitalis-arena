@@ -95,6 +95,8 @@ class Game {
         this.projectiles = [];
         this.enemies = [];
         this.xpOrbs = [];
+        this.healthPickups = [];
+        this.equipmentDrops = [];
         this.particles = [];
         this.screenShake = 0;
         
@@ -463,6 +465,11 @@ class Game {
             this.backToSelect();
         });
         
+        // View Full Inventory button (from pause screen)
+        document.getElementById('viewFullInventoryBtn')?.addEventListener('click', () => {
+            this.openInventory();
+        });
+        
         // Achievements button
         document.getElementById('achievementsBtn')?.addEventListener('click', () => {
             this.showAchievements();
@@ -547,6 +554,8 @@ class Game {
         this.projectiles = [];
         this.enemies = [];
         this.xpOrbs = [];
+        this.healthPickups = [];
+        this.equipmentDrops = [];
         this.particles = [];
         this.gameTime = 0;
         this.waveMultiplier = 1.0;
@@ -661,6 +670,23 @@ class Game {
             if (enemy.health <= 0) {
                 this.spawnXP(enemy.x, enemy.y, enemy.xpValue);
                 this.player.addKill(enemy); // Pass enemy to track type
+                
+                // Random health drop (15% chance)
+                if (Math.random() < 0.15) {
+                    const healAmount = enemy.type === 'boss' ? 50 : (enemy.type === 'tank' ? 25 : 15);
+                    this.spawnHealth(enemy.x, enemy.y, healAmount);
+                }
+                
+                // Random equipment drop (5% chance for non-boss, 100% for boss)
+                if (enemy.type === 'boss' || Math.random() < 0.05) {
+                    if (enemy.type === 'boss') {
+                        // Boss equipment handling is done elsewhere
+                    } else {
+                        // Regular enemy equipment drop
+                        this.dropEquipment(enemy.x, enemy.y);
+                    }
+                }
+                
                 this.enemies.splice(i, 1);
                 this.createParticles(enemy.x, enemy.y, enemy.color, enemy.type);
             }
@@ -698,6 +724,39 @@ class Game {
             if (this.checkCollision(orb, this.player)) {
                 this.player.addXP(orb.value);
                 this.xpOrbs.splice(i, 1);
+            }
+        }
+        
+        // Update Health Pickups
+        for (let i = this.healthPickups.length - 1; i >= 0; i--) {
+            const pickup = this.healthPickups[i];
+            pickup.update(deltaTime, this.player);
+            
+            // Check collision with player
+            if (this.checkCollision(pickup, this.player)) {
+                // Heal player
+                const healAmount = pickup.healAmount;
+                this.player.health = Math.min(this.player.maxHealth, this.player.health + healAmount);
+                this.healthPickups.splice(i, 1);
+                this.showNotification(`+${healAmount} HP`, '#2ecc71');
+            }
+        }
+        
+        // Update Equipment Drops
+        for (let i = this.equipmentDrops.length - 1; i >= 0; i--) {
+            const drop = this.equipmentDrops[i];
+            drop.update(deltaTime, this.player);
+            
+            // Check collision with player
+            if (this.checkCollision(drop, this.player)) {
+                // Add to inventory
+                const existingItem = this.playerInventory.find(item => item.name === drop.equipment.name);
+                if (!existingItem) {
+                    this.playerInventory.push({ ...drop.equipment });
+                    this.saveInventory();
+                }
+                this.equipmentDrops.splice(i, 1);
+                this.showNotification(`Found: ${drop.equipment.name}!`, this.getRarityColor(drop.equipment.rarity));
             }
         }
         
@@ -1256,6 +1315,32 @@ class Game {
         }
     }
     
+    updatePauseMenuEquipment() {
+        const slots = ['weapon', 'armor', 'accessory', 'ring'];
+        slots.forEach(slot => {
+            const slotElement = document.getElementById(`pause-${slot}`);
+            const equippedItem = this.player?.equipment?.[slot];
+            
+            if (equippedItem) {
+                slotElement.innerHTML = `
+                    <div style="color: ${this.getRarityColor(equippedItem.rarity)}; font-weight: bold; font-size: 0.9em;">${equippedItem.name}</div>
+                    <div style="font-size: 0.75em; color: rgba(255,255,255,0.5);">(Click to unequip)</div>
+                `;
+                slotElement.classList.add('equipped');
+                slotElement.style.cursor = 'pointer';
+                slotElement.onclick = () => {
+                    this.unequipFromInventory(slot);
+                    this.updatePauseMenuEquipment();
+                };
+            } else {
+                slotElement.innerHTML = 'Empty';
+                slotElement.classList.remove('equipped');
+                slotElement.style.cursor = 'default';
+                slotElement.onclick = null;
+            }
+        });
+    }
+    
     getRarityColor(rarity) {
         const colors = {
             'Common': '#9CA3AF',
@@ -1288,6 +1373,12 @@ class Game {
         
         // Draw XP orbs
         this.xpOrbs.forEach(orb => orb.draw(this.ctx));
+        
+        // Draw Health Pickups
+        this.healthPickups.forEach(pickup => pickup.draw(this.ctx));
+        
+        // Draw Equipment Drops
+        this.equipmentDrops.forEach(drop => drop.draw(this.ctx));
         
         // Draw enemies
         this.enemies.forEach(enemy => enemy.draw(this.ctx));
@@ -1444,6 +1535,16 @@ class Game {
         this.xpOrbs.push(new XPOrb(x, y, value));
     }
     
+    spawnHealth(x, y, healAmount) {
+        this.healthPickups.push(new HealthPickup(x, y, healAmount));
+    }
+    
+    dropEquipment(x, y) {
+        // Generate random equipment
+        const equipment = this.generateRandomEquipment(this.player.level);
+        this.equipmentDrops.push(new EquipmentDrop(x, y, equipment));
+    }
+    
     createParticles(x, y, color, enemyType = 'basic') {
         // Different particle effects based on enemy type
         let particleCount = 8;
@@ -1555,6 +1656,7 @@ class Game {
         
         if (this.isPaused) {
             pauseScreen.classList.add('active');
+            this.updatePauseMenuEquipment();
         } else {
             pauseScreen.classList.remove('active');
         }
@@ -3545,6 +3647,133 @@ class XPOrb {
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
         ctx.stroke();
+    }
+}
+
+// Health Pickup Class
+class HealthPickup {
+    constructor(x, y, healAmount) {
+        this.x = x;
+        this.y = y;
+        this.healAmount = healAmount;
+        this.radius = 10;
+        this.magnetRange = 150;
+        this.attractSpeed = 250;
+        this.pulseTime = 0;
+    }
+    
+    update(deltaTime, player) {
+        this.pulseTime += deltaTime * 3;
+        
+        const dx = player.x - this.x;
+        const dy = player.y - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        // Magnetic attraction
+        if (dist < this.magnetRange) {
+            this.x += (dx / dist) * this.attractSpeed * deltaTime;
+            this.y += (dy / dist) * this.attractSpeed * deltaTime;
+        }
+    }
+    
+    draw(ctx) {
+        const pulse = Math.sin(this.pulseTime) * 0.3 + 1;
+        
+        // Glow
+        const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.radius * 2.5 * pulse);
+        gradient.addColorStop(0, 'rgba(46, 204, 113, 0.8)');
+        gradient.addColorStop(1, 'rgba(46, 204, 113, 0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius * 2.5 * pulse, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Core
+        ctx.fillStyle = '#2ecc71';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius * pulse, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Cross symbol
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        const crossSize = this.radius * 0.6;
+        ctx.beginPath();
+        ctx.moveTo(this.x - crossSize, this.y);
+        ctx.lineTo(this.x + crossSize, this.y);
+        ctx.moveTo(this.x, this.y - crossSize);
+        ctx.lineTo(this.x, this.y + crossSize);
+        ctx.stroke();
+    }
+}
+
+// Equipment Drop Class
+class EquipmentDrop {
+    constructor(x, y, equipment) {
+        this.x = x;
+        this.y = y;
+        this.equipment = equipment;
+        this.radius = 12;
+        this.magnetRange = 120;
+        this.attractSpeed = 200;
+        this.rotationAngle = 0;
+        this.floatOffset = 0;
+    }
+    
+    update(deltaTime, player) {
+        this.rotationAngle += deltaTime * 2;
+        this.floatOffset = Math.sin(this.rotationAngle * 2) * 5;
+        
+        const dx = player.x - this.x;
+        const dy = player.y - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        // Magnetic attraction
+        if (dist < this.magnetRange) {
+            this.x += (dx / dist) * this.attractSpeed * deltaTime;
+            this.y += (dy / dist) * this.attractSpeed * deltaTime;
+        }
+    }
+    
+    draw(ctx) {
+        const rarityColors = {
+            'Common': '#9CA3AF',
+            'Uncommon': '#10B981',
+            'Rare': '#3B82F6',
+            'Epic': '#A855F7',
+            'Legendary': '#F59E0B'
+        };
+        
+        const color = rarityColors[this.equipment.rarity] || '#9CA3AF';
+        const displayY = this.y + this.floatOffset;
+        
+        // Outer glow
+        const gradient = ctx.createRadialGradient(this.x, displayY, 0, this.x, displayY, this.radius * 3);
+        gradient.addColorStop(0, color + '60');
+        gradient.addColorStop(1, color + '00');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(this.x, displayY, this.radius * 3, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Core
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(this.x, displayY, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Icon or letter based on equipment type
+        ctx.save();
+        ctx.translate(this.x, displayY);
+        ctx.rotate(this.rotationAngle);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        const icons = { weapon: '⚔️', armor: '🛡️', accessory: '📿', ring: '💍' };
+        ctx.fillText(icons[this.equipment.type] || '?', 0, 0);
+        ctx.restore();
     }
 }
 

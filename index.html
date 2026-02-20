@@ -254,6 +254,31 @@
             <div class="pause-panel">
                 <h2>⏸️ Game Paused</h2>
                 <p class="pause-hint">Click Resume or press ESC to continue</p>
+                
+                <!-- Quick Inventory Access -->
+                <div class="pause-inventory">
+                    <h3>Quick Equipment</h3>
+                    <div class="pause-equipped-slots">
+                        <div class="pause-equipment-slot" data-slot="weapon">
+                            <div class="slot-label">🗡️</div>
+                            <div id="pause-weapon" class="pause-slot-content">Empty</div>
+                        </div>
+                        <div class="pause-equipment-slot" data-slot="armor">
+                            <div class="slot-label">🛡️</div>
+                            <div id="pause-armor" class="pause-slot-content">Empty</div>
+                        </div>
+                        <div class="pause-equipment-slot" data-slot="accessory">
+                            <div class="slot-label">📿</div>
+                            <div id="pause-accessory" class="pause-slot-content">Empty</div>
+                        </div>
+                        <div class="pause-equipment-slot" data-slot="ring">
+                            <div class="slot-label">💍</div>
+                            <div id="pause-ring" class="pause-slot-content">Empty</div>
+                        </div>
+                    </div>
+                    <button id="viewFullInventoryBtn" class="btn-secondary" style="margin-top: 10px;">View Full Inventory</button>
+                </div>
+                
                 <button id="resumeBtn" class="btn-primary">Resume</button>
                 <button id="quitBtn" class="btn-secondary">Quit to Menu</button>
             </div>

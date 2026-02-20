@@ -533,6 +533,61 @@ body {
     min-width: 200px;
 }
 
+/* Pause Menu Inventory */
+.pause-inventory {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 15px;
+    padding: 15px;
+    margin: 20px 0;
+}
+
+.pause-inventory h3 {
+    font-size: 1.2em;
+    margin-bottom: 15px;
+    color: #4fc3f7;
+}
+
+.pause-equipped-slots {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.pause-equipment-slot {
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    padding: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.pause-equipment-slot:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: #4fc3f7;
+    transform: translateY(-2px);
+}
+
+.pause-equipment-slot .slot-label {
+    font-size: 1.5em;
+    margin-bottom: 5px;
+}
+
+.pause-slot-content {
+    font-size: 0.8em;
+    color: rgba(255, 255, 255, 0.7);
+    min-height: 40px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.pause-slot-content.equipped {
+    color: #4fc3f7;
+    font-weight: bold;
+}
+
 /* Level Up Panel */
 .level-up-panel {
     background: linear-gradient(135deg, #2d3561 0%, #1a1f3a 100%);
@@ -1773,6 +1828,39 @@ body {
     .pause-panel h2 {
         font-size: 1.3em;
         margin-bottom: 10px;
+    }
+    
+    /* Pause Menu Mobile Optimization */
+    .pause-panel {
+        padding: 15px;
+    }
+    
+    .pause-inventory {
+        padding: 10px;
+        margin: 10px 0;
+    }
+    
+    .pause-inventory h3 {
+        font-size: 1em;
+        margin-bottom: 10px;
+    }
+    
+    .pause-equipped-slots {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+    
+    .pause-equipment-slot {
+        padding: 8px;
+    }
+    
+    .pause-equipment-slot .slot-label {
+        font-size: 1.2em;
+    }
+    
+    .pause-slot-content {
+        font-size: 0.7em;
+        min-height: 35px;
     }
     
     /* Stage Complete Mobile Optimization */
