@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#1a1a2e">
+    <meta name="description" content="Vitalis Arena - Roguelike Survival Game">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <title>Vitalis Arena - Roguelike Survival Game</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Title Screen -->
+    <div id="titleScreen" class="screen active">
+        <div class="title-content">
+            <div class="press-start">Press Start or Any Key</div>
+        </div>
+    </div>
+    
+    <!-- Character Selection Screen -->
+    <div id="characterSelect" class="screen">
+        <h1>Vitalis Arena</h1>
+        <p class="game-subtitle">Select Your Hero</p>
+        <button id="achievementsBtn" class="achievements-button">🏆 Achievements</button>
+        <button id="menuShopBtn" class="menu-shop-button">🛒 Shop</button>
+        <button id="inventoryBtn" class="inventory-button">🎒 Inventory</button>
+        <div class="character-grid">
+            <div class="character-card" data-character="warrior">
+                <div class="character-icon">
+                    <img src="images/warrior.png" alt="Warrior" class="character-sprite">
+                </div>
+                <h2>Warrior</h2>
+                <p class="character-ability">Whirlwind Attack + Heavy Armor</p>
+                <p class="character-desc">AOE damage + 25% damage reduction + knockback</p>
+                <div class="character-stats">
+                    <span>❤️ HP: 120</span>
+                    <span>⚡ Speed: Fast</span>
+                    <span>🗡️ Damage: High</span>
+                </div>
+            </div>
+
+            <div class="character-card" data-character="ranger">
+                <div class="character-icon">
+                    <img src="images/ranger.png" alt="Ranger" class="character-sprite">
+                </div>
+                <h2>Ranger</h2>
+                <p class="character-ability">Multi-Shot</p>
+                <p class="character-desc">Fires 3 arrows in a spread pattern</p>
+                <div class="character-stats">
+                    <span>❤️ HP: 80</span>
+                    <span>⚡ Speed: Fast</span>
+                    <span>🗡️ Damage: Medium</span>
+                </div>
+            </div>
+
+            <div class="character-card" data-character="mage">
+                <div class="character-icon">
+                    <img src="images/mage.png" alt="Mage" class="character-sprite">
+                </div>
+                <h2>Mage</h2>
+                <p class="character-ability">Arcane Missiles</p>
+                <p class="character-desc">Launches homing projectiles at enemies</p>
+                <div class="character-stats">
+                    <span>❤️ HP: 70</span>
+                    <span>⚡ Speed: Slow</span>
+                    <span>🗡️ Damage: Very High</span>
+                </div>
+            </div>
+
+            <div class="character-card" data-character="assassin">
+                <div class="character-icon">
+                    <img src="images/assassin.png" alt="Assassin" class="character-sprite">
+                </div>
+                <h2>Assassin</h2>
+                <p class="character-ability">Shadow Strike</p>
+                <p class="character-desc">Teleports behind enemies for critical hits</p>
+                <div class="character-stats">
+                    <span>❤️ HP: 75</span>
+                    <span>⚡ Speed: Very Fast</span>
+                    <span>🗡️ Damage: Critical</span>
+                </div>
+            </div>
+
+            <div class="character-card" data-character="tank">
+                <div class="character-icon">
+                    <img src="images/tank.png" alt="Tank" class="character-sprite">
+                </div>
+                <h2>Tank</h2>
+                <p class="character-ability">Shockwave</p>
+                <p class="character-desc">Ground pound that stuns nearby enemies</p>
+                <div class="character-stats">
+                    <span>❤️ HP: 150</span>
+                    <span>⚡ Speed: Very Slow</span>
+                    <span>🗡️ Damage: Low</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Achievements Panel -->
+    <div id="achievementsPanel" class="overlay">
+        <div class="achievements-panel">
+            <div class="achievements-header">
+                <h2>🏆 Achievements</h2>
+                <span id="achievementProgress" class="achievement-progress">0/0 Unlocked</span>
+            </div>
+            <div id="achievementsGrid" class="achievements-grid"></div>
+            <button id="closeAchievements" class="btn-primary">Close</button>
+        </div>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="gameScreen" class="screen">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- HUD -->
+        <div id="hud">
+            <!-- Boss Warning -->
+            <div id="bossWarning" class="boss-warning">
+                <div class="boss-warning-content">
+                    <div class="boss-warning-icon">⚠️</div>
+                    <div id="bossWarningText" class="boss-warning-text">BOSS INCOMING IN 10...</div>
+                </div>
+            </div>
+            
+            <!-- Boss Health Bar -->
+            <div id="bossHealthBar" class="boss-health-container">
+                <!-- Rendered in canvas -->
+            </div>
+            
+            <!-- Pause Button -->
+            <button id="pauseButton" class="pause-button" title="Pause (ESC)">
+                <span class="pause-icon">⏸️</span>
+            </button>
+            
+            <div class="hud-top">
+                <div class="hud-item">
+                    <span class="hud-label">🏆 Stage</span>
+                    <span id="stageText">1</span>
+                </div>
+                <div class="hud-item">
+                    <span class="hud-label">🪙 Coins</span>
+                    <span id="coinsText">0</span>
+                </div>
+                <div class="hud-item">
+                    <span class="hud-label">❤️ Health</span>
+                    <div class="health-bar">
+                        <div id="healthBar" class="health-fill"></div>
+                    </div>
+                    <span id="healthText">100/100</span>
+                </div>
+                <div class="hud-item">
+                    <span class="hud-label">⭐ Level</span>
+                    <span id="levelText">1</span>
+                </div>
+                <div class="hud-item">
+                    <span class="hud-label">💎 XP</span>
+                    <div class="xp-bar">
+                        <div id="xpBar" class="xp-fill"></div>
+                    </div>
+                </div>
+                <div class="hud-item">
+                    <span class="hud-label">⏱️ Time</span>
+                    <span id="timeText">0:00</span>
+                </div>
+                <div class="hud-item">
+                    <span class="hud-label">💀 Kills</span>
+                    <span id="killText">0</span>
+                </div>
+                <div class="hud-item">
+                    <span class="hud-label">⚡ Ultimate</span>
+                    <div class="ultimate-bar">
+                        <div id="ultimateBar" class="ultimate-fill"></div>
+                    </div>
+                    <span id="ultimateText">0/100</span>
+                </div>
+            </div>
+            
+            <!-- Equipment Display -->
+            <div class="equipment-hud">
+                <div class="equipment-slots">
+                    <div id="equipment-weapon" class="equipment-slot" title="Weapon">
+                        <div class="empty-slot">🗡️</div>
+                    </div>
+                    <div id="equipment-armor" class="equipment-slot" title="Armor">
+                        <div class="empty-slot">🛡️</div>
+                    </div>
+                    <div id="equipment-accessory" class="equipment-slot" title="Accessory">
+                        <div class="empty-slot">📿</div>
+                    </div>
+                    <div id="equipment-ring" class="equipment-slot" title="Ring">
+                        <div class="empty-slot">💍</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Ultimate Button -->
+            <button id="ultimateButton" class="ultimate-button">
+                <span class="ultimate-icon">💥</span>
+                <span class="ultimate-label">ULTIMATE!</span>
+                <span class="ultimate-hint">Click or Press Q</span>
+            </button>
+            
+            <!-- Mobile Touch Controls -->
+            <div id="mobileControls" class="mobile-controls">
+                <!-- Virtual Joystick -->
+                <div id="joystickContainer" class="joystick-container">
+                    <div id="joystickBase" class="joystick-base"></div>
+                    <div id="joystickStick" class="joystick-stick"></div>
+                </div>
+                
+                <!-- Fire Button -->
+                <button id="fireButton" class="fire-button">🔥</button>
+            </div>
+        </div>
+
+        <!-- Level Up Screen -->
+        <div id="levelUpScreen" class="overlay">
+            <div class="level-up-panel">
+                <h2>🎉 Level Up!</h2>
+                <p>Choose an upgrade:</p>
+                <div id="upgradeOptions" class="upgrade-grid"></div>
+            </div>
+        </div>
+
+        <!-- Stage Complete Screen -->
+        <div id="stageCompletePanel" class="overlay">
+            <div class="stage-complete-panel">
+                <h2>🏆 Stage <span id="stageCompleteNumber">1</span> Complete!</h2>
+                <div class="stage-rewards">
+                    <div class="reward-item">
+                        <span class="reward-label">Coins Earned:</span>
+                        <span id="stageCoinsEarned" class="reward-value">+100 🪙</span>
+                    </div>
+                    <div class="reward-item">
+                        <span class="reward-label">Equipment Reward:</span>
+                        <div id="stageEquipmentInfo" class="equipment-reward-container"></div>
+                    </div>
+                </div>
+                <button id="nextStageBtn" class="btn-primary btn-large">Continue to Next Stage</button>
+            </div>
+        </div>
+
+        <!-- Pause Screen -->
+        <div id="pauseScreen" class="overlay">
+            <div class="pause-panel">
+                <h2>⏸️ Game Paused</h2>
+                <p class="pause-hint">Click Resume or press ESC to continue</p>
+                <button id="resumeBtn" class="btn-primary">Resume</button>
+                <button id="quitBtn" class="btn-secondary">Quit to Menu</button>
+            </div>
+        </div>
+        
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" class="overlay">
+            <div class="game-over-panel">
+                <h2>💀 Game Over</h2>
+                <div id="finalStats"></div>
+                <button id="restartBtn" class="btn-primary">Play Again</button>
+                <button id="backToSelectBtn" class="btn-secondary">Change Character</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Shop Panel -->
+    <div id="shopPanel" class="overlay">
+        <div class="shop-panel">
+            <div class="shop-header">
+                <h2>🛒 Equipment Shop</h2>
+                <div class="shop-coins">
+                    <span>Your Coins:</span>
+                    <span id="playerCoins" class="coins-amount">0</span> 🪙
+                </div>
+            </div>
+            <div id="shopItemsGrid" class="shop-grid"></div>
+            <div class="shop-footer">
+                <button id="refreshShopBtn" class="btn-secondary">🔄 Refresh (50 🪙)</button>
+                <button id="closeShopBtn" class="btn-primary">Close Shop</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inventory Panel -->
+    <div id="inventoryPanel" class="overlay">
+        <div class="inventory-panel">
+            <h2>🎒 Inventory</h2>
+            <div class="inventory-header">
+                <div class="coins-display">🪙 <span id="inventoryCoins">0</span></div>
+            </div>
+            <div class="equipped-section">
+                <h3>Equipped Items</h3>
+                <div class="equipped-slots">
+                    <div class="inventory-equipment-slot" data-slot="weapon">
+                        <div class="slot-label">🗡️ Weapon</div>
+                        <div id="inv-weapon" class="inventory-slot-content">Empty</div>
+                    </div>
+                    <div class="inventory-equipment-slot" data-slot="armor">
+                        <div class="slot-label">🛡️ Armor</div>
+                        <div id="inv-armor" class="inventory-slot-content">Empty</div>
+                    </div>
+                    <div class="inventory-equipment-slot" data-slot="accessory">
+                        <div class="slot-label">📿 Accessory</div>
+                        <div id="inv-accessory" class="inventory-slot-content">Empty</div>
+                    </div>
+                    <div class="inventory-equipment-slot" data-slot="ring">
+                        <div class="slot-label">💍 Ring</div>
+                        <div id="inv-ring" class="inventory-slot-content">Empty</div>
+                    </div>
+                </div>
+            </div>
+            <div class="inventory-section">
+                <h3>All Equipment</h3>
+                <div id="inventoryGrid" class="inventory-grid"></div>
+            </div>
+            <button id="closeInventoryBtn" class="btn-primary">Close</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    <script>
+        // Register Service Worker for PWA
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('service-worker.js')
+                    .then((registration) => {
+                        console.log('ServiceWorker registered:', registration.scope);
+                    })
+                    .catch((error) => {
+                        console.log('ServiceWorker registration failed:', error);
+                    });
+            });
+        }
+    </script>
+</body>
+</html>
