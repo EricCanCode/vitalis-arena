@@ -1680,7 +1680,14 @@ body {
     }
     
     /* Overlay Panels Mobile Optimization */
-    .level-up-panel,
+    .level-up-panel {
+        max-width: 95%;
+        max-height: 90vh;
+        padding: 10px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
     .shop-panel,
     .inventory-panel,
     .stage-complete-panel,
@@ -1693,7 +1700,16 @@ body {
         -webkit-overflow-scrolling: touch;
     }
     
-    .level-up-panel h2,
+    .level-up-panel h2 {
+        font-size: 1.1em;
+        margin-bottom: 5px;
+    }
+    
+    .level-up-panel p {
+        font-size: 0.75em;
+        margin-bottom: 5px;
+    }
+    
     .shop-panel h2,
     .inventory-panel h2,
     .stage-complete-panel h2,
@@ -1703,7 +1719,12 @@ body {
         margin-bottom: 10px;
     }
     
-    .upgrade-grid,
+    .upgrade-grid {
+        gap: 6px;
+        grid-template-columns: repeat(3, 1fr);
+        margin-top: 8px;
+    }
+    
     .shop-grid,
     .inventory-grid,
     .achievements-grid {
@@ -1711,7 +1732,26 @@ body {
         grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     }
     
-    .upgrade-option,
+    .upgrade-option {
+        padding: 8px;
+        font-size: 0.75em;
+    }
+    
+    .upgrade-icon {
+        font-size: 1.8em !important;
+        margin-bottom: 3px !important;
+    }
+    
+    .upgrade-name {
+        font-size: 0.9em !important;
+        margin-bottom: 3px !important;
+    }
+    
+    .upgrade-desc {
+        font-size: 0.7em !important;
+        line-height: 1.2;
+    }
+    
     .shop-item,
     .inventory-item,
     .achievement {
