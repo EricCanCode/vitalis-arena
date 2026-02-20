@@ -315,19 +315,19 @@ class Game {
             this.keys['d'] = false;
         });
         
-        // Fire Button
+        // Ultimate Button (Mobile)
         fireButton.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            this.touchState.fire.active = true;
-            this.touchState.fire.touchId = e.touches[0].identifier;
-            // Simulate space key for shooting
-            this.keys[' '] = true;
+            e.stopPropagation();
+            // Trigger ultimate ability if ready
+            if (this.player && this.player.ultimateReady && this.isRunning && !this.isPaused) {
+                this.player.useUltimate(this);
+            }
         });
         
         fireButton.addEventListener('touchend', (e) => {
             e.preventDefault();
-            this.touchState.fire.active = false;
-            this.keys[' '] = false;
+            e.stopPropagation();
         });
         
         // Prevent default touch behaviors on mobile controls
@@ -568,6 +568,9 @@ class Game {
         
         // Reset ultimate button
         document.getElementById('ultimateButton').classList.remove('ready');
+        // Also reset mobile ultimate button
+        const fireBtn = document.getElementById('fireButton');
+        if (fireBtn) fireBtn.classList.remove('ready');
         
         // Reset session stats
         this.sessionStats = {
@@ -2117,6 +2120,9 @@ class Player {
         this.ultimateCharge = 0;
         this.ultimateReady = false;
         document.getElementById('ultimateButton').classList.remove('ready');
+        // Also reset mobile ultimate button
+        const fireBtn = document.getElementById('fireButton');
+        if (fireBtn) fireBtn.classList.remove('ready');
         
         // Character-specific ultimate abilities
         switch(this.type) {
@@ -2274,6 +2280,9 @@ class Player {
             this.ultimateReady = true;
             // Show ultimate button
             document.getElementById('ultimateButton').classList.add('ready');
+            // Also show mobile ultimate button as ready
+            const fireBtn = document.getElementById('fireButton');
+            if (fireBtn) fireBtn.classList.add('ready');
         }
     }
     
@@ -3147,7 +3156,7 @@ class Enemy {
         const types = {
             basic: {
                 radius: 15,
-                speed: 100,
+                speed: 60,  // Reduced from 100
                 maxHealth: 20,
                 damage: 5,
                 xpValue: 5,
@@ -3155,7 +3164,7 @@ class Enemy {
             },
             fast: {
                 radius: 12,
-                speed: 180,
+                speed: 110,  // Reduced from 180
                 maxHealth: 15,
                 damage: 8,
                 xpValue: 8,
@@ -3163,7 +3172,7 @@ class Enemy {
             },
             tank: {
                 radius: 25,
-                speed: 60,
+                speed: 40,  // Reduced from 60
                 maxHealth: 60,
                 damage: 15,
                 xpValue: 15,
@@ -3171,7 +3180,7 @@ class Enemy {
             },
             boss: {
                 radius: 50,
-                speed: 70,
+                speed: 45,  // Reduced from 70
                 maxHealth: 500,
                 damage: 25,
                 xpValue: 100,
@@ -3181,6 +3190,7 @@ class Enemy {
         
         const stats = types[this.type];
         this.radius = stats.radius;
+        this.baseSpeed = stats.speed;  // Store base speed
         this.speed = stats.speed;
         this.maxHealth = stats.maxHealth;
         this.damage = stats.damage;
@@ -3201,9 +3211,14 @@ class Enemy {
             return;
         }
         
+        // Apply level-based speed scaling
+        // Speed increases by 5% per level (starts at 100% at level 1)
+        const levelSpeedMultiplier = 1 + ((this.game.player.level - 1) * 0.05);
+        const currentSpeed = this.baseSpeed * levelSpeedMultiplier;
+        
         // Boss special behavior
         if (this.type === 'boss') {
-            this.updateBoss(deltaTime, player);
+            this.updateBoss(deltaTime, player, currentSpeed);
             return;
         }
         
@@ -3213,12 +3228,12 @@ class Enemy {
         const dist = Math.sqrt(dx * dx + dy * dy);
         
         if (dist > 0) {
-            this.x += (dx / dist) * this.speed * deltaTime;
-            this.y += (dy / dist) * this.speed * deltaTime;
+            this.x += (dx / dist) * currentSpeed * deltaTime;
+            this.y += (dy / dist) * currentSpeed * deltaTime;
         }
     }
     
-    updateBoss(deltaTime, player) {
+    updateBoss(deltaTime, player, currentSpeed) {
         this.attackCooldown -= deltaTime;
         
         const dx = player.x - this.x;
@@ -3227,9 +3242,10 @@ class Enemy {
         
         // Change pattern based on health
         const healthPercent = this.health / this.maxHealth;
+        let bossSpeed = currentSpeed;
         if (healthPercent < this.phaseChangeThreshold && this.attackPattern === 0) {
             this.attackPattern = 1; // Enraged phase
-            this.speed = 100; // Faster when low health
+            bossSpeed = currentSpeed * 1.5; // 50% faster when low health
             this.game.screenShake = 20;
         }
         
@@ -3239,14 +3255,14 @@ class Enemy {
                 // Charge attack
                 this.attackCooldown = 4;
                 if (dist > 0) {
-                    this.x += (dx / dist) * this.speed * 3 * deltaTime; // 3x speed charge
-                    this.y += (dy / dist) * this.speed * 3 * deltaTime;
+                    this.x += (dx / dist) * bossSpeed * 3 * deltaTime; // 3x speed charge
+                    this.y += (dy / dist) * bossSpeed * 3 * deltaTime;
                 }
             } else {
                 // Normal movement
                 if (dist > 0) {
-                    this.x += (dx / dist) * this.speed * deltaTime;
-                    this.y += (dy / dist) * this.speed * deltaTime;
+                    this.x += (dx / dist) * bossSpeed * deltaTime;
+                    this.y += (dy / dist) * bossSpeed * deltaTime;
                 }
             }
         }
@@ -3254,8 +3270,8 @@ class Enemy {
         else {
             // Fast pursuit
             if (dist > 0) {
-                this.x += (dx / dist) * this.speed * deltaTime;
-                this.y += (dy / dist) * this.speed * deltaTime;
+                this.x += (dx / dist) * bossSpeed * deltaTime;
+                this.y += (dy / dist) * bossSpeed * deltaTime;
             }
             
             // Shoot projectiles
