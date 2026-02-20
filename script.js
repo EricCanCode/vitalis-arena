@@ -125,6 +125,7 @@ class Game {
         this.bossWarning = false;
         this.bossWarningTime = 0;
         this.currentBoss = null;
+        this.pendingLevelUp = false;
         
         // Equipment system
         this.availableEquipment = []; // Equipment available in shop
@@ -788,8 +789,8 @@ class Game {
         // Track boss defeat for achievements
         this.sessionStats.bosses++;
         
-        // Victory rewards
-        this.player.levelUp(this);
+        // Victory rewards - defer level up until after stage complete screen
+        this.pendingLevelUp = true;
         
         // Award coins based on stage
         const coinsEarned = 50 + (this.currentStage * 25);
@@ -998,6 +999,12 @@ class Game {
         // Close stage complete panel
         document.getElementById('stageCompletePanel').classList.remove('active');
         this.isPaused = false;
+        
+        // Show level up screen if pending from boss defeat
+        if (this.pendingLevelUp) {
+            this.pendingLevelUp = false;
+            this.player.levelUp(this);
+        }
         
         // Show notification
         this.showNotification(`Stage ${this.currentStage} - Difficulty Increased!`);
