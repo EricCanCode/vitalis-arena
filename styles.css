@@ -257,6 +257,7 @@ body {
     padding: 10px 20px;
     border-radius: 10px;
     font-weight: bold;
+    font-size: 1em;
 }
 
 .hud-label {
@@ -1515,6 +1516,83 @@ body {
 
 /* Landscape mobile optimization */
 @media (max-height: 500px) and (orientation: landscape) {
+    /* HUD Optimizations */
+    .hud-top {
+        padding: 5px 10px;
+        gap: 5px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .hud-item {
+        padding: 5px 10px;
+        font-size: 0.7em;
+        white-space: nowrap;
+        min-width: auto;
+    }
+    
+    .hud-label {
+        font-size: 0.8em;
+    }
+    
+    .health-bar, .xp-bar, .ultimate-bar {
+        width: 80px;
+        height: 12px;
+    }
+    
+    /* Equipment HUD */
+    .equipment-hud {
+        top: 60px;
+        right: 10px;
+    }
+    
+    .equipment-slot {
+        width: 40px;
+        height: 40px;
+        font-size: 1.2em;
+    }
+    
+    /* Ultimate button */
+    .ultimate-button {
+        bottom: 15px;
+        padding: 10px 20px;
+        font-size: 0.8em;
+    }
+    
+    .ultimate-icon {
+        font-size: 1.5em;
+    }
+    
+    .ultimate-label {
+        font-size: 0.9em;
+    }
+    
+    .ultimate-hint {
+        font-size: 0.65em;
+    }
+    
+    /* Mobile controls adjustment */
+    .joystick-container {
+        width: 100px;
+        height: 100px;
+        bottom: 15px;
+        left: 15px;
+    }
+    
+    .joystick-stick {
+        width: 40px;
+        height: 40px;
+    }
+    
+    .fire-button {
+        width: 70px;
+        height: 70px;
+        bottom: 15px;
+        right: 15px;
+        font-size: 2em;
+    }
+    
     #characterSelect {
         padding: 10px 20px;
     }
@@ -1580,6 +1658,52 @@ body {
     .character-stats {
         font-size: 0.6em;
         gap: 2px;
+    }
+    
+    /* Overlay Panels Mobile Optimization */
+    .level-up-panel,
+    .shop-panel,
+    .inventory-panel,
+    .stage-complete-panel,
+    .achievements-panel,
+    .pause-panel {
+        max-width: 95%;
+        max-height: 85vh;
+        padding: 15px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .level-up-panel h2,
+    .shop-panel h2,
+    .inventory-panel h2,
+    .stage-complete-panel h2,
+    .achievements-panel h2,
+    .pause-panel h2 {
+        font-size: 1.3em;
+        margin-bottom: 10px;
+    }
+    
+    .upgrade-grid,
+    .shop-grid,
+    .inventory-grid,
+    .achievements-grid {
+        gap: 10px;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    }
+    
+    .upgrade-option,
+    .shop-item,
+    .inventory-item,
+    .achievement {
+        padding: 10px;
+        font-size: 0.8em;
+    }
+    
+    .btn-primary,
+    .btn-secondary {
+        padding: 8px 16px;
+        font-size: 0.85em;
     }
 }
 
