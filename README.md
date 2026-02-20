@@ -25,13 +25,13 @@ A fast-paced roguelike survival game with 5 unique characters, equipment progres
 
 ## 🚀 Play Online
 
-[Play Vitalis Arena](https://yourusername.github.io/vitalis-arena)
+[Play Vitalis Arena](https://ericcancode.github.io/vitalis-arena)
 
 ## 💻 Local Development
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/vitalis-arena.git
+git clone https://github.com/EricCanCode/vitalis-arena.git
 cd vitalis-arena
 ```
 
