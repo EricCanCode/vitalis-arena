@@ -88,6 +88,9 @@ class AudioManager {
         this.currentMusic = null;
         this.currentMusicName = null;
         
+        // Pool index tracker for round-robin audio reuse
+        this.soundPoolIndex = {};
+        
         // Per-sound cooldowns (ms) to prevent rapid-fire stacking
         this.soundCooldownMs = {
             'enemy-hit':   80,
@@ -103,9 +106,18 @@ class AudioManager {
     }
     
     loadSound(name, path) {
-        const audio = new Audio(path);
-        audio.volume = this.soundVolume;
-        this.sounds[name] = audio;
+        // Pre-allocate a small pool to avoid cloneNode() on every play (expensive on iOS)
+        // Use navigator.userAgent directly since window.game doesn't exist yet during construction
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const poolSize = isMobile ? 2 : 3;
+        const pool = [];
+        for (let i = 0; i < poolSize; i++) {
+            const audio = new Audio(path);
+            audio.volume = this.soundVolume;
+            pool.push(audio);
+        }
+        this.sounds[name] = pool;
+        this.soundPoolIndex[name] = 0;
     }
     
     loadMusic(name, path) {
@@ -132,10 +144,19 @@ class AudioManager {
             this.soundLastPlayed[name] = now;
         }
         
-        // Clone audio for overlapping sounds (small files, safe on mobile)
-        const sound = this.sounds[name].cloneNode();
+        // Reuse a pool instance — find a free one or use round-robin (no cloneNode, safe on iOS)
+        const pool = this.sounds[name];
+        let sound = null;
+        for (let i = 0; i < pool.length; i++) {
+            if (pool[i].paused || pool[i].ended) { sound = pool[i]; break; }
+        }
+        if (!sound) {
+            sound = pool[this.soundPoolIndex[name]];
+            this.soundPoolIndex[name] = (this.soundPoolIndex[name] + 1) % pool.length;
+        }
+        sound.currentTime = 0;
         sound.volume = this.soundVolume;
-        sound.play().catch(err => console.log('Sound play error:', err));
+        sound.play().catch(() => {});
     }
     
     playMusic(name) {
@@ -166,8 +187,8 @@ class AudioManager {
     
     setSoundVolume(volume) {
         this.soundVolume = Math.max(0, Math.min(1, volume));
-        Object.values(this.sounds).forEach(sound => {
-            sound.volume = this.soundVolume;
+        Object.values(this.sounds).forEach(pool => {
+            pool.forEach(audio => { audio.volume = this.soundVolume; });
         });
         this.saveSettings();
     }
@@ -816,7 +837,7 @@ class Game {
         // Aggressive memory cleanup on mobile every 3 seconds
         if (this.performanceMode && Math.floor(this.gameTime) % 3 === 0 && Math.floor(this.gameTime) !== Math.floor(this.gameTime - deltaTime)) {
             // Force cleanup particles (keep BossProjectiles)
-            for (let i = this.particles.length - 1; i >= 0 && this.particles.length > 30; i--) {
+            for (let i = this.particles.length - 1; i >= 0 && this.particles.length > 15; i--) {
                 if (!(this.particles[i] instanceof BossProjectile)) {
                     this.particles.splice(i, 1);
                 }
@@ -943,8 +964,8 @@ class Game {
         }
         
         // Cap projectiles on mobile to prevent memory overload
-        if (this.performanceMode && this.projectiles.length > 25) {
-            this.projectiles.splice(0, this.projectiles.length - 25);
+        if (this.performanceMode && this.projectiles.length > 15) {
+            this.projectiles.splice(0, this.projectiles.length - 15);
         }
         
         // Update XP orbs
@@ -961,8 +982,8 @@ class Game {
         }
         
         // Cap XP orbs on mobile to prevent memory overload
-        if (this.performanceMode && this.xpOrbs.length > 15) {
-            this.xpOrbs.splice(0, this.xpOrbs.length - 15);
+        if (this.performanceMode && this.xpOrbs.length > 10) {
+            this.xpOrbs.splice(0, this.xpOrbs.length - 10);
         }
         
         // Update Health Pickups
@@ -1012,9 +1033,9 @@ class Game {
         
         // Update particles and boss projectiles (both live in particles array)
         // Hard cap on mobile BEFORE updating to keep memory low
-        if (this.performanceMode && this.particles.length > 40) {
+        if (this.performanceMode && this.particles.length > 20) {
             // Remove non-BossProjectile particles first (cosmetic only)
-            for (let i = this.particles.length - 1; i >= 0 && this.particles.length > 40; i--) {
+            for (let i = this.particles.length - 1; i >= 0 && this.particles.length > 20; i--) {
                 if (!(this.particles[i] instanceof BossProjectile)) {
                     this.particles.splice(i, 1);
                 }
@@ -1087,7 +1108,7 @@ class Game {
         this.screenShake = 30;
         
         // Spawn dramatic particles (reduced count on mobile)
-        const particleCount = this.performanceMode ? 20 : 100;
+        const particleCount = this.performanceMode ? 8 : 100;
         for (let i = 0; i < particleCount; i++) {
             const angle = Math.random() * Math.PI * 2;
             const speed = 100 + Math.random() * 200;
@@ -1842,7 +1863,7 @@ class Game {
         if (this.performanceMode) {
             particleCount = Math.floor(particleCount * 0.3); // 70% reduction on mobile
             // Hard cap: don't add particles if we're close to max
-            if (this.particles.length > 35) {
+            if (this.particles.length > 15) {
                 return; // Skip creating particles entirely
             }
         }
