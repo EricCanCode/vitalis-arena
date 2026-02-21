@@ -808,13 +808,6 @@ class Game {
     gameLoop(currentTime) {
         if (!this.isRunning) return;
         
-        // Frame rate limiting for mobile
-        const elapsed = currentTime - this.lastFrameTime;
-        if (this.isMobile && elapsed < this.targetFrameTime) {
-            requestAnimationFrame((time) => this.gameLoop(time));
-            return;
-        }
-        
         // Cap deltaTime to 100ms max — prevents physics/collision spiral if browser
         // pauses (GC, audio decode, tab switch) and resumes with a huge gap
         const rawDelta = (currentTime - this.lastTime) / 1000;
