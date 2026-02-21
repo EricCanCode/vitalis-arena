@@ -230,6 +230,10 @@ class Game {
         this.audioManager = new AudioManager();
         this.loadAudio();
         
+        // Mobile detection and performance settings
+        this.isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        this.performanceMode = this.isMobile; // Auto-enable performance mode on mobile
+        
         // Game settings
         this.waveMultiplier = 1.0;
         
@@ -553,7 +557,11 @@ class Game {
         const pressStartHandler = () => {
             // Enable audio on first user interaction (browser autoplay policy)
             this.audioManager.playSound('button-click');
-            this.showCharacterSelect();
+            
+            // Small delay to ensure audio context is unlocked before playing music
+            setTimeout(() => {
+                this.showCharacterSelect();
+            }, 100);
         };
         
         // Click to start
@@ -1003,8 +1011,9 @@ class Game {
         // Screen shake and effects
         this.screenShake = 30;
         
-        // Spawn dramatic particles
-        for (let i = 0; i < 100; i++) {
+        // Spawn dramatic particles (reduced count on mobile)
+        const particleCount = this.performanceMode ? 20 : 100;
+        for (let i = 0; i < particleCount; i++) {
             const angle = Math.random() * Math.PI * 2;
             const speed = 100 + Math.random() * 200;
             this.particles.push(new Particle(
@@ -1736,6 +1745,11 @@ class Game {
             particleCount = 20; // Large explosion
             particleSpeed = 80; // Slower but more particles
             particleSize = 1.5;
+        }
+        
+        // Reduce particle count on mobile
+        if (this.performanceMode) {
+            particleCount = Math.floor(particleCount * 0.4);
         }
         
         for (let i = 0; i < particleCount; i++) {
