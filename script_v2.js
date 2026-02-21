@@ -101,12 +101,14 @@ class AudioManager {
         this.musicEnabled = true;
 
         // Per-sound cooldowns (ms) to prevent rapid-fire spam
+        // Tighter values for combat sounds — creating AudioBufferSourceNodes at
+        // 10+ Hz still causes overhead when surrounded by a large group.
         this.soundCooldownMs = {
-            'enemy-hit':   80,
-            'player-hit':  150,
-            'pickup-xp':   60,
-            'shoot':       50,
-            'enemy-death': 50,
+            'enemy-hit':   200,  // max ~5/sec — was 80ms (too spammy in groups)
+            'player-hit':  200,
+            'pickup-xp':   80,
+            'shoot':       60,
+            'enemy-death': 150,  // was 50ms
         };
         this.soundLastPlayed = {};
 
