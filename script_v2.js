@@ -191,7 +191,6 @@ class AudioManager {
     playSound(name) {
         if (!this.soundEnabled) return;
         if (!this.audioContext || !this.soundBuffers[name]) return;
-        if (this.audioContext.state === 'suspended') return;
 
         // Per-sound cooldown to prevent spam
         const cooldown = this.soundCooldownMs[name];
@@ -201,12 +200,23 @@ class AudioManager {
             this.soundLastPlayed[name] = now;
         }
 
-        try {
-            const source = this.audioContext.createBufferSource();
-            source.buffer = this.soundBuffers[name];
-            source.connect(this.soundGainNode);
-            source.start(0);
-        } catch (e) { /* context closed or buffer error — ignore */ }
+        const doPlay = () => {
+            try {
+                const source = this.audioContext.createBufferSource();
+                source.buffer = this.soundBuffers[name];
+                source.connect(this.soundGainNode);
+                source.start(0);
+            } catch (e) {}
+        };
+
+        // If context is suspended (e.g. before first user gesture) resume then play.
+        // This handles the case where the click handler fires before the document-level
+        // resumeCtx listener, which is the common case on first tap/click.
+        if (this.audioContext.state === 'suspended') {
+            this.audioContext.resume().then(doPlay).catch(() => {});
+        } else {
+            doPlay();
+        }
     }
 
     // Play looping background music
@@ -218,28 +228,37 @@ class AudioManager {
         this._stopMusicSource();
 
         if (!this.musicBuffers[name]) {
-            // Buffer still loading — defer
+            // Buffer still downloading/decoding — defer until ready
             this._pendingMusic = name;
             return;
         }
+
+        const doPlayMusic = () => {
+            try {
+                const source = this.audioContext.createBufferSource();
+                source.buffer = this.musicBuffers[name];
+                source.loop = true;
+                source.connect(this.musicGainNode);
+                source.start(0);
+                this.currentMusicSource = source;
+                this.currentMusicName = name;
+            } catch (e) {
+                console.warn('playMusic error:', e);
+            }
+        };
 
         if (this.audioContext.state === 'suspended') {
-            // Waiting for user gesture to unlock context
+            // Resume the context (requires being called from a user-gesture handler),
+            // then play. Store as pending so resumeCtx can also pick it up as fallback.
             this._pendingMusic = name;
-            this.audioContext.resume().catch(() => {});
-            return;
-        }
-
-        try {
-            const source = this.audioContext.createBufferSource();
-            source.buffer = this.musicBuffers[name];
-            source.loop = true;
-            source.connect(this.musicGainNode);
-            source.start(0);
-            this.currentMusicSource = source;
-            this.currentMusicName = name;
-        } catch (e) {
-            console.warn('playMusic error:', e);
+            this.audioContext.resume().then(() => {
+                if (this._pendingMusic === name) {
+                    this._pendingMusic = null;
+                    doPlayMusic();
+                }
+            }).catch(() => {});
+        } else {
+            doPlayMusic();
         }
     }
 
