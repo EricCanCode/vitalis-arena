@@ -233,6 +233,8 @@ class Game {
         // Mobile detection and performance settings
         this.isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         this.performanceMode = this.isMobile; // Auto-enable performance mode on mobile
+        this.lastFrameTime = 0;
+        this.targetFrameTime = this.isMobile ? 1000 / 30 : 1000 / 60; // 30fps on mobile, 60fps on desktop
         
         // Game settings
         this.waveMultiplier = 1.0;
@@ -258,9 +260,9 @@ class Game {
         
         // Separate spawn timers for each enemy type
         this.enemySpawnTimers = {
-            basic: { lastSpawn: 0, cooldown: 800 },   // Most frequent
-            fast: { lastSpawn: 0, cooldown: 1800 },   // Medium frequency
-            tank: { lastSpawn: 0, cooldown: 4000 }    // Least frequent
+            basic: { lastSpawn: 0, cooldown: this.isMobile ? 1200 : 800 },   // Slower on mobile
+            fast: { lastSpawn: 0, cooldown: this.isMobile ? 2800 : 1800 },   // Slower on mobile
+            tank: { lastSpawn: 0, cooldown: this.isMobile ? 6000 : 4000 }    // Slower on mobile
         };
         
         // Achievement System
@@ -769,8 +771,16 @@ class Game {
     gameLoop(currentTime) {
         if (!this.isRunning) return;
         
+        // Frame rate limiting for mobile
+        const elapsed = currentTime - this.lastFrameTime;
+        if (this.isMobile && elapsed < this.targetFrameTime) {
+            requestAnimationFrame((time) => this.gameLoop(time));
+            return;
+        }
+        
         const deltaTime = (currentTime - this.lastTime) / 1000;
         this.lastTime = currentTime;
+        this.lastFrameTime = currentTime;
         
         this.gameTime += deltaTime;
         
@@ -1551,8 +1561,10 @@ class Game {
         this.ctx.fillStyle = '#1a1a2e';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
-        // Draw grid
-        this.drawGrid();
+        // Draw grid (skip on mobile for performance)
+        if (!this.performanceMode) {
+            this.drawGrid();
+        }
         
         // Draw particles (background layer)
         this.particles.forEach(particle => particle.draw(this.ctx));
@@ -1653,6 +1665,11 @@ class Game {
         
         // Calculate max enemies based on time (starts at 15, increases by 5 every 30 seconds)
         let maxEnemies = Math.floor(15 + (this.gameTime / 30) * 5);
+        
+        // Cap at lower max on mobile for better performance
+        if (this.performanceMode) {
+            maxEnemies = Math.min(maxEnemies, 12); // Hard cap at 12 enemies on mobile
+        }
         
         // Reduce max enemies during boss fight
         if (this.bossActive) {
@@ -4046,14 +4063,20 @@ class BossProjectile {
     }
     
     draw(ctx) {
-        // Glowing effect
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = this.color;
+        // Glowing effect (skip on mobile for performance)
+        if (!this.game.performanceMode) {
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = this.color;
+        }
+        
         ctx.fillStyle = this.color;
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx.fill();
-        ctx.shadowBlur = 0;
+        
+        if (!this.game.performanceMode) {
+            ctx.shadowBlur = 0;
+        }
         
         // Inner glow
         ctx.fillStyle = '#ffaaaa';
