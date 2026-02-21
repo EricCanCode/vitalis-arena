@@ -681,6 +681,9 @@ class Game {
     showCharacterSelect() {
         document.getElementById('titleScreen').classList.remove('active');
         document.getElementById('characterSelect').classList.add('active');
+        
+        // Start menu music
+        this.audioManager.playMusic('menu-theme');
     }
     
     selectCharacter(characterType) {
@@ -692,6 +695,9 @@ class Game {
         // Hide character select, show game screen
         document.getElementById('characterSelect').classList.remove('active');
         document.getElementById('gameScreen').classList.add('active');
+        
+        // Start game music
+        this.audioManager.playMusic('game-theme');
         
         // Initialize player
         this.player = new Player(
@@ -984,6 +990,9 @@ class Game {
         this.bossActive = true;
         document.getElementById('bossHealthBar').classList.add('active');
         
+        // Start boss music
+        this.audioManager.playMusic('boss-theme');
+        
         // Spawn from top center
         const x = this.canvas.width / 2;
         const y = -100;
@@ -1008,6 +1017,9 @@ class Game {
         this.audioManager.playSound('boss-defeat');
         this.bossActive = false;
         this.currentBoss = null;
+        
+        // Return to game music after boss
+        this.audioManager.playMusic('game-theme');
         
         document.getElementById('bossHealthBar').classList.remove('active');
         
@@ -1835,6 +1847,9 @@ class Game {
         
         document.getElementById('gameScreen').classList.remove('active');
         document.getElementById('titleScreen').classList.add('active');
+        
+        // Return to menu music
+        this.audioManager.playMusic('menu-theme');
         this.isRunning = false;
         this.isPaused = false;
         
