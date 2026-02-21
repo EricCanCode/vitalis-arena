@@ -106,6 +106,9 @@ class AudioManager {
     playSound(name) {
         if (!this.soundEnabled || !this.sounds[name]) return;
         
+        // Skip on mobile to prevent memory issues
+        if (window.game && window.game.isMobile) return;
+        
         // Clone audio for overlapping sounds
         const sound = this.sounds[name].cloneNode();
         sound.volume = this.soundVolume;
@@ -114,6 +117,9 @@ class AudioManager {
     
     playMusic(name) {
         if (!this.musicEnabled || !this.music[name]) return;
+        
+        // Skip on mobile to prevent memory issues
+        if (window.game && window.game.isMobile) return;
         
         // Stop current music
         if (this.currentMusic) {
@@ -228,13 +234,17 @@ class Game {
         
         // Audio Manager
         this.audioManager = new AudioManager();
-        this.loadAudio();
         
         // Mobile detection and performance settings
         this.isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         this.performanceMode = this.isMobile; // Auto-enable performance mode on mobile
         this.lastFrameTime = 0;
         this.targetFrameTime = this.isMobile ? 1000 / 30 : 1000 / 60; // 30fps on mobile, 60fps on desktop
+        
+        // Only load audio on desktop - disable on mobile to prevent crashes
+        if (!this.isMobile) {
+            this.loadAudio();
+        }
         
         // Game settings
         this.waveMultiplier = 1.0;
