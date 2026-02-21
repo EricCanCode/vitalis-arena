@@ -595,8 +595,6 @@ class Game {
         this.audioManager.loadMusic('game-theme', 'sounds/game-theme.mp3');
         this.audioManager.loadMusic('boss-theme', 'sounds/boss-theme.mp3');
     }
-        this.audioManager.loadMusic('boss-theme', 'sounds/boss-theme.mp3');
-    }
     
     setupUI() {
         // Title screen - press start
