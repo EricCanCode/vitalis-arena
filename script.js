@@ -449,20 +449,18 @@ class Game {
         
         // Virtual Joystick
         joystickContainer.addEventListener('touchstart', (e) => {
-            e.preventDefault();
             const touch = e.touches[0];
             this.touchState.joystick.active = true;
             this.touchState.joystick.touchId = touch.identifier;
             this.updateJoystick(touch, joystickContainer, joystickStick);
-        });
+        }, { passive: true });
         
         joystickContainer.addEventListener('touchmove', (e) => {
-            e.preventDefault();
             const touch = Array.from(e.touches).find(t => t.identifier === this.touchState.joystick.touchId);
             if (touch && this.touchState.joystick.active) {
                 this.updateJoystick(touch, joystickContainer, joystickStick);
             }
-        });
+        }, { passive: true });
         
         joystickContainer.addEventListener('touchend', (e) => {
             e.preventDefault();
@@ -479,23 +477,16 @@ class Game {
         
         // Ultimate Button (Mobile)
         fireButton.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
             // Trigger ultimate ability if ready
             if (this.player && this.player.ultimateReady && this.isRunning && !this.isPaused) {
                 this.player.useUltimate(this);
             }
-        });
+        }, { passive: true });
         
-        fireButton.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-        });
+        fireButton.addEventListener('touchend', () => {}, { passive: true });
         
-        // Prevent default touch behaviors on mobile controls
-        document.getElementById('mobileControls')?.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-        }, { passive: false });
+        // touch-action: none on joystick/fire-button CSS handles scroll prevention
+        // No passive:false listeners needed
     }
     
     updateJoystick(touch, container, stick) {
