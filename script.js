@@ -114,6 +114,9 @@ class AudioManager {
     playSound(name) {
         if (!this.soundEnabled || !this.sounds[name]) return;
         
+        // TEST: Skip on mobile to test performance
+        if (window.game && window.game.isMobile) return;
+        
         // Clone audio for overlapping sounds (small files, safe on mobile)
         const sound = this.sounds[name].cloneNode();
         sound.volume = this.soundVolume;
@@ -123,6 +126,9 @@ class AudioManager {
     playMusic(name) {
         if (!this.musicEnabled) return;
         
+        // TEST: Skip on mobile to test performance
+        if (window.game && window.game.isMobile) return;
+        
         // Stop and unload current music to free memory
         if (this.currentMusic) {
             this.currentMusic.pause();
@@ -130,26 +136,11 @@ class AudioManager {
             this.currentMusic = null;
         }
         
-        // On mobile: lazy load the music track
-        if (window.game && window.game.isMobile) {
-            if (!this.musicPaths[name]) return;
-            
-            // Don't reload if already playing this track
-            if (this.currentMusicName === name) return;
-            
-            // Create new audio element for this track only
-            this.currentMusic = new Audio(this.musicPaths[name]);
-            this.currentMusic.volume = this.musicVolume;
-            this.currentMusic.loop = true;
-            this.currentMusicName = name;
-            this.currentMusic.play().catch(err => console.log('Music play error:', err));
-        } else {
-            // Desktop: use preloaded music
-            if (!this.music[name]) return;
-            this.currentMusic = this.music[name];
-            this.currentMusicName = name;
-            this.currentMusic.play().catch(err => console.log('Music play error:', err));
-        }
+        // Desktop: use preloaded music
+        if (!this.music[name]) return;
+        this.currentMusic = this.music[name];
+        this.currentMusicName = name;
+        this.currentMusic.play().catch(err => console.log('Music play error:', err));
     }
     
     stopMusic() {
@@ -263,11 +254,8 @@ class Game {
         this.lastFrameTime = 0;
         this.targetFrameTime = this.isMobile ? 1000 / 30 : 1000 / 60; // 30fps on mobile, 60fps on desktop
         
-        // Only load audio on desktop - disable on mobile to prevent crashes
+        // TEST: Completely disable audio on mobile to test performance
         if (!this.isMobile) {
-            this.loadAudio();
-        } else {
-            // On mobile: load audio but with lazy-loading for music
             this.loadAudio();
         }
         
