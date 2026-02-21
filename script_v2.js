@@ -283,8 +283,10 @@ class Game {
         this.lastFrameTime = 0;
         this.targetFrameTime = this.isMobile ? 1000 / 30 : 1000 / 60; // 30fps on mobile, 60fps on desktop
         
-        // Load audio for all platforms (audio pool prevents mobile performance issues)
-        this.loadAudio();
+        // Load audio on desktop only - mobile audio causes stutter even with pooling
+        if (!this.isMobile) {
+            this.loadAudio();
+        }
         
         // Game settings
         this.waveMultiplier = 1.0;
