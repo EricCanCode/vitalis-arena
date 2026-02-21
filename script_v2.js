@@ -121,6 +121,8 @@ class AudioManager {
     }
     
     loadMusic(name, path) {
+        // Skip loading music on mobile — 3MB files stall the main thread during decode
+        if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) return;
         const audio = new Audio(path);
         audio.volume = this.musicVolume;
         audio.loop = true;
