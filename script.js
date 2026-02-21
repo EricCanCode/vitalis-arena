@@ -88,6 +88,14 @@ class AudioManager {
         this.currentMusic = null;
         this.currentMusicName = null;
         
+        // Per-sound cooldowns (ms) to prevent rapid-fire stacking
+        this.soundCooldownMs = {
+            'enemy-hit':   80,
+            'player-hit':  150,
+            'pickup-xp':   60,
+        };
+        this.soundLastPlayed = {}; // name -> timestamp
+        
         // Load settings from localStorage
         this.loadSettings();
     }
@@ -116,6 +124,14 @@ class AudioManager {
         
         // TEST: Skip on mobile to test performance
         if (window.game && window.game.isMobile) return;
+        
+        // Enforce per-sound cooldown to prevent rapid stacking (e.g. enemy-hit)
+        const cooldown = this.soundCooldownMs[name];
+        if (cooldown) {
+            const now = performance.now();
+            if (this.soundLastPlayed[name] && now - this.soundLastPlayed[name] < cooldown) return;
+            this.soundLastPlayed[name] = now;
+        }
         
         // Clone audio for overlapping sounds (small files, safe on mobile)
         const sound = this.sounds[name].cloneNode();
