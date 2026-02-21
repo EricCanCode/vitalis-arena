@@ -121,16 +121,10 @@ class AudioManager {
     }
     
     loadMusic(name, path) {
-        // On mobile: just store the path for lazy loading (don't load file yet)
-        // On desktop: preload for instant playback
-        if (window.game && window.game.isMobile) {
-            this.musicPaths[name] = path;
-        } else {
-            const audio = new Audio(path);
-            audio.volume = this.musicVolume;
-            audio.loop = true;
-            this.music[name] = audio;
-        }
+        const audio = new Audio(path);
+        audio.volume = this.musicVolume;
+        audio.loop = true;
+        this.music[name] = audio;
     }
     
     playSound(name) {
@@ -287,10 +281,8 @@ class Game {
         this.lastFrameTime = 0;
         this.targetFrameTime = this.isMobile ? 1000 / 30 : 1000 / 60; // 30fps on mobile, 60fps on desktop
         
-        // TEST: Completely disable audio on mobile to test performance
-        if (!this.isMobile) {
-            this.loadAudio();
-        }
+        // Load audio for all platforms (audio pool prevents mobile performance issues)
+        this.loadAudio();
         
         // Game settings
         this.waveMultiplier = 1.0;
