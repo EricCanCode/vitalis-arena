@@ -75,146 +75,216 @@ const EQUIPMENT_POOL = [
     { id: 'ring_of_power', name: 'Ring of Power', type: EQUIPMENT_TYPES.RING, baseStats: { damage: 30 }, effect: 'ultimate_charge', effectValue: 50, icon: '💍' },
 ];
 
-// Audio Manager Class
+// Audio Manager Class — Web Audio API
+// Uses AudioContext.decodeAudioData() which decodes on a background thread,
+// so playback never blocks the game loop (fixes iOS Safari stutter).
 class AudioManager {
     constructor() {
-        this.sounds = {};
-        this.music = {};  // Will store paths, not audio objects
-        this.musicPaths = {};  // Store music file paths for lazy loading
+        // AudioContext + gain graph (created on first user gesture — iOS autoplay policy)
+        this.audioContext = null;
+        this.soundGainNode = null;
+        this.musicGainNode = null;
+
+        // Decoded AudioBuffers — populated async via fetch + decodeAudioData
+        this.soundBuffers = {};
+        this.musicBuffers = {};
+
+        // Music state
+        this.currentMusicSource = null;
+        this.currentMusicName = null;
+        this._pendingMusic = null; // music to start once context / buffer is ready
+
+        // Volume + enabled flags
         this.soundVolume = 0.5;
         this.musicVolume = 0.3;
         this.soundEnabled = true;
         this.musicEnabled = true;
-        this.currentMusic = null;
-        this.currentMusicName = null;
-        
-        // Pool index tracker for round-robin audio reuse
-        this.soundPoolIndex = {};
-        
-        // Per-sound cooldowns (ms) to prevent rapid-fire stacking
+
+        // Per-sound cooldowns (ms) to prevent rapid-fire spam
         this.soundCooldownMs = {
             'enemy-hit':   80,
             'player-hit':  150,
             'pickup-xp':   60,
-            'shoot':       50,  // 20/sec max
+            'shoot':       50,
             'enemy-death': 50,
         };
-        this.soundLastPlayed = {}; // name -> timestamp
-        
-        // Load settings from localStorage
+        this.soundLastPlayed = {};
+
+        // Load user settings from localStorage
         this.loadSettings();
+
+        // Resume / create the AudioContext on the first user gesture.
+        // iOS Safari suspends AudioContext until a touch or click occurs.
+        const resumeCtx = () => {
+            if (!this.audioContext) {
+                this._initContext();
+            } else if (this.audioContext.state === 'suspended') {
+                this.audioContext.resume().then(() => {
+                    if (this._pendingMusic) {
+                        this.playMusic(this._pendingMusic);
+                        this._pendingMusic = null;
+                    }
+                });
+            }
+            // Remove once running
+            if (this.audioContext && this.audioContext.state === 'running') {
+                document.removeEventListener('touchstart', resumeCtx);
+                document.removeEventListener('click', resumeCtx);
+                document.removeEventListener('keydown', resumeCtx);
+            }
+        };
+        document.addEventListener('touchstart', resumeCtx, { passive: true });
+        document.addEventListener('click', resumeCtx);
+        document.addEventListener('keydown', resumeCtx);
     }
-    
-    loadSound(name, path) {
-        // Pre-allocate a small pool to avoid cloneNode() on every play (expensive on iOS)
-        // Use navigator.userAgent directly since window.game doesn't exist yet during construction
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const poolSize = isMobile ? 2 : 3;
-        const pool = [];
-        for (let i = 0; i < poolSize; i++) {
-            const audio = new Audio(path);
-            audio.volume = this.soundVolume;
-            pool.push(audio);
+
+    // Create AudioContext and gain node graph
+    _initContext() {
+        if (this.audioContext) return;
+        try {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+            // SFX chain: bufferSource → soundGainNode → destination
+            this.soundGainNode = this.audioContext.createGain();
+            this.soundGainNode.gain.value = this.soundEnabled ? this.soundVolume : 0;
+            this.soundGainNode.connect(this.audioContext.destination);
+
+            // Music chain: bufferSource → musicGainNode → destination
+            this.musicGainNode = this.audioContext.createGain();
+            this.musicGainNode.gain.value = this.musicEnabled ? this.musicVolume : 0;
+            this.musicGainNode.connect(this.audioContext.destination);
+        } catch (e) {
+            console.warn('Web Audio API unavailable:', e);
         }
-        this.sounds[name] = pool;
-        this.soundPoolIndex[name] = 0;
     }
-    
+
+    // Load a sound effect asynchronously (fetch + background-thread decode)
+    loadSound(name, path) {
+        this._initContext();
+        if (!this.audioContext) return;
+        fetch(path)
+            .then(r => r.arrayBuffer())
+            .then(buf => this.audioContext.decodeAudioData(buf))
+            .then(decoded => { this.soundBuffers[name] = decoded; })
+            .catch(err => console.warn(`Audio load failed [${name}]:`, err));
+    }
+
+    // Load background music asynchronously
     loadMusic(name, path) {
-        // Skip loading music on mobile — 3MB files stall the main thread during decode
-        if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) return;
-        const audio = new Audio(path);
-        audio.volume = this.musicVolume;
-        audio.loop = true;
-        this.music[name] = audio;
+        this._initContext();
+        if (!this.audioContext) return;
+        fetch(path)
+            .then(r => r.arrayBuffer())
+            .then(buf => this.audioContext.decodeAudioData(buf))
+            .then(decoded => {
+                this.musicBuffers[name] = decoded;
+                // If this track was queued before the buffer was ready, play it now
+                if (this._pendingMusic === name && this.audioContext.state === 'running') {
+                    this.playMusic(name);
+                    this._pendingMusic = null;
+                }
+            })
+            .catch(err => console.warn(`Music load failed [${name}]:`, err));
     }
-    
+
+    // Play a sound effect — near-zero cost, runs off main thread
     playSound(name) {
-        if (!this.soundEnabled || !this.sounds[name]) return;
-        
-        // Enforce per-sound cooldown to prevent rapid stacking (e.g. enemy-hit)
+        if (!this.soundEnabled) return;
+        if (!this.audioContext || !this.soundBuffers[name]) return;
+        if (this.audioContext.state === 'suspended') return;
+
+        // Per-sound cooldown to prevent spam
         const cooldown = this.soundCooldownMs[name];
         if (cooldown) {
             const now = performance.now();
             if (this.soundLastPlayed[name] && now - this.soundLastPlayed[name] < cooldown) return;
             this.soundLastPlayed[name] = now;
         }
-        
-        // Reuse a pool instance — find a free one or use round-robin (no cloneNode, safe on iOS)
-        const pool = this.sounds[name];
-        let sound = null;
-        for (let i = 0; i < pool.length; i++) {
-            if (pool[i].paused || pool[i].ended) { sound = pool[i]; break; }
-        }
-        if (!sound) {
-            sound = pool[this.soundPoolIndex[name]];
-            this.soundPoolIndex[name] = (this.soundPoolIndex[name] + 1) % pool.length;
-        }
-        sound.currentTime = 0;
-        sound.volume = this.soundVolume;
-        sound.play().catch(() => {});
+
+        try {
+            const source = this.audioContext.createBufferSource();
+            source.buffer = this.soundBuffers[name];
+            source.connect(this.soundGainNode);
+            source.start(0);
+        } catch (e) { /* context closed or buffer error — ignore */ }
     }
-    
+
+    // Play looping background music
     playMusic(name) {
         if (!this.musicEnabled) return;
-        
-        // Stop current music (keep src intact so preloaded file stays ready)
-        if (this.currentMusic) {
-            this.currentMusic.pause();
-            this.currentMusic.currentTime = 0;
-            this.currentMusic = null;
+        if (!this.audioContext) return;
+
+        // Stop whatever is currently playing
+        this._stopMusicSource();
+
+        if (!this.musicBuffers[name]) {
+            // Buffer still loading — defer
+            this._pendingMusic = name;
+            return;
         }
-        
-        // Desktop: use preloaded music
-        if (!this.music[name]) return;
-        this.currentMusic = this.music[name];
-        this.currentMusicName = name;
-        this.currentMusic.play().catch(err => console.log('Music play error:', err));
+
+        if (this.audioContext.state === 'suspended') {
+            // Waiting for user gesture to unlock context
+            this._pendingMusic = name;
+            this.audioContext.resume().catch(() => {});
+            return;
+        }
+
+        try {
+            const source = this.audioContext.createBufferSource();
+            source.buffer = this.musicBuffers[name];
+            source.loop = true;
+            source.connect(this.musicGainNode);
+            source.start(0);
+            this.currentMusicSource = source;
+            this.currentMusicName = name;
+        } catch (e) {
+            console.warn('playMusic error:', e);
+        }
     }
-    
+
+    _stopMusicSource() {
+        if (this.currentMusicSource) {
+            try { this.currentMusicSource.stop(0); } catch (e) {}
+            this.currentMusicSource = null;
+        }
+        this.currentMusicName = null;
+    }
+
     stopMusic() {
-        if (this.currentMusic) {
-            this.currentMusic.pause();
-            this.currentMusic.currentTime = 0;
-            this.currentMusic = null;
-            this.currentMusicName = null;
-        }
+        this._stopMusicSource();
+        this._pendingMusic = null;
     }
-    
+
     setSoundVolume(volume) {
         this.soundVolume = Math.max(0, Math.min(1, volume));
-        Object.values(this.sounds).forEach(pool => {
-            pool.forEach(audio => { audio.volume = this.soundVolume; });
-        });
+        if (this.soundGainNode) this.soundGainNode.gain.value = this.soundEnabled ? this.soundVolume : 0;
         this.saveSettings();
     }
-    
+
     setMusicVolume(volume) {
         this.musicVolume = Math.max(0, Math.min(1, volume));
-        Object.values(this.music).forEach(music => {
-            music.volume = this.musicVolume;
-        });
-        if (this.currentMusic) {
-            this.currentMusic.volume = this.musicVolume;
-        }
+        if (this.musicGainNode) this.musicGainNode.gain.value = this.musicEnabled ? this.musicVolume : 0;
         this.saveSettings();
     }
-    
+
     toggleSound() {
         this.soundEnabled = !this.soundEnabled;
+        if (this.soundGainNode) this.soundGainNode.gain.value = this.soundEnabled ? this.soundVolume : 0;
         this.saveSettings();
     }
-    
+
     toggleMusic() {
         this.musicEnabled = !this.musicEnabled;
-        if (!this.musicEnabled && this.currentMusic) {
-            this.currentMusic.pause();
-        } else if (this.musicEnabled && this.currentMusic) {
-            this.currentMusic.play();
+        if (this.musicGainNode) this.musicGainNode.gain.value = this.musicEnabled ? this.musicVolume : 0;
+        if (!this.musicEnabled) {
+            this._stopMusicSource();
+        } else if (this.currentMusicName) {
+            this.playMusic(this.currentMusicName);
         }
         this.saveSettings();
     }
-    
+
     loadSettings() {
         const settings = localStorage.getItem('audioSettings');
         if (settings) {
@@ -225,7 +295,7 @@ class AudioManager {
             this.musicEnabled = parsed.musicEnabled !== false;
         }
     }
-    
+
     saveSettings() {
         localStorage.setItem('audioSettings', JSON.stringify({
             soundVolume: this.soundVolume,
@@ -283,10 +353,8 @@ class Game {
         this.lastFrameTime = 0;
         this.targetFrameTime = this.isMobile ? 1000 / 30 : 1000 / 60; // 30fps on mobile, 60fps on desktop
         
-        // Load audio on desktop only - mobile audio causes stutter even with pooling
-        if (!this.isMobile) {
-            this.loadAudio();
-        }
+        // Load audio on all devices — Web Audio API decodes on background thread (no stutter)
+        this.loadAudio();
         
         // Game settings
         this.waveMultiplier = 1.0;
