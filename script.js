@@ -75,6 +75,119 @@ const EQUIPMENT_POOL = [
     { id: 'ring_of_power', name: 'Ring of Power', type: EQUIPMENT_TYPES.RING, baseStats: { damage: 30 }, effect: 'ultimate_charge', effectValue: 50, icon: '💍' },
 ];
 
+// Audio Manager Class
+class AudioManager {
+    constructor() {
+        this.sounds = {};
+        this.music = {};
+        this.soundVolume = 0.5;
+        this.musicVolume = 0.3;
+        this.soundEnabled = true;
+        this.musicEnabled = true;
+        this.currentMusic = null;
+        
+        // Load settings from localStorage
+        this.loadSettings();
+    }
+    
+    loadSound(name, path) {
+        const audio = new Audio(path);
+        audio.volume = this.soundVolume;
+        this.sounds[name] = audio;
+    }
+    
+    loadMusic(name, path) {
+        const audio = new Audio(path);
+        audio.volume = this.musicVolume;
+        audio.loop = true;
+        this.music[name] = audio;
+    }
+    
+    playSound(name) {
+        if (!this.soundEnabled || !this.sounds[name]) return;
+        
+        // Clone audio for overlapping sounds
+        const sound = this.sounds[name].cloneNode();
+        sound.volume = this.soundVolume;
+        sound.play().catch(err => console.log('Sound play error:', err));
+    }
+    
+    playMusic(name) {
+        if (!this.musicEnabled || !this.music[name]) return;
+        
+        // Stop current music
+        if (this.currentMusic) {
+            this.currentMusic.pause();
+            this.currentMusic.currentTime = 0;
+        }
+        
+        // Play new music
+        this.currentMusic = this.music[name];
+        this.currentMusic.play().catch(err => console.log('Music play error:', err));
+    }
+    
+    stopMusic() {
+        if (this.currentMusic) {
+            this.currentMusic.pause();
+            this.currentMusic.currentTime = 0;
+        }
+    }
+    
+    setSoundVolume(volume) {
+        this.soundVolume = Math.max(0, Math.min(1, volume));
+        Object.values(this.sounds).forEach(sound => {
+            sound.volume = this.soundVolume;
+        });
+        this.saveSettings();
+    }
+    
+    setMusicVolume(volume) {
+        this.musicVolume = Math.max(0, Math.min(1, volume));
+        Object.values(this.music).forEach(music => {
+            music.volume = this.musicVolume;
+        });
+        if (this.currentMusic) {
+            this.currentMusic.volume = this.musicVolume;
+        }
+        this.saveSettings();
+    }
+    
+    toggleSound() {
+        this.soundEnabled = !this.soundEnabled;
+        this.saveSettings();
+    }
+    
+    toggleMusic() {
+        this.musicEnabled = !this.musicEnabled;
+        if (!this.musicEnabled && this.currentMusic) {
+            this.currentMusic.pause();
+        } else if (this.musicEnabled && this.currentMusic) {
+            this.currentMusic.play();
+        }
+        this.saveSettings();
+    }
+    
+    loadSettings() {
+        const settings = localStorage.getItem('audioSettings');
+        if (settings) {
+            const parsed = JSON.parse(settings);
+            this.soundVolume = parsed.soundVolume || 0.5;
+            this.musicVolume = parsed.musicVolume || 0.3;
+            this.soundEnabled = parsed.soundEnabled !== false;
+            this.musicEnabled = parsed.musicEnabled !== false;
+        }
+    }
+    
+    saveSettings() {
+        localStorage.setItem('audioSettings', JSON.stringify({
+            soundVolume: this.soundVolume,
+            musicVolume: this.musicVolume,
+            soundEnabled: this.soundEnabled,
+            musicEnabled: this.musicEnabled
+        }));
+    }
+}
+
 class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
@@ -112,6 +225,10 @@ class Game {
         this.images = {};
         this.imagesLoaded = false;
         this.loadImages();
+        
+        // Audio Manager
+        this.audioManager = new AudioManager();
+        this.loadAudio();
         
         // Game settings
         this.waveMultiplier = 1.0;
@@ -408,6 +525,23 @@ class Game {
         }
     }
     
+    loadAudio() {
+        // Load sound effects
+        this.audioManager.loadSound('shoot', 'sounds/shoot.mp3');
+        this.audioManager.loadSound('enemy-hit', 'sounds/enemy-hit.mp3');
+        this.audioManager.loadSound('enemy-death', 'sounds/enemy-death.mp3');
+        this.audioManager.loadSound('player-hit', 'sounds/player-hit.mp3');
+        this.audioManager.loadSound('level-up', 'sounds/level-up.mp3');
+        this.audioManager.loadSound('boss-warning', 'sounds/boss-warning.mp3');
+        this.audioManager.loadSound('boss-defeat', 'sounds/boss-defeat.mp3');
+        this.audioManager.loadSound('pickup-xp', 'sounds/pickup-xp.mp3');
+        this.audioManager.loadSound('pickup-health', 'sounds/pickup-health.mp3');
+        this.audioManager.loadSound('pickup-equipment', 'sounds/pickup-equipment.mp3');
+        this.audioManager.loadSound('equip-item', 'sounds/equip-item.mp3');
+        this.audioManager.loadSound('ultimate', 'sounds/ultimate.mp3');
+        this.audioManager.loadSound('button-click', 'sounds/button-click.mp3');
+    }
+    
     setupUI() {
         // Title screen - press start
         const titleScreen = document.getElementById('titleScreen');
@@ -421,6 +555,7 @@ class Game {
         // Any key to start (but only when title screen is active)
         const keyStartHandler = (e) => {
             if (titleScreen.classList.contains('active')) {
+                this.audioManager.playSound('button-click');
                 pressStartHandler();
             }
         };
@@ -430,16 +565,19 @@ class Game {
         const characterCards = document.querySelectorAll('.character-card');
         characterCards.forEach(card => {
             card.addEventListener('click', () => {
+                this.audioManager.playSound('button-click');
                 this.selectCharacter(card.dataset.character);
             });
         });
         
         // Game over buttons
         document.getElementById('restartBtn').addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
             this.restart();
         });
         
         document.getElementById('backToSelectBtn').addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
             this.backToSelect();
         });
         
@@ -452,56 +590,67 @@ class Game {
         
         // Pause button
         document.getElementById('pauseButton').addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
             this.togglePause();
         });
         
         // Resume button
         document.getElementById('resumeBtn').addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
             this.togglePause();
         });
         
         // Quit button (from pause screen)
         document.getElementById('quitBtn').addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
             this.backToSelect();
         });
         
         // View Full Inventory button (from pause screen)
         document.getElementById('viewFullInventoryBtn')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
             this.openInventory();
         });
         
         // Achievements button
         document.getElementById('achievementsBtn')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
             this.showAchievements();
         });
         
         // Close achievements button
         document.getElementById('closeAchievements')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
             document.getElementById('achievementsPanel').classList.remove('active');
         });
         
         // Stage complete - next stage button
         document.getElementById('nextStageBtn')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
             this.advanceStage();
         });
         
         // Shop button
         document.getElementById('shopButton')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
             this.openShop();
         });
         
         // Menu shop button
         document.getElementById('menuShopBtn')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
             this.openShop();
         });
         
         // Close shop button
         document.getElementById('closeShopBtn')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
             this.closeShop();
         });
         
         // Refresh shop button
         document.getElementById('refreshShopBtn')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
             if (this.coins >= 50) {
                 this.coins -= 50;
                 this.saveCoins();
@@ -511,11 +660,13 @@ class Game {
         
         // Inventory button
         document.getElementById('inventoryBtn')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
             this.openInventory();
         });
         
         // Close inventory button
         document.getElementById('closeInventoryBtn')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
             this.closeInventory();
         });
     }
@@ -668,6 +819,7 @@ class Game {
             
             // Remove dead enemies
             if (enemy.health <= 0) {
+                this.audioManager.playSound('enemy-death');
                 this.spawnXP(enemy.x, enemy.y, enemy.xpValue);
                 this.player.addKill(enemy); // Pass enemy to track type
                 
@@ -722,6 +874,7 @@ class Game {
             
             // Check collision with player
             if (this.checkCollision(orb, this.player)) {
+                this.audioManager.playSound('pickup-xp');
                 this.player.addXP(orb.value);
                 this.xpOrbs.splice(i, 1);
             }
@@ -734,6 +887,7 @@ class Game {
             
             // Check collision with player
             if (this.checkCollision(pickup, this.player)) {
+                this.audioManager.playSound('pickup-health');
                 // Heal player
                 const healAmount = pickup.healAmount;
                 this.player.health = Math.min(this.player.maxHealth, this.player.health + healAmount);
@@ -749,6 +903,7 @@ class Game {
             
             // Check collision with player
             if (this.checkCollision(drop, this.player)) {
+                this.audioManager.playSound('pickup-equipment');
                 // Add to inventory
                 const existingItem = this.playerInventory.find(item => item.name === drop.equipment.name);
                 if (!existingItem) {
@@ -843,6 +998,7 @@ class Game {
     }
     
     defeatBoss() {
+        this.audioManager.playSound('boss-defeat');
         this.bossActive = false;
         this.currentBoss = null;
         
@@ -1144,6 +1300,7 @@ class Game {
         // Add event listeners to buy buttons
         document.querySelectorAll('.shop-buy-btn:not(.disabled)').forEach(btn => {
             btn.addEventListener('click', (e) => {
+                this.audioManager.playSound('button-click');
                 const index = parseInt(e.target.dataset.index);
                 this.purchaseEquipment(index);
             });
@@ -1273,6 +1430,7 @@ class Game {
     equipFromInventory(index) {
         const equipment = this.playerInventory[index];
         if (this.player) {
+            this.audioManager.playSound('equip-item');
             // In-game: equip to active player
             this.player.equipItem(equipment);
             this.savedEquipment[equipment.type] = equipment;
@@ -2053,6 +2211,7 @@ class Player {
                 
                 // Fire projectiles
                 if (this.projectileCount === 1) {
+                    game.audioManager.playSound('shoot');
                     game.projectiles.push(new Projectile(
                         this.x, this.y, angle, 
                         this.projectileSpeed, 
@@ -2063,6 +2222,7 @@ class Player {
                     ));
                 } else {
                     // Multi-shot (for Ranger)
+                    game.audioManager.playSound('shoot');
                     const spreadAngle = 0.3;
                     for (let i = 0; i < this.projectileCount; i++) {
                         const offset = (i - (this.projectileCount - 1) / 2) * spreadAngle;
@@ -2217,6 +2377,8 @@ class Player {
     
     useUltimate(game) {
         if (!this.ultimateReady) return;
+        
+        game.audioManager.playSound('ultimate');
         
         // Reset ultimate charge
         this.ultimateCharge = 0;
@@ -2482,6 +2644,8 @@ class Player {
     }
     
     levelUp() {
+        const game = window.game;
+        game.audioManager.playSound('level-up');
         this.level++;
         this.xp -= this.xpToLevel;
         this.xpToLevel = Math.floor(this.xpToLevel * 1.5);
@@ -2615,6 +2779,7 @@ class Player {
                 <div class="upgrade-desc">${upgrade.desc}</div>
             `;
             option.addEventListener('click', () => {
+                game.audioManager.playSound('button-click');
                 upgrade.apply.call(this);
                 levelUpScreen.classList.remove('active');
                 game.isPaused = false;
@@ -3396,6 +3561,7 @@ class Enemy {
     
     takeDamage(amount) {
         this.health -= amount;
+        this.game.audioManager.playSound('enemy-hit');
     }
     
     draw(ctx) {
