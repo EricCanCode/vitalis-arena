@@ -79,12 +79,14 @@ const EQUIPMENT_POOL = [
 class AudioManager {
     constructor() {
         this.sounds = {};
-        this.music = {};
+        this.music = {};  // Will store paths, not audio objects
+        this.musicPaths = {};  // Store music file paths for lazy loading
         this.soundVolume = 0.5;
         this.musicVolume = 0.3;
         this.soundEnabled = true;
         this.musicEnabled = true;
         this.currentMusic = null;
+        this.currentMusicName = null;
         
         // Load settings from localStorage
         this.loadSettings();
@@ -97,45 +99,65 @@ class AudioManager {
     }
     
     loadMusic(name, path) {
-        const audio = new Audio(path);
-        audio.volume = this.musicVolume;
-        audio.loop = true;
-        this.music[name] = audio;
+        // On mobile: just store the path for lazy loading (don't load file yet)
+        // On desktop: preload for instant playback
+        if (window.game && window.game.isMobile) {
+            this.musicPaths[name] = path;
+        } else {
+            const audio = new Audio(path);
+            audio.volume = this.musicVolume;
+            audio.loop = true;
+            this.music[name] = audio;
+        }
     }
     
     playSound(name) {
         if (!this.soundEnabled || !this.sounds[name]) return;
         
-        // Skip on mobile to prevent memory issues
-        if (window.game && window.game.isMobile) return;
-        
-        // Clone audio for overlapping sounds
+        // Clone audio for overlapping sounds (small files, safe on mobile)
         const sound = this.sounds[name].cloneNode();
         sound.volume = this.soundVolume;
         sound.play().catch(err => console.log('Sound play error:', err));
     }
     
     playMusic(name) {
-        if (!this.musicEnabled || !this.music[name]) return;
+        if (!this.musicEnabled) return;
         
-        // Skip on mobile to prevent memory issues
-        if (window.game && window.game.isMobile) return;
-        
-        // Stop current music
+        // Stop and unload current music to free memory
         if (this.currentMusic) {
             this.currentMusic.pause();
-            this.currentMusic.currentTime = 0;
+            this.currentMusic.src = '';  // Unload audio file from memory
+            this.currentMusic = null;
         }
         
-        // Play new music
-        this.currentMusic = this.music[name];
-        this.currentMusic.play().catch(err => console.log('Music play error:', err));
+        // On mobile: lazy load the music track
+        if (window.game && window.game.isMobile) {
+            if (!this.musicPaths[name]) return;
+            
+            // Don't reload if already playing this track
+            if (this.currentMusicName === name) return;
+            
+            // Create new audio element for this track only
+            this.currentMusic = new Audio(this.musicPaths[name]);
+            this.currentMusic.volume = this.musicVolume;
+            this.currentMusic.loop = true;
+            this.currentMusicName = name;
+            this.currentMusic.play().catch(err => console.log('Music play error:', err));
+        } else {
+            // Desktop: use preloaded music
+            if (!this.music[name]) return;
+            this.currentMusic = this.music[name];
+            this.currentMusicName = name;
+            this.currentMusic.play().catch(err => console.log('Music play error:', err));
+        }
     }
     
     stopMusic() {
         if (this.currentMusic) {
             this.currentMusic.pause();
-            this.currentMusic.currentTime = 0;
+            this.currentMusic.src = '';  // Unload from memory
+            this.currentMusic = null;
+            this.currentMusicName = null;
         }
     }
     
@@ -243,6 +265,9 @@ class Game {
         
         // Only load audio on desktop - disable on mobile to prevent crashes
         if (!this.isMobile) {
+            this.loadAudio();
+        } else {
+            // On mobile: load audio but with lazy-loading for music
             this.loadAudio();
         }
         
@@ -550,7 +575,7 @@ class Game {
     }
     
     loadAudio() {
-        // Load sound effects
+        // Load sound effects (small files - safe to preload)
         this.audioManager.loadSound('shoot', 'sounds/shoot.mp3');
         this.audioManager.loadSound('enemy-hit', 'sounds/enemy-hit.mp3');
         this.audioManager.loadSound('enemy-death', 'sounds/enemy-death.mp3');
@@ -565,9 +590,11 @@ class Game {
         this.audioManager.loadSound('ultimate', 'sounds/ultimate.mp3');
         this.audioManager.loadSound('button-click', 'sounds/button-click.mp3');
         
-        // Load music
+        // Register music paths (lazy-loaded on demand to save memory)
         this.audioManager.loadMusic('menu-theme', 'sounds/menu-theme.mp3');
         this.audioManager.loadMusic('game-theme', 'sounds/game-theme.mp3');
+        this.audioManager.loadMusic('boss-theme', 'sounds/boss-theme.mp3');
+    }
         this.audioManager.loadMusic('boss-theme', 'sounds/boss-theme.mp3');
     }
     
