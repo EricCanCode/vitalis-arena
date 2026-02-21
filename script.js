@@ -124,9 +124,6 @@ class AudioManager {
     playSound(name) {
         if (!this.soundEnabled || !this.sounds[name]) return;
         
-        // TEST: Skip on mobile to test performance
-        if (window.game && window.game.isMobile) return;
-        
         // Enforce per-sound cooldown to prevent rapid stacking (e.g. enemy-hit)
         const cooldown = this.soundCooldownMs[name];
         if (cooldown) {
@@ -143,9 +140,6 @@ class AudioManager {
     
     playMusic(name) {
         if (!this.musicEnabled) return;
-        
-        // TEST: Skip on mobile to test performance
-        if (window.game && window.game.isMobile) return;
         
         // Stop current music (keep src intact so preloaded file stays ready)
         if (this.currentMusic) {
@@ -902,14 +896,16 @@ class Game {
                 this.spawnXP(enemy.x, enemy.y, enemy.xpValue);
                 this.player.addKill(enemy); // Pass enemy to track type
                 
-                // Random health drop (15% chance)
-                if (Math.random() < 0.15) {
+                // Random health drop (25% chance)
+                if (Math.random() < 0.25) {
                     const healAmount = enemy.type === 'boss' ? 50 : (enemy.type === 'tank' ? 25 : 15);
-                    this.spawnHealth(enemy.x, enemy.y, healAmount);
+                    // Offset spawn so drop doesn't sit exactly on player
+                    const angle = Math.random() * Math.PI * 2;
+                    this.spawnHealth(enemy.x + Math.cos(angle) * 40, enemy.y + Math.sin(angle) * 40, healAmount);
                 }
                 
-                // Random equipment drop (5% chance for non-boss, 100% for boss)
-                if (enemy.type === 'boss' || Math.random() < 0.05) {
+                // Random equipment drop (10% chance for non-boss, 100% for boss)
+                if (enemy.type === 'boss' || Math.random() < 0.10) {
                     if (enemy.type === 'boss') {
                         // Boss equipment handling is done elsewhere
                     } else {
@@ -1166,6 +1162,11 @@ class Game {
             level: 1, // All equipment starts at level 1
             stats: this.scaleEquipmentStats(baseEquipment.baseStats, rarityData.statMultiplier)
         };
+    }
+
+    // Alias kept for backwards compatibility (old cached scripts may call this name)
+    generateRandomEquipment(level) {
+        return this.generateEquipmentDrop(this.currentStage);
     }
     
     scaleEquipmentStats(baseStats, multiplier) {
