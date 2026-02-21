@@ -1610,17 +1610,21 @@ class Game {
     }
     
     render() {
-        // Apply screen shake
+        // Clear the FULL canvas pixel buffer first (before any transforms)
+        // Must reset transform temporarily to ensure the entire buffer is wiped
+        this.ctx.save();
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+        this.ctx.fillStyle = '#1a1a2e';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.restore();
+        
+        // Apply screen shake on top of existing scale transform
         this.ctx.save();
         if (this.screenShake > 0) {
             const shakeX = (Math.random() - 0.5) * this.screenShake;
             const shakeY = (Math.random() - 0.5) * this.screenShake;
             this.ctx.translate(shakeX, shakeY);
         }
-        
-        // Clear canvas
-        this.ctx.fillStyle = '#1a1a2e';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
         // Draw grid (skip on mobile for performance)
         if (!this.performanceMode) {
