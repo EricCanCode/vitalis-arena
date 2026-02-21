@@ -93,6 +93,8 @@ class AudioManager {
             'enemy-hit':   80,
             'player-hit':  150,
             'pickup-xp':   60,
+            'shoot':       50,  // 20/sec max
+            'enemy-death': 50,
         };
         this.soundLastPlayed = {}; // name -> timestamp
         
@@ -813,7 +815,10 @@ class Game {
             return;
         }
         
-        const deltaTime = (currentTime - this.lastTime) / 1000;
+        // Cap deltaTime to 100ms max — prevents physics/collision spiral if browser
+        // pauses (GC, audio decode, tab switch) and resumes with a huge gap
+        const rawDelta = (currentTime - this.lastTime) / 1000;
+        const deltaTime = Math.min(rawDelta, 0.1);
         this.lastTime = currentTime;
         this.lastFrameTime = currentTime;
         
