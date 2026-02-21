@@ -1805,7 +1805,7 @@ class Game {
     
     dropEquipment(x, y) {
         // Generate random equipment
-        const equipment = this.generateRandomEquipment(this.player.level);
+        const equipment = this.generateEquipmentDrop(this.currentStage);
         this.equipmentDrops.push(new EquipmentDrop(x, y, equipment));
     }
     
