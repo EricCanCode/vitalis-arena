@@ -129,10 +129,10 @@ class AudioManager {
         // TEST: Skip on mobile to test performance
         if (window.game && window.game.isMobile) return;
         
-        // Stop and unload current music to free memory
+        // Stop current music (keep src intact so preloaded file stays ready)
         if (this.currentMusic) {
             this.currentMusic.pause();
-            this.currentMusic.src = '';  // Unload audio file from memory
+            this.currentMusic.currentTime = 0;
             this.currentMusic = null;
         }
         
@@ -146,7 +146,7 @@ class AudioManager {
     stopMusic() {
         if (this.currentMusic) {
             this.currentMusic.pause();
-            this.currentMusic.src = '';  // Unload from memory
+            this.currentMusic.currentTime = 0;
             this.currentMusic = null;
             this.currentMusicName = null;
         }
@@ -3585,7 +3585,7 @@ class Enemy {
         
         // Boss-specific properties
         if (this.type === 'boss') {
-            this.attackCooldown = 0;
+            this.attackCooldown = 2; // Brief entry delay before first attack
             this.attackPattern = 0;
             this.phaseChangeThreshold = 0.5; // Changes attack at 50% health
         }
@@ -3662,16 +3662,17 @@ class Enemy {
             
             // Shoot projectiles
             if (this.attackCooldown <= 0) {
-                this.attackCooldown = 2;
+                this.attackCooldown = this.game.performanceMode ? 4 : 2; // Slower fire rate on mobile
                 this.shootProjectiles();
             }
         }
     }
     
     shootProjectiles() {
-        // Fire 8 projectiles in all directions
-        for (let i = 0; i < 8; i++) {
-            const angle = (Math.PI * 2 / 8) * i;
+        // Fire projectiles in all directions (fewer on mobile for performance)
+        const count = this.game.performanceMode ? 4 : 8;
+        for (let i = 0; i < count; i++) {
+            const angle = (Math.PI * 2 / count) * i;
             this.game.particles.push(new BossProjectile(
                 this.x, this.y, angle, 200, this.damage, this.game
             ));
