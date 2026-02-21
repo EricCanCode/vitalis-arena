@@ -391,6 +391,8 @@ class Game {
             const scale = 0.75; // 75% resolution on mobile
             this.canvas.width = Math.floor(width * scale);
             this.canvas.height = Math.floor(height * scale);
+            // Reset transform before applying scale (prevent accumulation)
+            this.ctx.setTransform(1, 0, 0, 1, 0, 0);
             this.ctx.scale(scale, scale);
         }
         
