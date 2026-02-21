@@ -817,11 +817,17 @@ class Game {
         
         this.gameTime += deltaTime;
         
-        // Aggressive memory cleanup on mobile every 5 seconds
-        if (this.performanceMode && Math.floor(this.gameTime) % 5 === 0 && Math.floor(this.gameTime) !== Math.floor(this.gameTime - deltaTime)) {
-            // Force cleanup of old particles
-            if (this.particles.length > 100) {
-                this.particles.splice(0, this.particles.length - 100);
+        // Throttle achievement checks - only run once per second
+        if (!this.lastAchievementCheck) this.lastAchievementCheck = 0;
+        this.lastAchievementCheck += deltaTime;
+        
+        // Aggressive memory cleanup on mobile every 3 seconds
+        if (this.performanceMode && Math.floor(this.gameTime) % 3 === 0 && Math.floor(this.gameTime) !== Math.floor(this.gameTime - deltaTime)) {
+            // Force cleanup particles (keep BossProjectiles)
+            for (let i = this.particles.length - 1; i >= 0 && this.particles.length > 30; i--) {
+                if (!(this.particles[i] instanceof BossProjectile)) {
+                    this.particles.splice(i, 1);
+                }
             }
         }
         
@@ -834,8 +840,11 @@ class Game {
         // Update
         this.update(deltaTime);
         
-        // Check achievements
-        this.checkAchievements();
+        // Check achievements only once per second (not every frame)
+        if (!this.performanceMode || this.lastAchievementCheck >= 1.0) {
+            this.lastAchievementCheck = 0;
+            this.checkAchievements();
+        }
         
         // Update achievement notifications
         this.updateAchievementNotifications(deltaTime);
@@ -940,8 +949,8 @@ class Game {
         }
         
         // Cap projectiles on mobile to prevent memory overload
-        if (this.performanceMode && this.projectiles.length > 50) {
-            this.projectiles.splice(0, this.projectiles.length - 50);
+        if (this.performanceMode && this.projectiles.length > 25) {
+            this.projectiles.splice(0, this.projectiles.length - 25);
         }
         
         // Update XP orbs
@@ -958,8 +967,8 @@ class Game {
         }
         
         // Cap XP orbs on mobile to prevent memory overload
-        if (this.performanceMode && this.xpOrbs.length > 30) {
-            this.xpOrbs.splice(0, this.xpOrbs.length - 30);
+        if (this.performanceMode && this.xpOrbs.length > 15) {
+            this.xpOrbs.splice(0, this.xpOrbs.length - 15);
         }
         
         // Update Health Pickups
@@ -979,8 +988,8 @@ class Game {
         }
         
         // Cap health pickups on mobile to prevent memory overload
-        if (this.performanceMode && this.healthPickups.length > 15) {
-            this.healthPickups.splice(0, this.healthPickups.length - 15);
+        if (this.performanceMode && this.healthPickups.length > 8) {
+            this.healthPickups.splice(0, this.healthPickups.length - 8);
         }
         
         // Update Equipment Drops
@@ -1003,23 +1012,24 @@ class Game {
         }
         
         // Cap equipment drops on mobile
-        if (this.performanceMode && this.equipmentDrops.length > 10) {
-            this.equipmentDrops.splice(0, this.equipmentDrops.length - 10);
+        if (this.performanceMode && this.equipmentDrops.length > 5) {
+            this.equipmentDrops.splice(0, this.equipmentDrops.length - 5);
         }
         
-        // Update particles
+        // Update particles and boss projectiles (both live in particles array)
+        // Hard cap on mobile BEFORE updating to keep memory low
+        if (this.performanceMode && this.particles.length > 40) {
+            // Remove non-BossProjectile particles first (cosmetic only)
+            for (let i = this.particles.length - 1; i >= 0 && this.particles.length > 40; i--) {
+                if (!(this.particles[i] instanceof BossProjectile)) {
+                    this.particles.splice(i, 1);
+                }
+            }
+        }
         for (let i = this.particles.length - 1; i >= 0; i--) {
             this.particles[i].update(deltaTime);
             if (this.particles[i].lifetime <= 0) {
                 this.particles.splice(i, 1);
-            }
-        }
-        
-        // Update boss projectiles (BossProjectile instances in particles array)
-        for (let i = this.particles.length - 1; i >= 0; i--) {
-            const particle = this.particles[i];
-            if (particle instanceof BossProjectile) {
-                particle.update(deltaTime);
             }
         }
         
@@ -1831,9 +1841,9 @@ class Game {
         
         // Reduce particle count on mobile
         if (this.performanceMode) {
-            particleCount = Math.floor(particleCount * 0.4);
-            // Hard cap: don't add particles if we're at max to prevent crash
-            if (this.particles.length > 80) {
+            particleCount = Math.floor(particleCount * 0.3); // 70% reduction on mobile
+            // Hard cap: don't add particles if we're close to max
+            if (this.particles.length > 35) {
                 return; // Skip creating particles entirely
             }
         }
@@ -2025,6 +2035,10 @@ class Game {
     checkAchievements() {
         if (!this.player) return;
         
+        // Cache these values - don't re-read localStorage inside the loop
+        const totalBosses = this.getTotalBossesDefeated();
+        const characterWins = this.getCharacterWins();
+        
         ACHIEVEMENTS.forEach(achievement => {
             if (this.achievements[achievement.id].unlocked) return;
             
@@ -2039,19 +2053,16 @@ class Game {
                     unlocked = this.gameTime >= req.value;
                     break;
                 case 'bosses':
-                    const totalBosses = this.getTotalBossesDefeated();
                     unlocked = totalBosses >= req.value;
                     break;
                 case 'level':
                     unlocked = this.player.level >= req.value;
                     break;
                 case 'character':
-                    // Check if completed with this character (reached 20 minutes)
                     unlocked = this.selectedCharacter === req.value && this.gameTime >= 1200;
                     break;
                 case 'all_characters':
-                    const wins = this.getCharacterWins();
-                    unlocked = wins.size >= req.value;
+                    unlocked = characterWins.size >= req.value;
                     break;
                 case 'speed_kills':
                     unlocked = this.sessionStats.recentKills.length >= req.value;
