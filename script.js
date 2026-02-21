@@ -304,10 +304,9 @@ class Game {
         
         window.addEventListener('resize', () => this.resizeCanvas());
         
-        // Listen for visual viewport changes (mobile browser chrome show/hide)
+        // Listen for visual viewport resize only (NOT scroll - scroll fires constantly during gameplay)
         if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', () => this.resizeCanvas());
-            window.visualViewport.addEventListener('scroll', () => this.resizeCanvas());
         }
         
         // Mobile orientation and fullscreen handling
@@ -374,29 +373,16 @@ class Game {
         let width, height;
         
         if (viewport) {
-            // Visual viewport available (modern mobile browsers)
             width = viewport.width;
             height = viewport.height;
         } else {
-            // Fallback for older browsers
             width = window.innerWidth || document.documentElement.clientWidth;
             height = window.innerHeight || document.documentElement.clientHeight;
         }
         
+        // Set canvas to full resolution - game ran fine at native res before optimizations
         this.canvas.width = width;
         this.canvas.height = height;
-        
-        // Reduce canvas resolution on mobile for better performance
-        if (this.isMobile) {
-            const scale = 0.75; // 75% resolution on mobile
-            this.canvas.width = Math.floor(width * scale);
-            this.canvas.height = Math.floor(height * scale);
-            // Reset transform before applying scale (prevent accumulation)
-            this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-            this.ctx.scale(scale, scale);
-        }
-        
-        // Force canvas to fill screen
         this.canvas.style.width = width + 'px';
         this.canvas.style.height = height + 'px';
         
@@ -1628,7 +1614,7 @@ class Game {
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         this.ctx.restore();
         
-        // Apply screen shake on top of existing scale transform
+        // Apply screen shake
         this.ctx.save();
         if (this.screenShake > 0) {
             const shakeX = (Math.random() - 0.5) * this.screenShake;
