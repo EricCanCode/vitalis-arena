@@ -363,6 +363,14 @@ class Game {
         this.canvas.width = width;
         this.canvas.height = height;
         
+        // Reduce canvas resolution on mobile for better performance
+        if (this.isMobile) {
+            const scale = 0.75; // 75% resolution on mobile
+            this.canvas.width = Math.floor(width * scale);
+            this.canvas.height = Math.floor(height * scale);
+            this.ctx.scale(scale, scale);
+        }
+        
         // Force canvas to fill screen
         this.canvas.style.width = width + 'px';
         this.canvas.style.height = height + 'px';
@@ -784,6 +792,14 @@ class Game {
         
         this.gameTime += deltaTime;
         
+        // Aggressive memory cleanup on mobile every 5 seconds
+        if (this.performanceMode && Math.floor(this.gameTime) % 5 === 0 && Math.floor(this.gameTime) !== Math.floor(this.gameTime - deltaTime)) {
+            // Force cleanup of old particles
+            if (this.particles.length > 100) {
+                this.particles.splice(0, this.particles.length - 100);
+            }
+        }
+        
         // Decay screen shake
         if (this.screenShake > 0) {
             this.screenShake -= deltaTime * 30;
@@ -898,6 +914,11 @@ class Game {
             }
         }
         
+        // Cap projectiles on mobile to prevent memory overload
+        if (this.performanceMode && this.projectiles.length > 50) {
+            this.projectiles.splice(0, this.projectiles.length - 50);
+        }
+        
         // Update XP orbs
         for (let i = this.xpOrbs.length - 1; i >= 0; i--) {
             const orb = this.xpOrbs[i];
@@ -909,6 +930,11 @@ class Game {
                 this.player.addXP(orb.value);
                 this.xpOrbs.splice(i, 1);
             }
+        }
+        
+        // Cap XP orbs on mobile to prevent memory overload
+        if (this.performanceMode && this.xpOrbs.length > 30) {
+            this.xpOrbs.splice(0, this.xpOrbs.length - 30);
         }
         
         // Update Health Pickups
@@ -925,6 +951,11 @@ class Game {
                 this.healthPickups.splice(i, 1);
                 this.showNotification(`+${healAmount} HP`, '#2ecc71');
             }
+        }
+        
+        // Cap health pickups on mobile to prevent memory overload
+        if (this.performanceMode && this.healthPickups.length > 15) {
+            this.healthPickups.splice(0, this.healthPickups.length - 15);
         }
         
         // Update Equipment Drops
@@ -944,6 +975,11 @@ class Game {
                 this.equipmentDrops.splice(i, 1);
                 this.showNotification(`Found: ${drop.equipment.name}!`, this.getRarityColor(drop.equipment.rarity));
             }
+        }
+        
+        // Cap equipment drops on mobile
+        if (this.performanceMode && this.equipmentDrops.length > 10) {
+            this.equipmentDrops.splice(0, this.equipmentDrops.length - 10);
         }
         
         // Update particles
@@ -1666,9 +1702,9 @@ class Game {
         // Calculate max enemies based on time (starts at 15, increases by 5 every 30 seconds)
         let maxEnemies = Math.floor(15 + (this.gameTime / 30) * 5);
         
-        // Cap at lower max on mobile for better performance
+        // Cap at lower max on mobile for better performance - prevent crash
         if (this.performanceMode) {
-            maxEnemies = Math.min(maxEnemies, 12); // Hard cap at 12 enemies on mobile
+            maxEnemies = Math.min(maxEnemies, 8); // Hard cap at 8 enemies on mobile to prevent crash
         }
         
         // Reduce max enemies during boss fight
@@ -1767,6 +1803,10 @@ class Game {
         // Reduce particle count on mobile
         if (this.performanceMode) {
             particleCount = Math.floor(particleCount * 0.4);
+            // Hard cap: don't add particles if we're at max to prevent crash
+            if (this.particles.length > 80) {
+                return; // Skip creating particles entirely
+            }
         }
         
         for (let i = 0; i < particleCount; i++) {
@@ -4005,7 +4045,8 @@ class Particle {
         this.vy = Math.sin(angle) * speed;
         this.color = color;
         this.radius = (3 + Math.random() * 3) * sizeMultiplier;
-        this.lifetime = 0.5;
+        // Much shorter lifetime on mobile to reduce lag
+        this.lifetime = window.game && window.game.performanceMode ? 0.15 : 0.5;
         this.maxLifetime = this.lifetime;
     }
     
