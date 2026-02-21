@@ -540,12 +540,19 @@ class Game {
         this.audioManager.loadSound('equip-item', 'sounds/equip-item.mp3');
         this.audioManager.loadSound('ultimate', 'sounds/ultimate.mp3');
         this.audioManager.loadSound('button-click', 'sounds/button-click.mp3');
+        
+        // Load music
+        this.audioManager.loadMusic('menu-theme', 'sounds/menu-theme.mp3');
+        this.audioManager.loadMusic('game-theme', 'sounds/game-theme.mp3');
+        this.audioManager.loadMusic('boss-theme', 'sounds/boss-theme.mp3');
     }
     
     setupUI() {
         // Title screen - press start
         const titleScreen = document.getElementById('titleScreen');
         const pressStartHandler = () => {
+            // Enable audio on first user interaction (browser autoplay policy)
+            this.audioManager.playSound('button-click');
             this.showCharacterSelect();
         };
         
