@@ -2111,3 +2111,28 @@ body {
     font-size: 0.75em;
     font-weight: bold;
 }
+
+/* Sound toggle button styles */
+.sound-toggle-btn {
+  background: rgba(30,30,40,0.92);
+  color: #fff;
+  border: 2px solid #444;
+  border-radius: 24px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: background 0.2s, border 0.2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  user-select: none;
+}
+.sound-toggle-btn:hover, .sound-toggle-btn:active {
+  background: #222a;
+  border-color: #888;
+}
+@media (max-width: 600px) {
+  .sound-toggle-btn {
+    font-size: 1em;
+    padding: 6px 10px;
+    top: 8px;
+    right: 8px;
+  }
+}

@@ -4810,3 +4810,36 @@ class BossProjectile {
 window.addEventListener('DOMContentLoaded', () => {
     window.game = new Game();
 });
+
+window.addEventListener('DOMContentLoaded', () => {
+    window.game = new Game();
+    // --- Add the sound toggle logic here ---
+    const soundBtn = document.getElementById('soundToggleBtn');
+    const soundIcon = document.getElementById('soundToggleIcon');
+    const soundLabel = document.getElementById('soundToggleLabel');
+    function updateSoundBtn() {
+        if (window.game && window.game.audioManager) {
+            const enabled = window.game.audioManager.soundEnabled;
+            soundIcon.textContent = enabled ? '🔊' : '🔇';
+            soundLabel.textContent = enabled ? 'Sound On' : 'Sound Off';
+        }
+    }
+    if (soundBtn) {
+        soundBtn.addEventListener('click', () => {
+            if (window.game && window.game.audioManager) {
+                window.game.audioManager.toggleSound();
+                window.game.audioManager._initContext && window.game.audioManager._initContext();
+                updateSoundBtn();
+            }
+        });
+        // Resume AudioContext on first user gesture (for mobile/iOS)
+        ['touchstart','mousedown','keydown'].forEach(evt => {
+            window.addEventListener(evt, () => {
+                if (window.game && window.game.audioManager && window.game.audioManager._initContext) {
+                    window.game.audioManager._initContext();
+                }
+            }, { once: true });
+        });
+        updateSoundBtn();
+    }
+});
