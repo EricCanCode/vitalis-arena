@@ -834,7 +834,7 @@ body {
     text-align: center;
 }
 
-.slot-label {
+ slot-label {
     font-size: 0.9em;
     color: rgba(255, 255, 255, 0.6);
     margin-bottom: 10px;
