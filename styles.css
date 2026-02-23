@@ -2001,3 +2001,113 @@ body {
         padding-bottom: max(0px, env(safe-area-inset-bottom));
     }
 }
+
+/* ============================================
+   CO-OP MODE STYLES
+   ============================================ */
+
+.coop-toggle-container {
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+.coop-toggle-btn {
+    background: linear-gradient(135deg, #2d3748, #4a5568);
+    border: 2px solid #4a5568;
+    color: #fff;
+    padding: 10px 24px;
+    border-radius: 25px;
+    font-size: 1em;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.coop-toggle-btn:hover {
+    background: linear-gradient(135deg, #4a5568, #718096);
+    border-color: #718096;
+    transform: scale(1.05);
+}
+
+.coop-toggle-btn.active {
+    background: linear-gradient(135deg, #2b6cb0, #3182ce);
+    border-color: #63b3ed;
+    box-shadow: 0 0 15px rgba(99, 179, 237, 0.4);
+}
+
+.p2-select-banner {
+    text-align: center;
+    padding: 8px 16px;
+    margin-bottom: 8px;
+    background: rgba(49, 130, 206, 0.2);
+    border: 1px solid rgba(99, 179, 237, 0.3);
+    border-radius: 8px;
+    font-size: 0.9em;
+    animation: p2-pulse 2s infinite;
+}
+
+@keyframes p2-pulse {
+    0%, 100% { border-color: rgba(99, 179, 237, 0.3); }
+    50% { border-color: rgba(99, 179, 237, 0.7); }
+}
+
+.p2-label {
+    font-weight: bold;
+    color: #63b3ed;
+}
+
+.p2-hint {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.85em;
+    margin-left: 12px;
+}
+
+/* P2 HUD */
+.hud-bottom-right {
+    position: fixed;
+    bottom: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid rgba(99, 179, 237, 0.4);
+    border-radius: 8px;
+    padding: 8px 12px;
+    z-index: 100;
+    min-width: 160px;
+}
+
+.p2-hud-label {
+    font-weight: bold;
+    color: #63b3ed;
+    font-size: 0.9em;
+    margin-bottom: 4px;
+    text-align: center;
+}
+
+.p2-health-fill {
+    background: linear-gradient(90deg, #3182ce, #63b3ed) !important;
+}
+
+.p2-ult-fill {
+    background: linear-gradient(90deg, #2b6cb0, #4299e1) !important;
+}
+
+.character-card.p2-selected {
+    border-color: #63b3ed !important;
+    box-shadow: 0 0 20px rgba(99, 179, 237, 0.5) !important;
+    position: relative;
+}
+
+.character-card.p2-selected::after {
+    content: '🎮 P2';
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: #3182ce;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75em;
+    font-weight: bold;
+}

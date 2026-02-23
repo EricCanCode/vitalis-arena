@@ -1,9 +1,9 @@
-const CACHE_NAME = 'vitalis-arena-v1';
+const CACHE_NAME = 'vitalis-arena-v2';
 const urlsToCache = [
   '.',
   'index.html',
   'styles.css',
-  'script.js',
+  'script_v2.js',
   'manifest.json',
   'images/warrior.png',
   'images/ranger.png',
@@ -13,7 +13,23 @@ const urlsToCache = [
   'images/enemy_basic.png',
   'images/enemy_fast.png',
   'images/enemy_tank.png',
-  'images/demon_boss.png'
+  'images/demon_boss.png',
+  'sounds/shoot.mp3',
+  'sounds/enemy-hit.mp3',
+  'sounds/enemy-death.mp3',
+  'sounds/player-hit.mp3',
+  'sounds/level-up.mp3',
+  'sounds/boss-warning.mp3',
+  'sounds/boss-defeat.mp3',
+  'sounds/pickup-xp.mp3',
+  'sounds/pickup-health.mp3',
+  'sounds/pickup-equipment.mp3',
+  'sounds/equip-item.mp3',
+  'sounds/ultimate.mp3',
+  'sounds/button-click.mp3',
+  'sounds/menu-theme.mp3',
+  'sounds/game-theme.mp3',
+  'sounds/boss-theme.mp3'
 ];
 
 // Install service worker and cache resources

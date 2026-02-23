@@ -29,6 +29,21 @@
     <div id="characterSelect" class="screen">
         <h1>Vitalis Arena</h1>
         <p class="game-subtitle">Select Your Hero</p>
+        
+        <!-- Co-op Toggle -->
+        <div class="coop-toggle-container">
+            <button id="coopToggleBtn" class="coop-toggle-btn">
+                <span class="coop-icon">👤</span>
+                <span class="coop-label">Solo Mode</span>
+            </button>
+        </div>
+        
+        <!-- P2 Character Selection (hidden by default) -->
+        <div id="p2SelectBanner" class="p2-select-banner" style="display: none;">
+            <span class="p2-label">🎮 P2 Selected: <span id="p2SelectedChar">None</span></span>
+            <span class="p2-hint">(P2: IJKL Move, U = Ultimate)</span>
+        </div>
+        
         <button id="achievementsBtn" class="achievements-button">🏆 Achievements</button>
         <button id="menuShopBtn" class="menu-shop-button">🛒 Shop</button>
         <button id="inventoryBtn" class="inventory-button">🎒 Inventory</button>
@@ -181,6 +196,24 @@
                         <div id="ultimateBar" class="ultimate-fill"></div>
                     </div>
                     <span id="ultimateText">0/100</span>
+                </div>
+            </div>
+            
+            <!-- Player 2 HUD (co-op mode) -->
+            <div id="p2Hud" class="hud-bottom-right" style="display: none;">
+                <div class="p2-hud-label">🎮 P2</div>
+                <div class="hud-item">
+                    <span class="hud-label">❤️ P2 HP</span>
+                    <div class="health-bar p2-health">
+                        <div id="p2HealthBar" class="health-fill p2-health-fill"></div>
+                    </div>
+                    <span id="p2HealthText">100/100</span>
+                </div>
+                <div class="hud-item">
+                    <span class="hud-label">⚡ P2 Ult</span>
+                    <div class="ultimate-bar">
+                        <div id="p2UltimateBar" class="ultimate-fill p2-ult-fill"></div>
+                    </div>
                 </div>
             </div>
             

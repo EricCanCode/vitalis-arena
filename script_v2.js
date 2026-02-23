@@ -338,10 +338,22 @@ class Game {
         this.isPaused = false;
         this.gameTime = 0;
         this.lastTime = 0;
+        this.animationFrameId = null; // Track rAF to cancel on restart
+        this.activeTimers = []; // Track setInterval/setTimeout for cleanup
+        
+        // HUD throttle — update DOM only every 100ms, not every frame
+        this.lastHUDUpdate = 0;
+        this.hudUpdateInterval = 0.1; // seconds
         
         // Player
         this.player = null;
         this.selectedCharacter = null;
+        
+        // Co-op mode
+        this.coopMode = false;
+        this.player2 = null;
+        this.selectedCharacter2 = null;
+        this.keys2 = {}; // P2 key state (IJKL + U for ultimate)
         
         // Game objects
         this.projectiles = [];
@@ -351,6 +363,9 @@ class Game {
         this.equipmentDrops = [];
         this.particles = [];
         this.screenShake = 0;
+        
+        // Cache DOM references to avoid getElementById every frame
+        this._hudElements = null;
         
         // Input
         this.keys = {};
@@ -523,6 +538,17 @@ class Game {
         window.addEventListener('keydown', (e) => {
             this.keys[e.key.toLowerCase()] = true;
             
+            // P2 keys: IJKL for movement, U for ultimate
+            if (this.coopMode) {
+                const p2KeyMap = { 'i': 'w', 'j': 'a', 'k': 's', 'l': 'd' };
+                if (p2KeyMap[e.key.toLowerCase()]) {
+                    this.keys2[p2KeyMap[e.key.toLowerCase()]] = true;
+                }
+                if (e.key.toLowerCase() === 'u' && this.player2 && this.player2.ultimateReady && this.isRunning && !this.isPaused) {
+                    this.player2.useUltimate(this);
+                }
+            }
+            
             // ESC key toggles pause
             if (e.key === 'Escape' && this.isRunning) {
                 this.togglePause();
@@ -531,6 +557,14 @@ class Game {
         
         window.addEventListener('keyup', (e) => {
             this.keys[e.key.toLowerCase()] = false;
+            
+            // P2 keys
+            if (this.coopMode) {
+                const p2KeyMap = { 'i': 'w', 'j': 'a', 'k': 's', 'l': 'd' };
+                if (p2KeyMap[e.key.toLowerCase()]) {
+                    this.keys2[p2KeyMap[e.key.toLowerCase()]] = false;
+                }
+            }
         });
     }
     
@@ -706,14 +740,59 @@ class Game {
         };
         window.addEventListener('keydown', keyStartHandler, { once: true });
         
-        // Character selection
+        // Character selection — P1 click starts game (or picks P1 in co-op)
         const characterCards = document.querySelectorAll('.character-card');
         characterCards.forEach(card => {
             card.addEventListener('click', () => {
                 this.audioManager.playSound('button-click');
-                this.selectCharacter(card.dataset.character);
+                
+                if (this.coopMode && !this.selectedCharacter) {
+                    // Co-op: first click picks P1
+                    this.selectedCharacter = card.dataset.character;
+                    card.classList.add('selected');
+                    // Update subtitle to prompt P2
+                    document.querySelector('.game-subtitle').textContent = 'P2 — Pick Your Hero!';
+                } else if (this.coopMode && this.selectedCharacter && !this.selectedCharacter2) {
+                    // Co-op: second click picks P2
+                    this.selectedCharacter2 = card.dataset.character;
+                    card.classList.add('p2-selected');
+                    document.getElementById('p2SelectedChar').textContent = card.querySelector('h2').textContent;
+                    // Start the game
+                    this.startGame();
+                } else {
+                    // Solo mode
+                    this.selectCharacter(card.dataset.character);
+                }
             });
         });
+        
+        // Co-op toggle button
+        const coopBtn = document.getElementById('coopToggleBtn');
+        if (coopBtn) {
+            coopBtn.addEventListener('click', () => {
+                this.audioManager.playSound('button-click');
+                this.coopMode = !this.coopMode;
+                coopBtn.classList.toggle('active', this.coopMode);
+                coopBtn.querySelector('.coop-icon').textContent = this.coopMode ? '👥' : '👤';
+                coopBtn.querySelector('.coop-label').textContent = this.coopMode ? 'Co-op Mode' : 'Solo Mode';
+                
+                const p2Banner = document.getElementById('p2SelectBanner');
+                p2Banner.style.display = this.coopMode ? 'block' : 'none';
+                
+                // Update subtitle
+                document.querySelector('.game-subtitle').textContent = this.coopMode
+                    ? 'P1 — Pick Your Hero First!'
+                    : 'Select Your Hero';
+                
+                // Reset any partial selection
+                this.selectedCharacter = null;
+                this.selectedCharacter2 = null;
+                document.querySelectorAll('.character-card').forEach(c => {
+                    c.classList.remove('selected', 'p2-selected');
+                });
+                document.getElementById('p2SelectedChar').textContent = 'None';
+            });
+        }
         
         // Game over buttons
         document.getElementById('restartBtn').addEventListener('click', () => {
@@ -845,6 +924,21 @@ class Game {
             this
         );
         
+        // Initialize Player 2 in co-op mode
+        if (this.coopMode && this.selectedCharacter2) {
+            this.player2 = new Player(
+                this.canvas.width / 2 + 60,
+                this.canvas.height / 2,
+                this.selectedCharacter2,
+                this
+            );
+            this.player2.isP2 = true; // Flag for rendering differences
+            document.getElementById('p2Hud').style.display = 'block';
+        } else {
+            this.player2 = null;
+            document.getElementById('p2Hud').style.display = 'none';
+        }
+        
         // Apply saved equipment loadout
         Object.entries(this.savedEquipment).forEach(([slot, equipment]) => {
             if (equipment) {
@@ -890,10 +984,21 @@ class Game {
             characterWins: new Set()
         };
         
+        // Cancel any previous game loop to prevent stacking
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
+        }
+        // Clear any lingering timers from previous run (ultimate abilities etc.)
+        this.clearActiveTimers();
+        
+        // Cache HUD DOM references
+        this._cacheHUDElements();
+        
         // Start game loop
         this.isRunning = true;
         this.lastTime = performance.now();
-        this.gameLoop(this.lastTime);
+        this.animationFrameId = requestAnimationFrame((time) => this.gameLoop(time));
     }
     
     gameLoop(currentTime) {
@@ -913,14 +1018,7 @@ class Game {
         this.lastAchievementCheck += deltaTime;
         
         // Aggressive memory cleanup on mobile every 3 seconds
-        if (this.performanceMode && Math.floor(this.gameTime) % 3 === 0 && Math.floor(this.gameTime) !== Math.floor(this.gameTime - deltaTime)) {
-            // Force cleanup particles (keep BossProjectiles)
-            for (let i = this.particles.length - 1; i >= 0 && this.particles.length > 15; i--) {
-                if (!(this.particles[i] instanceof BossProjectile)) {
-                    this.particles.splice(i, 1);
-                }
-            }
-        }
+        // (now handled more efficiently via swap-remove in update())
         
         // Decay screen shake
         if (this.screenShake > 0) {
@@ -943,8 +1041,8 @@ class Game {
         // Render
         this.render();
         
-        // Continue loop
-        requestAnimationFrame((time) => this.gameLoop(time));
+        // Continue loop (store id so we can cancel on restart/quit)
+        this.animationFrameId = requestAnimationFrame((time) => this.gameLoop(time));
     }
     
     update(deltaTime) {
@@ -953,7 +1051,19 @@ class Game {
         // Update player
         this.player.update(deltaTime, this.keys, this.canvas.width, this.canvas.height);
         
-        // Check for ultimate activation (Q key)
+        // Update Player 2 in co-op mode
+        if (this.player2 && this.player2.health > 0 && !this.player2.downed) {
+            this.player2.update(deltaTime, this.keys2, this.canvas.width, this.canvas.height);
+            this.player2.attack(this, deltaTime);
+            this.player2.updateWeapons(deltaTime, this);
+        }
+        
+        // Co-op revive system
+        if (this.coopMode && this.player2) {
+            this.updateReviveSystem(deltaTime);
+        }
+        
+        // Check for ultimate activation (Q key for P1)
         if (this.keys['q'] && this.player.ultimateReady) {
             this.player.useUltimate(this);
             this.keys['q'] = false; // Prevent multiple activations
@@ -966,164 +1076,276 @@ class Game {
         this.updateBossSystem(deltaTime);
         
         // Update enemies
-        for (let i = this.enemies.length - 1; i >= 0; i--) {
-            const enemy = this.enemies[i];
-            enemy.update(deltaTime, this.player);
-            
-            // Check collision with player
-            if (this.checkCollision(enemy, this.player)) {
-                this.player.takeDamage(enemy.damage);
-                
-                // Knockback enemy (especially strong for warrior)
-                const knockbackPower = this.player.type === 'warrior' ? 200 : 100;
-                const dx = enemy.x - this.player.x;
-                const dy = enemy.y - this.player.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                if (dist > 0) {
-                    enemy.x += (dx / dist) * knockbackPower * deltaTime;
-                    enemy.y += (dy / dist) * knockbackPower * deltaTime;
-                }
-                
-                if (this.player.health <= 0) {
-                    this.gameOver();
-                }
-            }
-            
-            // Remove dead enemies
-            if (enemy.health <= 0) {
-                this.audioManager.playSound('enemy-death');
-                this.spawnXP(enemy.x, enemy.y, enemy.xpValue);
-                this.player.addKill(enemy); // Pass enemy to track type
-                
-                // Random health drop (25% chance)
-                if (Math.random() < 0.25) {
-                    const healAmount = enemy.type === 'boss' ? 50 : (enemy.type === 'tank' ? 25 : 15);
-                    // Offset spawn so drop doesn't sit exactly on player
-                    const angle = Math.random() * Math.PI * 2;
-                    this.spawnHealth(enemy.x + Math.cos(angle) * 40, enemy.y + Math.sin(angle) * 40, healAmount);
-                }
-                
-                // Random equipment drop (10% chance for non-boss, 100% for boss)
-                if (enemy.type === 'boss' || Math.random() < 0.10) {
-                    if (enemy.type === 'boss') {
-                        // Boss equipment handling is done elsewhere
+        {
+            let writeIdx = 0;
+            for (let i = 0; i < this.enemies.length; i++) {
+                const enemy = this.enemies[i];
+                // In co-op, enemies target the nearest living (non-downed) player
+                let target = this.player;
+                const p1Alive = this.player.health > 0 && !this.player.downed;
+                const p2Alive = this.player2 && this.player2.health > 0 && !this.player2.downed;
+                if (p2Alive) {
+                    if (!p1Alive) {
+                        target = this.player2;
                     } else {
-                        // Regular enemy equipment drop
-                        this.dropEquipment(enemy.x, enemy.y);
+                        const d1 = (enemy.x - this.player.x) ** 2 + (enemy.y - this.player.y) ** 2;
+                        const d2 = (enemy.x - this.player2.x) ** 2 + (enemy.y - this.player2.y) ** 2;
+                        target = d2 < d1 ? this.player2 : this.player;
+                    }
+                }
+                enemy.update(deltaTime, target);
+                
+                // Check collision with player 1 (skip if downed)
+                if (!this.player.downed && this.checkCollision(enemy, this.player)) {
+                    this.player.takeDamage(enemy.damage);
+                    
+                    const knockbackPower = this.player.type === 'warrior' ? 200 : 100;
+                    const dx = enemy.x - this.player.x;
+                    const dy = enemy.y - this.player.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 0) {
+                        enemy.x += (dx / dist) * knockbackPower * deltaTime;
+                        enemy.y += (dy / dist) * knockbackPower * deltaTime;
+                    }
+                    
+                    // In co-op: game over only when BOTH players are truly dead (not just downed)
+                    if (this.player.health <= 0 && !this.player.downed) {
+                        if (!this.player2 || (this.player2.health <= 0 && !this.player2.downed)) {
+                            this.gameOver();
+                            return;
+                        }
                     }
                 }
                 
-                this.enemies.splice(i, 1);
-                this.createParticles(enemy.x, enemy.y, enemy.color, enemy.type);
-            }
-        }
-        
-        // Update projectiles
-        for (let i = this.projectiles.length - 1; i >= 0; i--) {
-            const projectile = this.projectiles[i];
-            projectile.update(deltaTime);
-            
-            // Check collision with enemies
-            let hit = false;
-            for (let j = 0; j < this.enemies.length; j++) {
-                const enemy = this.enemies[j];
-                if (projectile.active && this.checkCollision(projectile, enemy)) {
-                    enemy.takeDamage(projectile.damage);
-                    projectile.hit();
-                    hit = true;
-                    if (!projectile.piercing) break;
+                // Check collision with player 2 (co-op, skip if downed)
+                if (this.player2 && !this.player2.downed && this.player2.health > 0 && this.checkCollision(enemy, this.player2)) {
+                    this.player2.takeDamage(enemy.damage);
+                    
+                    const knockbackPower = this.player2.type === 'warrior' ? 200 : 100;
+                    const dx = enemy.x - this.player2.x;
+                    const dy = enemy.y - this.player2.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 0) {
+                        enemy.x += (dx / dist) * knockbackPower * deltaTime;
+                        enemy.y += (dy / dist) * knockbackPower * deltaTime;
+                    }
+                    
+                    if (this.player2.health <= 0 && !this.player2.downed && this.player.health <= 0 && !this.player.downed) {
+                        this.gameOver();
+                        return;
+                    }
+                }
+                
+                // Remove dead enemies
+                if (enemy.health <= 0) {
+                    this.audioManager.playSound('enemy-death');
+                    this.spawnXP(enemy.x, enemy.y, enemy.xpValue);
+                    this.player.addKill(enemy);
+                    
+                    if (Math.random() < 0.25) {
+                        const healAmount = enemy.type === 'boss' ? 50 : (enemy.type === 'tank' ? 25 : 15);
+                        const angle = Math.random() * Math.PI * 2;
+                        this.spawnHealth(enemy.x + Math.cos(angle) * 40, enemy.y + Math.sin(angle) * 40, healAmount);
+                    }
+                    
+                    if (enemy.type !== 'boss' && Math.random() < 0.10) {
+                        this.dropEquipment(enemy.x, enemy.y);
+                    }
+                    
+                    this.createParticles(enemy.x, enemy.y, enemy.color, enemy.type);
+                    // Don't write to array (effectively removes it)
+                } else {
+                    this.enemies[writeIdx++] = enemy;
                 }
             }
-            
-            // Remove inactive projectiles
-            if (!projectile.active || projectile.lifetime <= 0) {
-                this.projectiles.splice(i, 1);
+            this.enemies.length = writeIdx;
+        }
+        
+        // Update projectiles (swap-remove pattern — O(1) per removal instead of O(n) splice)
+        {
+            let writeIdx = 0;
+            for (let i = 0; i < this.projectiles.length; i++) {
+                const projectile = this.projectiles[i];
+                projectile.update(deltaTime);
+                
+                // Check collision with enemies
+                if (projectile.active) {
+                    for (let j = 0; j < this.enemies.length; j++) {
+                        const enemy = this.enemies[j];
+                        if (this.checkCollision(projectile, enemy)) {
+                            enemy.takeDamage(projectile.damage);
+                            projectile.hit();
+                            if (!projectile.piercing) break;
+                        }
+                    }
+                }
+                
+                // Keep active projectiles
+                if (projectile.active && projectile.lifetime > 0) {
+                    this.projectiles[writeIdx++] = projectile;
+                }
             }
+            this.projectiles.length = writeIdx;
         }
         
         // Cap projectiles on mobile to prevent memory overload
         if (this.performanceMode && this.projectiles.length > 15) {
-            this.projectiles.splice(0, this.projectiles.length - 15);
+            this.projectiles.length = 15;
         }
         
-        // Update XP orbs
-        for (let i = this.xpOrbs.length - 1; i >= 0; i--) {
-            const orb = this.xpOrbs[i];
-            orb.update(deltaTime, this.player);
-            
-            // Check collision with player
-            if (this.checkCollision(orb, this.player)) {
-                this.audioManager.playSound('pickup-xp');
-                this.player.addXP(orb.value);
-                this.xpOrbs.splice(i, 1);
-            }
-        }
-        
-        // Cap XP orbs on mobile to prevent memory overload
-        if (this.performanceMode && this.xpOrbs.length > 10) {
-            this.xpOrbs.splice(0, this.xpOrbs.length - 10);
-        }
-        
-        // Update Health Pickups
-        for (let i = this.healthPickups.length - 1; i >= 0; i--) {
-            const pickup = this.healthPickups[i];
-            pickup.update(deltaTime, this.player);
-            
-            // Check collision with player
-            if (this.checkCollision(pickup, this.player)) {
-                this.audioManager.playSound('pickup-health');
-                // Heal player
-                const healAmount = pickup.healAmount;
-                this.player.health = Math.min(this.player.maxHealth, this.player.health + healAmount);
-                this.healthPickups.splice(i, 1);
-                this.showNotification(`+${healAmount} HP`, '#2ecc71');
-            }
-        }
-        
-        // Cap health pickups on mobile to prevent memory overload
-        if (this.performanceMode && this.healthPickups.length > 8) {
-            this.healthPickups.splice(0, this.healthPickups.length - 8);
-        }
-        
-        // Update Equipment Drops
-        for (let i = this.equipmentDrops.length - 1; i >= 0; i--) {
-            const drop = this.equipmentDrops[i];
-            drop.update(deltaTime, this.player);
-            
-            // Check collision with player
-            if (this.checkCollision(drop, this.player)) {
-                this.audioManager.playSound('pickup-equipment');
-                // Add to inventory
-                const existingItem = this.playerInventory.find(item => item.name === drop.equipment.name);
-                if (!existingItem) {
-                    this.playerInventory.push({ ...drop.equipment });
-                    this.saveInventory();
+        // Update XP orbs (swap-remove) — P2 can also pick up
+        {
+            let writeIdx = 0;
+            for (let i = 0; i < this.xpOrbs.length; i++) {
+                const orb = this.xpOrbs[i];
+                // Attract to the nearest living player
+                if (this.player2 && this.player2.health > 0 && this.player.health > 0) {
+                    const d1 = (orb.x - this.player.x) ** 2 + (orb.y - this.player.y) ** 2;
+                    const d2 = (orb.x - this.player2.x) ** 2 + (orb.y - this.player2.y) ** 2;
+                    orb.update(deltaTime, d2 < d1 ? this.player2 : this.player);
+                } else if (this.player2 && this.player2.health > 0) {
+                    orb.update(deltaTime, this.player2);
+                } else {
+                    orb.update(deltaTime, this.player);
                 }
-                this.equipmentDrops.splice(i, 1);
-                this.showNotification(`Found: ${drop.equipment.name}!`, this.getRarityColor(drop.equipment.rarity));
+                
+                let collected = false;
+                if (this.checkCollision(orb, this.player)) {
+                    this.audioManager.playSound('pickup-xp');
+                    this.player.addXP(orb.value);
+                    // Share XP with P2 (50%)
+                    if (this.player2 && this.player2.health > 0) {
+                        this.player2.addXP(Math.floor(orb.value * 0.5));
+                    }
+                    collected = true;
+                } else if (this.player2 && this.player2.health > 0 && this.checkCollision(orb, this.player2)) {
+                    this.audioManager.playSound('pickup-xp');
+                    this.player2.addXP(orb.value);
+                    this.player.addXP(Math.floor(orb.value * 0.5));
+                    collected = true;
+                }
+                
+                if (!collected) {
+                    this.xpOrbs[writeIdx++] = orb;
+                }
             }
+            this.xpOrbs.length = writeIdx;
+        }
+        
+        // Cap XP orbs on mobile
+        if (this.performanceMode && this.xpOrbs.length > 10) {
+            this.xpOrbs.length = 10;
+        }
+        
+        // Update Health Pickups (swap-remove) — P2 can also pick up
+        {
+            let writeIdx = 0;
+            for (let i = 0; i < this.healthPickups.length; i++) {
+                const pickup = this.healthPickups[i];
+                // Attract to the nearest living player
+                if (this.player2 && this.player2.health > 0 && this.player.health > 0) {
+                    const d1 = (pickup.x - this.player.x) ** 2 + (pickup.y - this.player.y) ** 2;
+                    const d2 = (pickup.x - this.player2.x) ** 2 + (pickup.y - this.player2.y) ** 2;
+                    pickup.update(deltaTime, d2 < d1 ? this.player2 : this.player);
+                } else if (this.player2 && this.player2.health > 0) {
+                    pickup.update(deltaTime, this.player2);
+                } else {
+                    pickup.update(deltaTime, this.player);
+                }
+                
+                let collected = false;
+                if (this.checkCollision(pickup, this.player)) {
+                    this.audioManager.playSound('pickup-health');
+                    const healAmount = pickup.healAmount;
+                    this.player.health = Math.min(this.player.maxHealth, this.player.health + healAmount);
+                    this.showNotification(`+${healAmount} HP`, '#2ecc71');
+                    collected = true;
+                } else if (this.player2 && this.player2.health > 0 && this.checkCollision(pickup, this.player2)) {
+                    this.audioManager.playSound('pickup-health');
+                    const healAmount = pickup.healAmount;
+                    this.player2.health = Math.min(this.player2.maxHealth, this.player2.health + healAmount);
+                    this.showNotification(`P2 +${healAmount} HP`, '#63b3ed');
+                    collected = true;
+                }
+                
+                if (!collected) {
+                    this.healthPickups[writeIdx++] = pickup;
+                }
+            }
+            this.healthPickups.length = writeIdx;
+        }
+        
+        // Cap health pickups on mobile
+        if (this.performanceMode && this.healthPickups.length > 8) {
+            this.healthPickups.length = 8;
+        }
+        
+        // Update Equipment Drops (swap-remove) — P2 pickup goes to shared inventory
+        {
+            let writeIdx = 0;
+            for (let i = 0; i < this.equipmentDrops.length; i++) {
+                const drop = this.equipmentDrops[i];
+                // Attract to the nearest living player
+                if (this.player2 && this.player2.health > 0 && this.player.health > 0) {
+                    const d1 = (drop.x - this.player.x) ** 2 + (drop.y - this.player.y) ** 2;
+                    const d2 = (drop.x - this.player2.x) ** 2 + (drop.y - this.player2.y) ** 2;
+                    drop.update(deltaTime, d2 < d1 ? this.player2 : this.player);
+                } else if (this.player2 && this.player2.health > 0) {
+                    drop.update(deltaTime, this.player2);
+                } else {
+                    drop.update(deltaTime, this.player);
+                }
+                
+                let collected = false;
+                if (this.checkCollision(drop, this.player)) {
+                    collected = true;
+                } else if (this.player2 && this.player2.health > 0 && this.checkCollision(drop, this.player2)) {
+                    collected = true;
+                }
+                
+                if (collected) {
+                    this.audioManager.playSound('pickup-equipment');
+                    const existingItem = this.playerInventory.find(item => item.name === drop.equipment.name);
+                    if (!existingItem) {
+                        this.playerInventory.push({ ...drop.equipment });
+                        this.saveInventory();
+                    }
+                    this.showNotification(`Found: ${drop.equipment.name}!`, this.getRarityColor(drop.equipment.rarity));
+                } else {
+                    this.equipmentDrops[writeIdx++] = drop;
+                }
+            }
+            this.equipmentDrops.length = writeIdx;
         }
         
         // Cap equipment drops on mobile
         if (this.performanceMode && this.equipmentDrops.length > 5) {
-            this.equipmentDrops.splice(0, this.equipmentDrops.length - 5);
+            this.equipmentDrops.length = 5;
         }
         
-        // Update particles and boss projectiles (both live in particles array)
+        // Update particles and boss projectiles (swap-remove)
         // Hard cap on mobile BEFORE updating to keep memory low
         if (this.performanceMode && this.particles.length > 20) {
-            // Remove non-BossProjectile particles first (cosmetic only)
-            for (let i = this.particles.length - 1; i >= 0 && this.particles.length > 20; i--) {
-                if (!(this.particles[i] instanceof BossProjectile)) {
-                    this.particles.splice(i, 1);
+            // Keep only BossProjectiles + most recent cosmetic particles
+            let kept = 0;
+            let writeIdx = 0;
+            for (let i = 0; i < this.particles.length; i++) {
+                if (this.particles[i] instanceof BossProjectile || kept < 20) {
+                    this.particles[writeIdx++] = this.particles[i];
+                    kept++;
                 }
             }
+            this.particles.length = writeIdx;
         }
-        for (let i = this.particles.length - 1; i >= 0; i--) {
-            this.particles[i].update(deltaTime);
-            if (this.particles[i].lifetime <= 0) {
-                this.particles.splice(i, 1);
+        {
+            let writeIdx = 0;
+            for (let i = 0; i < this.particles.length; i++) {
+                this.particles[i].update(deltaTime);
+                if (this.particles[i].lifetime > 0) {
+                    this.particles[writeIdx++] = this.particles[i];
+                }
             }
+            this.particles.length = writeIdx;
         }
         
         // Player auto-attack
@@ -1132,8 +1354,12 @@ class Game {
         // Update player weapons
         this.player.updateWeapons(deltaTime, this);
         
-        // Update HUD
-        this.updateHUD();
+        // Throttle HUD updates — DOM manipulation is expensive, especially on iOS Safari
+        this.lastHUDUpdate += deltaTime;
+        if (this.lastHUDUpdate >= this.hudUpdateInterval) {
+            this.lastHUDUpdate = 0;
+            this.updateHUD();
+        }
     }
     
     updateBossSystem(deltaTime) {
@@ -1712,7 +1938,13 @@ class Game {
             'Uncommon': '#10B981',
             'Rare': '#3B82F6',
             'Epic': '#A855F7',
-            'Legendary': '#F59E0B'
+            'Legendary': '#F59E0B',
+            // Also support uppercase enum keys used in equipment data
+            'COMMON': '#9CA3AF',
+            'UNCOMMON': '#10B981',
+            'RARE': '#3B82F6',
+            'EPIC': '#A855F7',
+            'LEGENDARY': '#F59E0B'
         };
         return colors[rarity] || '#fff';
     }
@@ -1762,6 +1994,30 @@ class Game {
         
         // Draw player
         this.player.draw(this.ctx);
+        
+        // Draw Player 2 (co-op)
+        if (this.player2 && this.player2.health > 0 && !this.player2.downed) {
+            this.player2.drawWeapons(this.ctx);
+            this.player2.draw(this.ctx);
+        }
+        // Draw P1 revive indicator if P1 is downed
+        if (this.player && this.player.downed) {
+            this.drawReviveIndicator(this.ctx, this.player, 'P1');
+        }
+        // Draw P2 revive indicator if P2 is downed
+        if (this.player2 && this.player2.downed) {
+            this.drawReviveIndicator(this.ctx, this.player2, 'P2');
+        }
+        // Draw permanent death marker (no longer revivable)
+        if (this.player2 && this.player2.health <= 0 && !this.player2.downed && this.player.health > 0) {
+            this.ctx.globalAlpha = 0.3;
+            this.ctx.font = '20px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillStyle = '#ff4444';
+            this.ctx.fillText('💀 P2', this.player2.x, this.player2.y);
+            this.ctx.globalAlpha = 1.0;
+        }
         
         // Draw achievement notifications
         this.drawAchievementNotifications();
@@ -1961,49 +2217,266 @@ class Game {
     checkCollision(obj1, obj2) {
         const dx = obj1.x - obj2.x;
         const dy = obj1.y - obj2.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        return distance < obj1.radius + obj2.radius;
+        // Use squared distance to avoid expensive sqrt
+        const distSq = dx * dx + dy * dy;
+        const radii = obj1.radius + obj2.radius;
+        return distSq < radii * radii;
+    }
+    
+    // Cache HUD DOM references once so we don't call getElementById every frame
+    _cacheHUDElements() {
+        this._hudElements = {
+            stage: document.getElementById('stageText'),
+            coins: document.getElementById('coinsText'),
+            healthBar: document.getElementById('healthBar'),
+            healthText: document.getElementById('healthText'),
+            level: document.getElementById('levelText'),
+            xpBar: document.getElementById('xpBar'),
+            time: document.getElementById('timeText'),
+            kills: document.getElementById('killText'),
+            ultimateBar: document.getElementById('ultimateBar'),
+            ultimateText: document.getElementById('ultimateText'),
+        };
     }
     
     updateHUD() {
-        // Stage
-        document.getElementById('stageText').textContent = this.currentStage;
+        if (!this._hudElements) this._cacheHUDElements();
+        const h = this._hudElements;
         
-        // Coins
-        document.getElementById('coinsText').textContent = this.coins;
+        h.stage.textContent = this.currentStage;
+        h.coins.textContent = this.coins;
         
         // Health
         const healthPercent = (this.player.health / this.player.maxHealth) * 100;
-        document.getElementById('healthBar').style.width = healthPercent + '%';
-        document.getElementById('healthText').textContent = 
-            `${Math.ceil(this.player.health)}/${this.player.maxHealth}`;
+        h.healthBar.style.width = healthPercent + '%';
+        h.healthText.textContent = `${Math.ceil(this.player.health)}/${this.player.maxHealth}`;
         
         // Level
-        document.getElementById('levelText').textContent = this.player.level;
+        h.level.textContent = this.player.level;
         
         // XP
         const xpPercent = (this.player.xp / this.player.xpToLevel) * 100;
-        document.getElementById('xpBar').style.width = xpPercent + '%';
+        h.xpBar.style.width = xpPercent + '%';
         
         // Time
         const stageTime = this.gameTime - this.stageStartTime;
         const minutes = Math.floor(stageTime / 60);
         const seconds = Math.floor(stageTime % 60);
-        document.getElementById('timeText').textContent = 
-            `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        h.time.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
         
         // Kills
-        document.getElementById('killText').textContent = this.player.kills;
+        h.kills.textContent = this.player.kills;
         
         // Ultimate charge
         const ultimatePercent = (this.player.ultimateCharge / this.player.ultimateMax) * 100;
-        document.getElementById('ultimateBar').style.width = ultimatePercent + '%';
-        document.getElementById('ultimateText').textContent = 
-            `${Math.floor(this.player.ultimateCharge)}/${this.player.ultimateMax}`;
+        h.ultimateBar.style.width = ultimatePercent + '%';
+        h.ultimateText.textContent = `${Math.floor(this.player.ultimateCharge)}/${this.player.ultimateMax}`;
+        
+        // Player 2 HUD (co-op)
+        if (this.player2) {
+            const p2HealthPercent = Math.max(0, (this.player2.health / this.player2.maxHealth) * 100);
+            const p2HealthBar = document.getElementById('p2HealthBar');
+            const p2HealthText = document.getElementById('p2HealthText');
+            const p2UltBar = document.getElementById('p2UltimateBar');
+            const p2StatusEl = document.getElementById('p2ReviveStatus');
+            if (p2HealthBar) {
+                p2HealthBar.style.width = p2HealthPercent + '%';
+                if (this.player2.downed) {
+                    p2HealthBar.style.background = 'repeating-linear-gradient(45deg, #ff4444, #ff4444 4px, #cc0000 4px, #cc0000 8px)';
+                } else {
+                    p2HealthBar.style.background = '';
+                }
+            }
+            if (p2HealthText) {
+                if (this.player2.downed) {
+                    const secs = Math.ceil(this.player2.reviveTimer);
+                    p2HealthText.textContent = `⚠️ DOWN (${secs}s)`;
+                } else if (this.player2.health <= 0) {
+                    p2HealthText.textContent = '💀 DEAD';
+                } else {
+                    p2HealthText.textContent = `${Math.ceil(this.player2.health)}/${this.player2.maxHealth}`;
+                }
+            }
+            if (p2UltBar) p2UltBar.style.width = ((this.player2.ultimateCharge / this.player2.ultimateMax) * 100) + '%';
+            // Show revive status text
+            if (p2StatusEl) {
+                if (this.player2.downed) {
+                    const pct = Math.floor(this.player2.reviveProgress * 100);
+                    p2StatusEl.textContent = pct > 0 ? `Reviving... ${pct}%` : 'Get close to revive!';
+                    p2StatusEl.style.display = 'block';
+                } else {
+                    p2StatusEl.style.display = 'none';
+                }
+            }
+        }
+        // Player 1 downed HUD (show warning on main health bar)
+        if (this.player && this.player.downed) {
+            const secs = Math.ceil(this.player.reviveTimer);
+            if (h.healthText) h.healthText.textContent = `⚠️ DOWN (${secs}s)`;
+            if (h.healthBar) h.healthBar.style.background = 'repeating-linear-gradient(45deg, #ff4444, #ff4444 4px, #cc0000 4px, #cc0000 8px)';
+        } else {
+            if (h.healthBar) h.healthBar.style.background = '';
+        }
+    }
+    
+    // Co-op revive system — called each frame when coopMode is active
+    updateReviveSystem(deltaTime) {
+        const players = [
+            { downed: this.player, rescuer: this.player2, label: 'P1' },
+            { downed: this.player2, rescuer: this.player, label: 'P2' }
+        ];
+        
+        for (const pair of players) {
+            const dp = pair.downed;   // potentially downed player
+            const rp = pair.rescuer;  // potential rescuer
+            
+            if (!dp || !dp.downed) continue;
+            
+            // Count down the revive window
+            dp.reviveTimer -= deltaTime;
+            
+            // If timer expires → permanent death
+            if (dp.reviveTimer <= 0) {
+                dp.downed = false;
+                dp.health = 0;
+                dp.reviveTimer = 0;
+                dp.reviveProgress = 0;
+                this.showNotification(`${pair.label} has fallen!`, '#ff4444');
+                
+                // Check if both players are now truly dead
+                const p1Dead = this.player.health <= 0 && !this.player.downed;
+                const p2Dead = !this.player2 || (this.player2.health <= 0 && !this.player2.downed);
+                if (p1Dead && p2Dead) {
+                    this.gameOver();
+                    return;
+                }
+                continue;
+            }
+            
+            // Check if rescuer is alive and close enough
+            if (rp && rp.health > 0 && !rp.downed) {
+                const dx = dp.x - rp.x;
+                const dy = dp.y - rp.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist <= dp.reviveRange) {
+                    // Revive progress increases
+                    dp.reviveProgress += deltaTime / dp.reviveTime;
+                    
+                    if (dp.reviveProgress >= 1) {
+                        // Revived!
+                        dp.downed = false;
+                        dp.health = Math.floor(dp.maxHealth * 0.4); // Revive at 40% HP
+                        dp.reviveProgress = 0;
+                        dp.timesRevived++;
+                        dp.invulnerable = true;
+                        dp.iframeTimer = 3.0; // 3s of invulnerability after revive
+                        
+                        this.showNotification(`${pair.label} revived!`, '#2ecc71');
+                        this.audioManager.playSound('pickup-health');
+                        
+                        // Celebration particles
+                        for (let i = 0; i < 12; i++) {
+                            const angle = (i / 12) * Math.PI * 2;
+                            this.particles.push(new Particle(
+                                dp.x, dp.y, angle, 120 + Math.random() * 80,
+                                '#2ecc71', 1.5
+                            ));
+                        }
+                    }
+                } else {
+                    // Decay progress slowly when out of range (doesn't reset fully)
+                    dp.reviveProgress = Math.max(0, dp.reviveProgress - deltaTime * 0.3);
+                }
+            } else {
+                // No rescuer available — progress decays
+                dp.reviveProgress = Math.max(0, dp.reviveProgress - deltaTime * 0.3);
+            }
+        }
+    }
+    
+    // Draw the revive indicator on canvas for a downed player
+    drawReviveIndicator(ctx, player, label) {
+        const px = player.x;
+        const py = player.y;
+        const t = this.gameTime;
+        
+        // Pulsing red glow behind
+        const pulseAlpha = 0.3 + Math.sin(t * 4) * 0.15;
+        ctx.globalAlpha = pulseAlpha;
+        ctx.fillStyle = '#ff4444';
+        ctx.beginPath();
+        ctx.arc(px, py, 30, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Downed player icon (skull + label)
+        ctx.globalAlpha = 0.7 + Math.sin(t * 3) * 0.2;
+        ctx.font = '20px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ff6666';
+        ctx.fillText(`💀 ${label}`, px, py - 2);
+        
+        // Revive progress arc (green ring)
+        if (player.reviveProgress > 0) {
+            ctx.globalAlpha = 0.9;
+            ctx.strokeStyle = '#2ecc71';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(px, py, 35, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * player.reviveProgress);
+            ctx.stroke();
+            
+            // Progress percentage
+            ctx.fillStyle = '#2ecc71';
+            ctx.font = 'bold 12px Arial';
+            ctx.fillText(`${Math.floor(player.reviveProgress * 100)}%`, px, py + 22);
+        }
+        
+        // Countdown timer ring (red, shrinking)
+        const timerFrac = player.reviveTimer / Math.max(5, player.reviveWindowMax - player.timesRevived * 3);
+        ctx.globalAlpha = 0.5;
+        ctx.strokeStyle = timerFrac > 0.3 ? '#ffaa00' : '#ff0000';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(px, py, 40, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * timerFrac);
+        ctx.stroke();
+        
+        // Timer text
+        ctx.globalAlpha = 0.8;
+        ctx.fillStyle = timerFrac > 0.3 ? '#ffcc00' : '#ff4444';
+        ctx.font = '10px Arial';
+        ctx.fillText(`${Math.ceil(player.reviveTimer)}s`, px, py + 34);
+        
+        // "Get close!" prompt if no progress
+        if (player.reviveProgress === 0) {
+            const bobY = Math.sin(t * 2) * 3;
+            ctx.globalAlpha = 0.6 + Math.sin(t * 3) * 0.2;
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 11px Arial';
+            ctx.fillText('REVIVE!', px, py - 30 + bobY);
+        }
+        
+        ctx.globalAlpha = 1.0;
+        ctx.lineWidth = 1;
+    }
+    
+    // Clear all tracked timers (called on restart/quit)
+    clearActiveTimers() {
+        if (this.activeTimers) {
+            this.activeTimers.forEach(id => clearTimeout(id));
+            this.activeTimers = [];
+        }
     }
     
     gameOver() {
         this.isRunning = false;
+        
+        // Cancel the game loop and clear active timers
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
+        }
+        this.clearActiveTimers();
         
         // Save persistent stats for achievements
         const totalBosses = this.getTotalBossesDefeated();
@@ -2060,6 +2533,28 @@ class Game {
         this.audioManager.playMusic('menu-theme');
         this.isRunning = false;
         this.isPaused = false;
+        
+        // Cancel game loop and clear timers
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
+        }
+        this.clearActiveTimers();
+        
+        // Reset co-op state
+        this.coopMode = false;
+        this.player2 = null;
+        this.selectedCharacter2 = null;
+        const coopBtn = document.getElementById('coopToggleBtn');
+        if (coopBtn) coopBtn.textContent = '🎮 Co-Op: OFF';
+        const p2Banner = document.getElementById('p2SelectBanner');
+        if (p2Banner) p2Banner.style.display = 'none';
+        const p2Hud = document.getElementById('p2Hud');
+        if (p2Hud) p2Hud.style.display = 'none';
+        // Remove P2 selected styling from character cards
+        document.querySelectorAll('.character-card.p2-selected').forEach(card => {
+            card.classList.remove('p2-selected');
+        });
         
         // Re-enable any key to start
         const titleScreen = document.getElementById('titleScreen');
@@ -2265,6 +2760,7 @@ class Player {
         this.radius = 20;
         
         // Stats based on character type
+        this.maxHealthBonus = 0; // Resets on new game, persists only within a run
         this.setupCharacter();
         
         // State
@@ -2299,6 +2795,15 @@ class Player {
         // Special weapons
         this.weapons = [];
         
+        // Co-op revive system
+        this.downed = false;           // True when in revivable state
+        this.reviveTimer = 0;          // Countdown until permanently dead
+        this.reviveWindowMax = 15;     // Seconds to revive before permanent death
+        this.reviveProgress = 0;       // 0-1 progress toward being revived
+        this.reviveTime = 3.0;         // Seconds of proximity needed to revive
+        this.reviveRange = 70;         // Pixels — how close the other player must be
+        this.timesRevived = 0;         // Each revive shortens next window
+
         // Equipment System
         this.equipment = {
             weapon: null,
@@ -2358,7 +2863,8 @@ class Player {
         };
         
         const stat = stats[this.type];
-        this.maxHealth = stat.maxHealth;
+        // Always apply bonus upgrades after base
+        this.maxHealth = stat.maxHealth + (this.maxHealthBonus || 0);
         this.speed = stat.speed;
         this.baseDamage = stat.damage;
         this.color = stat.color;
@@ -2646,40 +3152,49 @@ class Player {
                 break;
                 
             case 'ranger':
-                // Arrow Storm: Rapid fire barrage
-                let arrowCount = 0;
-                const stormInterval = setInterval(() => {
-                    if (arrowCount >= 100 || !game.isRunning) {
-                        clearInterval(stormInterval);
-                        return;
+                // Arrow Storm: Spawn arrows in tracked batches (no setInterval leak)
+                {
+                    const totalArrows = game.performanceMode ? 40 : 100;
+                    const batchSize = game.performanceMode ? 8 : 20;
+                    const batches = Math.ceil(totalArrows / batchSize);
+                    for (let b = 0; b < batches; b++) {
+                        const timerId = setTimeout(() => {
+                            if (!game.isRunning || game.isPaused) return;
+                            for (let a = 0; a < batchSize; a++) {
+                                const angle = Math.random() * Math.PI * 2;
+                                game.projectiles.push(new Projectile(
+                                    this.x, this.y, angle,
+                                    600, this.projectileDamage * 2,
+                                    this.color, true, this.type
+                                ));
+                            }
+                        }, b * 80);
+                        game.activeTimers.push(timerId);
                     }
-                    const angle = Math.random() * Math.PI * 2;
-                    game.projectiles.push(new Projectile(
-                        this.x, this.y, angle,
-                        600, this.projectileDamage * 2,
-                        this.color, true, this.type
-                    ));
-                    arrowCount++;
-                }, 30);
+                }
                 break;
                 
             case 'mage':
-                // Meteor Strike: Summon meteors at enemy positions
-                const meteors = Math.min(game.enemies.length, 20);
-                for (let i = 0; i < meteors; i++) {
-                    const enemy = game.enemies[i];
-                    if (enemy) {
-                        setTimeout(() => {
-                            if (game.isRunning) {
-                                for (let j = 0; j < 8; j++) {
-                                    const angle = (Math.PI * 2 * j) / 8;
+                // Meteor Strike: Summon meteors with tracked timers
+                {
+                    const meteors = Math.min(game.enemies.length, 20);
+                    const meteorDamage = this.projectileDamage * 10;
+                    for (let i = 0; i < meteors; i++) {
+                        const enemy = game.enemies[i];
+                        if (enemy) {
+                            const timerId = setTimeout(() => {
+                                if (!game.isRunning) return;
+                                const particleCount = game.performanceMode ? 4 : 8;
+                                for (let j = 0; j < particleCount; j++) {
+                                    const angle = (Math.PI * 2 * j) / particleCount;
                                     game.particles.push(new Particle(
                                         enemy.x, enemy.y, angle, 200, '#ff4500', 1.5
                                     ));
                                 }
-                                enemy.takeDamage(this.projectileDamage * 10);
-                            }
-                        }, i * 50);
+                                enemy.takeDamage(meteorDamage);
+                            }, i * 50);
+                            game.activeTimers.push(timerId);
+                        }
                     }
                 }
                 break;
@@ -2734,13 +3249,22 @@ class Player {
     }
     
     takeDamage(amount) {
-        // Skip damage if invulnerable
-        if (this.invulnerable) return;
+        // Skip damage if invulnerable or already downed
+        if (this.invulnerable || this.downed) return;
         
         // Apply armor damage reduction
         const reducedDamage = amount * (1 - this.armor);
         this.health -= reducedDamage;
         if (this.health < 0) this.health = 0;
+        
+        // In co-op, enter downed state instead of dying
+        if (this.health <= 0 && this.isP2 !== undefined && this.game.coopMode) {
+            this.downed = true;
+            // Revive window shrinks each time: 15s, 10s, 7s, 5s...
+            this.reviveTimer = Math.max(5, this.reviveWindowMax - this.timesRevived * 3);
+            this.reviveProgress = 0;
+            this.health = 0;
+        }
         
         // Activate invulnerability frames
         this.invulnerable = true;
@@ -2895,6 +3419,7 @@ class Player {
         // Generate random upgrades
         const statUpgrades = [
             { icon: '❤️', name: 'Max Health +20', desc: 'Increase maximum health', apply: () => {
+                this.maxHealthBonus = (this.maxHealthBonus || 0) + 20;
                 this.maxHealth += 20;
                 this.health += 20;
             }},
@@ -4027,14 +4552,16 @@ class XPOrb {
     }
     
     draw(ctx) {
-        // Glow
-        const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.radius * 2);
-        gradient.addColorStop(0, 'rgba(74, 144, 226, 0.8)');
-        gradient.addColorStop(1, 'rgba(74, 144, 226, 0)');
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius * 2, 0, Math.PI * 2);
-        ctx.fill();
+        // Skip glow on mobile (createRadialGradient is expensive)
+        if (!window.game || !window.game.performanceMode) {
+            const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.radius * 2);
+            gradient.addColorStop(0, 'rgba(74, 144, 226, 0.8)');
+            gradient.addColorStop(1, 'rgba(74, 144, 226, 0)');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius * 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
         
         // Core
         ctx.fillStyle = '#4a90e2';
@@ -4077,14 +4604,16 @@ class HealthPickup {
     draw(ctx) {
         const pulse = Math.sin(this.pulseTime) * 0.3 + 1;
         
-        // Glow
-        const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.radius * 2.5 * pulse);
-        gradient.addColorStop(0, 'rgba(46, 204, 113, 0.8)');
-        gradient.addColorStop(1, 'rgba(46, 204, 113, 0)');
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius * 2.5 * pulse, 0, Math.PI * 2);
-        ctx.fill();
+        // Skip glow on mobile
+        if (!window.game || !window.game.performanceMode) {
+            const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.radius * 2.5 * pulse);
+            gradient.addColorStop(0, 'rgba(46, 204, 113, 0.8)');
+            gradient.addColorStop(1, 'rgba(46, 204, 113, 0)');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius * 2.5 * pulse, 0, Math.PI * 2);
+            ctx.fill();
+        }
         
         // Core
         ctx.fillStyle = '#2ecc71';
@@ -4225,7 +4754,7 @@ class BossProjectile {
         this.y += this.vy * deltaTime;
         this.lifetime -= deltaTime;
         
-        // Check collision with player
+        // Check collision with player 1
         const dx = this.game.player.x - this.x;
         const dy = this.game.player.y - this.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -4233,6 +4762,17 @@ class BossProjectile {
         if (dist < this.radius + this.game.player.radius) {
             this.game.player.takeDamage(this.damage);
             this.lifetime = 0;
+        }
+        
+        // Check collision with player 2 (co-op)
+        if (this.lifetime > 0 && this.game.player2 && this.game.player2.health > 0) {
+            const dx2 = this.game.player2.x - this.x;
+            const dy2 = this.game.player2.y - this.y;
+            const dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+            if (dist2 < this.radius + this.game.player2.radius) {
+                this.game.player2.takeDamage(this.damage);
+                this.lifetime = 0;
+            }
         }
         
         // Remove if off screen
