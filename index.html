@@ -155,6 +155,13 @@
             <div id="stageIntroSub" class="stage-intro-sub">The horde thickens</div>
         </div>
 
+        <!-- Mid-stage event banner. Unlike the stage card this plays over a
+             live fight, so it never dims the field or blocks the view. -->
+        <div id="eventBanner" class="event-banner">
+            <div id="eventBannerTitle" class="event-banner-title">THE PACK</div>
+            <div id="eventBannerSub" class="event-banner-sub"></div>
+        </div>
+
         <!-- Entrance card. Held for two seconds while the camera pushes to
              the boss and time runs slow, so the arrival is an event rather
              than another enemy appearing at the top of the screen. -->
@@ -475,6 +482,8 @@
     <script src="src/entities/CoinPickup.js"></script>
     <script src="src/systems/DamageNumbers.js"></script>
     <script src="src/systems/Effects.js"></script>
+    <script src="src/data/Elites.js"></script>
+    <script src="src/systems/ArenaEvents.js"></script>
     <script src="src/systems/TitleBackground.js"></script>
 
     <script src="script_v2.js"></script>

@@ -2875,6 +2875,56 @@ body {
 }
 
 /* ------------------------------------------------------------------
+   Mid-stage event banner
+   ------------------------------------------------------------------
+   Plays over a live fight, so unlike the stage card it must not dim the
+   field, block the centre, or take pointer events. It sits in the upper
+   third — below the HUD strip, above where the player usually is. */
+.event-banner {
+    position: absolute;
+    /* Clear of the HUD strip, which is 135px tall — a percentage alone put
+       this on top of the ultimate bar on a 720px viewport. */
+    top: max(24%, 158px);
+    left: 50%;
+    transform: translate(-50%, -12px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 0 20px;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 55;
+    transition: opacity 0.32s ease, transform 0.32s ease;
+}
+
+.event-banner.active {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+.event-banner-title {
+    font-size: clamp(1.1rem, 3.4vw, 1.9rem);
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    color: #ffe9c2;
+    text-shadow: 0 2px 0 rgba(0, 0, 0, 0.9),
+                 0 0 26px rgba(255, 180, 80, 0.5);
+}
+
+.event-banner-sub {
+    font-size: clamp(0.72rem, 1.9vw, 0.95rem);
+    letter-spacing: 0.1em;
+    color: rgba(255, 226, 190, 0.78);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .event-banner { transition: opacity 0.2s ease; transform: translate(-50%, 0); }
+}
+
+/* ------------------------------------------------------------------
    Stage intro
    ------------------------------------------------------------------
    Paired with a short spawn-free hold, this is the breath between

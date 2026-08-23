@@ -37,5 +37,29 @@ class Chest {
         ctx.textBaseline = 'middle';
         ctx.fillText('🎁', this.x, y);
         ctx.restore();
+
+        // A cache chest is on a clock, and a clock the player cannot see is
+        // just an unexplained disappearance. Draw it as a ring that drains,
+        // so the remaining time is readable at a glance from across the arena.
+        if (this.expires !== undefined && this.maxExpires) {
+            const frac = Math.max(0, this.expires / this.maxExpires);
+            const r = this.radius + 12;
+            const start = -Math.PI / 2;
+
+            ctx.save();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+            ctx.beginPath();
+            ctx.arc(this.x, y, r, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Reddens as it runs out, so urgency is carried by colour as well
+            // as by length — the last two seconds should feel different.
+            ctx.strokeStyle = frac > 0.35 ? '#ffd43b' : '#ff6b6b';
+            ctx.beginPath();
+            ctx.arc(this.x, y, r, start, start + Math.PI * 2 * frac);
+            ctx.stroke();
+            ctx.restore();
+        }
     }
 }

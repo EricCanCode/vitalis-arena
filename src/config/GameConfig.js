@@ -126,6 +126,55 @@ const GAME_CONFIG = {
         ]
     },
 
+    // Mid-stage events. Between bosses the run was a flat trickle of enemies
+    // at a rate that only drifted upward, so the stretch before a boss felt the
+    // same at the end as at the start. The director punctuates it: on an
+    // interval it picks one event, announces it, and runs it.
+    //
+    // Timings are set against the real stage shape, not a guess: a stage runs
+    // stageTimeLimit (90s), the boss warning starts at 80s, and the lockout
+    // below closes the door at 78s. That leaves one usable window, and these
+    // numbers put two events in it with room to breathe on either side.
+    events: {
+        // The stage card has just played. Let the stage open on its own terms
+        // before the director starts interrupting.
+        firstDelay: 26,
+        interval: 27,
+        // +/- this many seconds, so the beat never becomes a metronome the
+        // player can set their watch by.
+        jitter: 5,
+
+        // Events are suppressed near a boss — the pre-boss warning is its own
+        // build-up and must not be competing with a treasure timer.
+        bossWarningLockout: 12,
+
+        pack: {
+            count: 5,
+            countMobile: 3,
+            // Elites spawn as a ring on one side rather than scattered, so the
+            // pack reads as a formation that arrived, not as a spawn spike.
+            formationRadius: 130,
+            healthScale: 1.35
+        },
+
+        surge: {
+            // The tell. Long enough to cross the arena away from the edge.
+            telegraph: 1.8,
+            count: 26,
+            countMobile: 12,
+            // Spread along the incoming edge, in world units.
+            spread: 900
+        },
+
+        cache: {
+            // How long the chest waits before it gives up and vanishes. Tuned
+            // so crossing the arena is possible but not casual.
+            lifetime: 12,
+            // Never spawn it in the player's lap; the point is the commute.
+            minDistance: 620
+        }
+    },
+
     juice: {
         // Longest the simulation may ever be frozen for. Hit-stop is felt,
         // not seen — past ~120ms it stops reading as impact and starts

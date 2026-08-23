@@ -400,6 +400,8 @@ class Game {
         this.equipmentDrops = [];
         this.particles = [];
         this.effects = new EffectLayer(this);
+        // Punctuates the long flat stretch between bosses. See ArenaEvents.js.
+        this.eventDirector = new ArenaEventDirector(this);
         this.screenShake = 0;
         // Hit-stop: seconds of frozen simulation remaining. Rendering keeps
         // running, so the frame an impact lands on is held on screen. Nothing
@@ -1135,6 +1137,7 @@ class Game {
         this.equipmentDrops = [];
         this.particles = [];
         this.effects.clear();
+        this.eventDirector.reset();
         this.hitStop = 0;
         this.bossLull = 0;
         this.timeScale = 1;
@@ -1312,6 +1315,10 @@ class Game {
             this.keys['q'] = false; // Prevent multiple activations
         }
         
+        // Mid-stage events run before the ordinary spawner so anything an
+        // event creates is subject to the same enemy cap as everything else.
+        this.eventDirector.update(deltaTime);
+
         // Spawn enemies
         this.spawnEnemies(deltaTime);
         
@@ -1654,12 +1661,24 @@ class Game {
             this.coinPickups.length = writeIdx;
         }
 
-        // Update chests (swap-remove). Chests never expire.
+        // Update chests (swap-remove). Dropped chests wait forever; a cache
+        // chest carries an `expires` clock, which is the whole point of it.
         {
             let writeIdx = 0;
             for (let i = 0; i < this.chests.length; i++) {
                 const chest = this.chests[i];
                 chest.update(deltaTime);
+
+                if (chest.expires !== undefined) {
+                    chest.expires -= deltaTime;
+                    if (chest.expires <= 0) {
+                        this.effects.add(new RingEffect(chest.x, chest.y, {
+                            fromRadius: 30, toRadius: 120, life: 0.5,
+                            color: '#6b7280', width: 3, endWidth: 1
+                        }));
+                        continue;   // dropped from the array by not being kept
+                    }
+                }
 
                 let taken = false;
                 for (const p of [this.player, this.player2]) {
@@ -2176,6 +2195,31 @@ class Game {
         this.beginStageIntro();
     }
     
+    // An event announcement. Deliberately not showNotification: notifications
+    // stack in the corner and are read as flavour, and an event the player is
+    // expected to react to cannot be flavour. This lands across the upper
+    // arena, holds, and leaves — without dimming the field, because unlike the
+    // stage card this plays while enemies are still moving.
+    announceEvent(title, sub) {
+        const banner = document.getElementById('eventBanner');
+        if (!banner) return;
+        const t = document.getElementById('eventBannerTitle');
+        const s = document.getElementById('eventBannerSub');
+        if (t) t.textContent = title;
+        if (s) s.textContent = sub || '';
+
+        // Restart the animation even if a previous banner is still on screen.
+        banner.classList.remove('active');
+        void banner.offsetWidth;
+        banner.classList.add('active');
+
+        clearTimeout(this._eventBannerTimer);
+        this._eventBannerTimer = setTimeout(() => {
+            banner.classList.remove('active');
+        }, 2600);
+        this.activeTimers.push(this._eventBannerTimer);
+    }
+
     showNotification(message) {
         // Create temporary notification element
         const notification = document.createElement('div');
@@ -6383,6 +6427,30 @@ class Enemy {
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText('⚡', this.x, this.y - this.radius - 20);
+        }
+
+        // Named elite: a ring in a colour no ordinary enemy wears, and a
+        // nameplate. The ring is what the player reads mid-fight; the name is
+        // what they remember afterwards.
+        if (this.isElite) {
+            const pulse = 0.55 + 0.45 * Math.sin(this.game.gameTime * 3);
+            ctx.save();
+            ctx.globalAlpha = 0.5 + 0.4 * pulse;
+            ctx.strokeStyle = ELITE_MARK_COLOR;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 7, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.globalAlpha = 0.95;
+            ctx.fillStyle = ELITE_MARK_COLOR;
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.shadowColor = 'rgba(0,0,0,0.9)';
+            ctx.shadowBlur = 4;
+            ctx.fillText(this.eliteFullName, this.x, this.y - this.radius - 12);
+            ctx.restore();
         }
     }
 }
