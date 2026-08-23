@@ -73,6 +73,38 @@ const EQUIPMENT_POOL = [
     { id: 'ring_of_haste', name: 'Ring of Haste', type: EQUIPMENT_TYPES.RING, baseStats: { attackSpeed: 0.3, speed: 15 }, effect: 'time_slow', effectValue: 10, icon: '💨' },
     { id: 'ring_of_regeneration', name: 'Ring of Regeneration', type: EQUIPMENT_TYPES.RING, baseStats: { health: 20 }, effect: 'health_regen', effectValue: 2, icon: '💚' },
     { id: 'ring_of_power', name: 'Ring of Power', type: EQUIPMENT_TYPES.RING, baseStats: { damage: 30 }, effect: 'ultimate_charge', effectValue: 50, icon: '💍' },
+
+    // --- Expanded pool ---------------------------------------------------
+    // The original thirteen were collected within a couple of minutes, after
+    // which every drop was a duplicate. These deliberately use only stats that
+    // are actually wired up (damage, health, speed, attackSpeed, armor, xpGain)
+    // rather than declaring effects that do nothing.
+
+    // Weapons
+    { id: 'ruinblade',    name: 'Ruinblade',     type: EQUIPMENT_TYPES.WEAPON, baseStats: { damage: 22 }, icon: '🗡️' },
+    { id: 'whisperfang',  name: 'Whisperfang',   type: EQUIPMENT_TYPES.WEAPON, baseStats: { damage: 8, attackSpeed: 0.25 }, icon: '🐍' },
+    { id: 'emberbrand',   name: 'Emberbrand',    type: EQUIPMENT_TYPES.WEAPON, baseStats: { damage: 16, attackSpeed: 0.08 }, icon: '🔥' },
+    { id: 'gravecaller',  name: 'Gravecaller',   type: EQUIPMENT_TYPES.WEAPON, baseStats: { damage: 19, health: 15 }, icon: '⚰️' },
+    { id: 'stormpike',    name: 'Stormpike',     type: EQUIPMENT_TYPES.WEAPON, baseStats: { damage: 14, speed: 25 }, icon: '🔱' },
+
+    // Armor
+    { id: 'bonewrought',  name: 'Bonewrought Mail', type: EQUIPMENT_TYPES.ARMOR, baseStats: { health: 60, armor: 8 }, icon: '🦴' },
+    { id: 'runed_shell',  name: 'Runed Carapace',   type: EQUIPMENT_TYPES.ARMOR, baseStats: { health: 35, armor: 14 }, icon: '🐢' },
+    { id: 'wardens_aegis',name: "Warden's Aegis",   type: EQUIPMENT_TYPES.ARMOR, baseStats: { health: 80, armor: 6 }, icon: '🛡️' },
+    { id: 'cinderplate',  name: 'Cinderplate',      type: EQUIPMENT_TYPES.ARMOR, baseStats: { health: 45, armor: 10 }, icon: '🌋' },
+    { id: 'veilweave',    name: 'Veilweave',        type: EQUIPMENT_TYPES.ARMOR, baseStats: { health: 25, speed: 30, armor: 4 }, icon: '🕸️' },
+
+    // Accessories
+    { id: 'oath_token',   name: 'Oath Token',     type: EQUIPMENT_TYPES.ACCESSORY, baseStats: { damage: 18, health: 20 }, icon: '🎖️' },
+    { id: 'ravener_fang', name: "Ravener's Fang", type: EQUIPMENT_TYPES.ACCESSORY, baseStats: { damage: 30 }, icon: '🦷' },
+    { id: 'scholars_sigil', name: "Scholar's Sigil", type: EQUIPMENT_TYPES.ACCESSORY, baseStats: { xpGain: 40 }, icon: '📜' },
+    { id: 'hollow_idol',  name: 'Hollow Idol',    type: EQUIPMENT_TYPES.ACCESSORY, baseStats: { health: 55, armor: 5 }, icon: '🗿' },
+
+    // Rings
+    { id: 'band_of_embers', name: 'Band of Embers',    type: EQUIPMENT_TYPES.RING, baseStats: { damage: 22, attackSpeed: 0.12 }, icon: '🔴' },
+    { id: 'coil_of_years',  name: 'Coil of Years',     type: EQUIPMENT_TYPES.RING, baseStats: { xpGain: 30, health: 15 }, icon: '🌀' },
+    { id: 'signet_onslaught', name: 'Signet of Onslaught', type: EQUIPMENT_TYPES.RING, baseStats: { attackSpeed: 0.35 }, icon: '⚡' },
+    { id: 'loop_of_stone',  name: 'Loop of Stone',     type: EQUIPMENT_TYPES.RING, baseStats: { armor: 12, health: 25 }, icon: '🪨' },
 ];
 
 // Audio Manager Class — Web Audio API
@@ -332,6 +364,11 @@ class Game {
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d');
         this.resizeCanvas();
+
+        // World space (the playfield) is separate from screen space (the
+        // viewport). The camera is the only thing that maps between them.
+        this.setupWorld();
+        this.camera = new Camera(this);
         
         // Game state
         this.isRunning = false;
@@ -362,7 +399,20 @@ class Game {
         this.healthPickups = [];
         this.equipmentDrops = [];
         this.particles = [];
+        this.effects = new EffectLayer(this);
         this.screenShake = 0;
+        // Hit-stop: seconds of frozen simulation remaining. Rendering keeps
+        // running, so the frame an impact lands on is held on screen. Nothing
+        // moves, so the eye reads the collision instead of skating past it.
+        this.hitStop = 0;
+        this.bossLull = 0;
+        // Slow motion. Hit-stop stops time dead; this stretches it, which is
+        // what a cinematic beat wants — the player still sees movement.
+        this.timeScale = 1;
+        // While set, the camera looks here instead of at the players.
+        this.cameraOverride = null;
+        this.bossEntrance = 0;
+        this.stageIntro = 0;
         
         // Cache DOM references to avoid getElementById every frame
         this._hudElements = null;
@@ -421,6 +471,31 @@ class Game {
             tank: { lastSpawn: 0, cooldown: this.isMobile ? 6000 : 4000 }    // Slower on mobile
         };
         
+        // Chests, coin pickups and floating damage numbers
+        this.chests = [];
+        this.coinPickups = [];
+        this.damageNumbers = [];
+
+        // Wave director state
+        this.currentWaveId = 0;
+        this.currentWaveName = '';
+
+        // Only one level-up screen may be open at a time (matters in co-op)
+        this.levelUpScreenOwner = null;
+
+        // Chest reward flow
+        this.pendingChestReward = null;
+
+        // Permanent (meta) upgrades bought between runs
+        this.metaUpgradeLevels = this.loadMetaUpgrades();
+
+        // Per-run tallies used by the game over summary
+        this.runStats = this.createRunStats();
+
+        // Debug performance overlay (toggle with F3)
+        this.showDebug = false;
+        this.fps = 0;
+
         // Achievement System
         this.achievements = this.loadAchievements();
         this.sessionStats = {
@@ -442,6 +517,10 @@ class Game {
             window.visualViewport.addEventListener('resize', () => this.resizeCanvas());
         }
         
+        // Animated title backdrop (no-op on mobile / reduced motion)
+        this.titleBackground = new TitleBackground('video/title-loop.mp4');
+        this.titleBackground.start();
+
         // Mobile orientation and fullscreen handling
         this.setupMobileDisplay();
     }
@@ -468,38 +547,73 @@ class Game {
                 }
             };
             
-            // Request fullscreen on any touch interaction
+            // Request fullscreen once, on the first touch. The previous code
+            // re-requested it a second after every exit, which fights both the
+            // player and itch.io's own fullscreen control inside its iframe.
             document.addEventListener('touchstart', () => {
                 if (!document.fullscreenElement && !document.webkitFullscreenElement) {
                     requestFullscreen();
                 }
             }, { once: true });
-            
-            // Re-request fullscreen if user exits it
-            document.addEventListener('fullscreenchange', () => {
-                if (!document.fullscreenElement) {
-                    // Give a short delay before re-requesting
-                    setTimeout(() => {
-                        if (!document.fullscreenElement) {
-                            requestFullscreen();
-                        }
-                    }, 1000);
-                }
-            });
-            
-            // Listen for webkit fullscreen changes (Safari)
-            document.addEventListener('webkitfullscreenchange', () => {
-                if (!document.webkitFullscreenElement) {
-                    setTimeout(() => {
-                        if (!document.webkitFullscreenElement) {
-                            requestFullscreen();
-                        }
-                    }, 1000);
-                }
-            });
         }
     }
-    
+
+    // World size is fixed by config, not by the viewport, so resizing the
+    // window never changes the size of the playfield. The only exception is a
+    // viewport larger than the configured world, which would otherwise show
+    // empty space outside it.
+    setupWorld() {
+        const cfg = GAME_CONFIG.world;
+        if (!cfg.scroll) {
+            // Classic arena: world == viewport, camera clamps to identity.
+            this.world = { width: this.canvas.width, height: this.canvas.height };
+            return;
+        }
+        this.world = {
+            width: Math.max(cfg.width, this.canvas.width),
+            height: Math.max(cfg.height, this.canvas.height)
+        };
+    }
+
+    // Point the camera should centre on. In co-op that is the midpoint between
+    // the players; solo it degenerates to the player's own position.
+    getCameraFocus() {
+        // A cinematic can take the camera off the players entirely.
+        if (this.cameraOverride) return this.cameraOverride;
+
+        const alive = [this.player, this.player2].filter(p => p && p.health > 0);
+        if (alive.length === 0) return { x: this.world.width / 2, y: this.world.height / 2 };
+        if (alive.length === 1) return { x: alive[0].x, y: alive[0].y };
+        return {
+            x: (alive[0].x + alive[1].x) / 2,
+            y: (alive[0].y + alive[1].y) / 2
+        };
+    }
+
+    // One camera, two players: past a maximum separation, ease both back toward
+    // their midpoint so neither can walk off the edge of the shared view.
+    enforceCoopLeash(deltaTime) {
+        const p1 = this.player;
+        const p2 = this.player2;
+        if (!p1 || !p2 || p1.health <= 0 || p2.health <= 0) return;
+
+        const max = GAME_CONFIG.world.coopMaxSeparation;
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist <= max || dist === 0) return;
+
+        // Pull each player halfway to the allowed radius. Eased rather than
+        // snapped so it reads as resistance, not a teleport.
+        const overshoot = (dist - max) / 2;
+        const pull = Math.min(overshoot, 400 * deltaTime);
+        const nx = dx / dist;
+        const ny = dy / dist;
+
+        if (!p1.downed) { p1.x += nx * pull; p1.y += ny * pull; }
+        if (!p2.downed) { p2.x -= nx * pull; p2.y -= ny * pull; }
+    }
+
     resizeCanvas() {
         // Use visual viewport for mobile browsers (accounts for browser chrome)
         const viewport = window.visualViewport;
@@ -519,6 +633,10 @@ class Game {
         this.canvas.style.width = width + 'px';
         this.canvas.style.height = height + 'px';
         
+        // A viewport larger than the configured world would show empty space
+        // past its edges, so re-derive the world whenever the canvas changes.
+        if (this.world) this.setupWorld();
+
         // Resize ALL screens to match viewport (fixes Safari browser chrome issue)
         const screens = document.querySelectorAll('.screen');
         screens.forEach(screen => {
@@ -552,6 +670,12 @@ class Game {
             // ESC key toggles pause
             if (e.key === 'Escape' && this.isRunning) {
                 this.togglePause();
+            }
+
+            // F3 toggles the performance overlay
+            if (e.key === 'F3') {
+                e.preventDefault();
+                this.showDebug = !this.showDebug;
             }
         });
         
@@ -666,6 +790,8 @@ class Game {
             enemy_basic: 'images/enemy_basic.png',
             enemy_fast: 'images/enemy_fast.png',
             enemy_tank: 'images/enemy_tank.png',
+            enemy_crawler: 'images/demon_grunt.png',
+            enemy_elite: 'images/demon.png',
             enemy_boss: 'images/demon_boss.png'
         };
         
@@ -710,9 +836,9 @@ class Game {
         this.audioManager.loadSound('button-click', 'sounds/button-click.mp3');
         
         // Register music paths (lazy-loaded on demand to save memory)
-        this.audioManager.loadMusic('menu-theme', 'sounds/menu-theme.mp3');
-        this.audioManager.loadMusic('game-theme', 'sounds/game-theme.mp3');
-        this.audioManager.loadMusic('boss-theme', 'sounds/boss-theme.mp3');
+        this.audioManager.loadMusic('menu-theme', 'sounds/menu-theme.m4a');
+        this.audioManager.loadMusic('game-theme', 'sounds/game-theme.m4a');
+        this.audioManager.loadMusic('boss-theme', 'sounds/boss-theme.m4a');
     }
     
     setupUI() {
@@ -888,16 +1014,71 @@ class Game {
             this.openInventory();
         });
         
+        // Optimise equipment button
+        document.getElementById('optimizeEquipmentBtn')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
+            this.optimizeEquipment();
+        });
+
         // Close inventory button
         document.getElementById('closeInventoryBtn')?.addEventListener('click', () => {
             this.audioManager.playSound('button-click');
             this.closeInventory();
         });
+
+        // Victory screen
+        document.getElementById('victoryEndlessBtn')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
+            document.getElementById('victoryScreen').classList.remove('active');
+            this.endlessMode = true;
+            this.startGame();
+        });
+        document.getElementById('victoryMenuBtn')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
+            document.getElementById('victoryScreen').classList.remove('active');
+            this.endlessMode = false;
+            this.backToSelect();
+        });
+
+        // Endless toggle — only meaningful once the campaign has been cleared.
+        document.getElementById('endlessToggleBtn')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
+            this.endlessMode = !this.endlessMode;
+            this.refreshEndlessToggle();
+        });
+
+        // Permanent upgrade shop
+        document.getElementById('metaShopBtn')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
+            this.openMetaShop();
+        });
+        document.getElementById('closeMetaShopBtn')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
+            this.closeMetaShop();
+        });
+        document.getElementById('resetSaveBtn')?.addEventListener('click', () => {
+            if (confirm('Erase ALL saved progress \u2014 coins, equipment, achievements and permanent upgrades? This cannot be undone.')) {
+                this.resetSaveData();
+            }
+        });
     }
     
+    // The toggle stays hidden until there is something to toggle.
+    refreshEndlessToggle() {
+        const btn = document.getElementById('endlessToggleBtn');
+        if (!btn) return;
+        if (!this.isEndlessUnlocked()) { btn.style.display = 'none'; return; }
+        btn.style.display = '';
+        btn.textContent = this.endlessMode ? '\u267e\ufe0f Endless: On' : '\u267e\ufe0f Endless: Off';
+        btn.classList.toggle('active', !!this.endlessMode);
+    }
+
     showCharacterSelect() {
+        // Leaving the title screen — release the video decoder.
+        if (this.titleBackground) this.titleBackground.stop();
         document.getElementById('titleScreen').classList.remove('active');
         document.getElementById('characterSelect').classList.add('active');
+        this.refreshEndlessToggle();
         
         // Start menu music
         this.audioManager.playMusic('menu-theme');
@@ -918,8 +1099,8 @@ class Game {
         
         // Initialize player
         this.player = new Player(
-            this.canvas.width / 2,
-            this.canvas.height / 2,
+            this.world.width / 2,
+            this.world.height / 2,
             this.selectedCharacter,
             this
         );
@@ -927,8 +1108,8 @@ class Game {
         // Initialize Player 2 in co-op mode
         if (this.coopMode && this.selectedCharacter2) {
             this.player2 = new Player(
-                this.canvas.width / 2 + 60,
-                this.canvas.height / 2,
+                this.world.width / 2 + 60,
+                this.world.height / 2,
                 this.selectedCharacter2,
                 this
             );
@@ -953,8 +1134,45 @@ class Game {
         this.healthPickups = [];
         this.equipmentDrops = [];
         this.particles = [];
+        this.effects.clear();
+        this.hitStop = 0;
+        this.bossLull = 0;
+        this.timeScale = 1;
+        this.cameraOverride = null;
+        this.bossEntrance = 0;
+        this.stageIntro = 0;
+        document.getElementById('bossEntrance')?.classList.remove('active');
+        document.getElementById('stageIntro')?.classList.remove('active');
+        this.chests = [];
+        this.coinPickups = [];
+        this.damageNumbers = [];
         this.gameTime = 0;
         this.waveMultiplier = 1.0;
+
+        // Endless is opt-in and only offered once the campaign has been won.
+        if (this.endlessMode && !this.isEndlessUnlocked()) this.endlessMode = false;
+
+        // Wave director / chest / level-up flow state
+        this.currentWaveId = 0;
+        this.currentWaveName = '';
+        this.levelUpScreenOwner = null;
+        this.chestRewardReady = false;
+        this.runStats = this.createRunStats();
+        this._loadoutSignature = null;
+
+        // Close any panel that could still be open from a previous run.
+        // Those panels own the pause flag while they are up, and a run that ends
+        // underneath one (the chest close handler bails out on !isRunning) can
+        // leave isPaused stuck true — which would start the next run frozen,
+        // since update() early-returns on it. Clear it with them.
+        ['levelUpScreen', 'chestPanel', 'stageCompletePanel'].forEach(id => {
+            document.getElementById(id)?.classList.remove('active');
+        });
+        this.isPaused = false;
+
+        // Permanent upgrade: bonus coins at the start of every run
+        const startCoins = this.getMetaBonuses().startCoins;
+        if (startCoins > 0) this.addCoins(startCoins);
         
         // Reset stage system
         this.currentStage = 1;
@@ -964,12 +1182,8 @@ class Game {
         this.bossWarning = false;
         this.pendingEquipment = null;
         
-        // Reset enemy spawn timers
-        this.enemySpawnTimers = {
-            basic: { lastSpawn: 0, cooldown: 800 },
-            fast: { lastSpawn: 0, cooldown: 1800 },
-            tank: { lastSpawn: 0, cooldown: 4000 }
-        };
+        // Spawn timers are created on demand by the wave director.
+        this.enemySpawnTimers = {};
         
         // Reset ultimate button
         document.getElementById('ultimateButton').classList.remove('ready');
@@ -992,6 +1206,10 @@ class Game {
         // Clear any lingering timers from previous run (ultimate abilities etc.)
         this.clearActiveTimers();
         
+        // Place the camera on the player before the first frame renders.
+        this.setupWorld();
+        this.camera.snapTo(this.player.x, this.player.y);
+
         // Cache HUD DOM references
         this._cacheHUDElements();
         
@@ -1007,10 +1225,26 @@ class Game {
         // Cap deltaTime to 100ms max — prevents physics/collision spiral if browser
         // pauses (GC, audio decode, tab switch) and resumes with a huge gap
         const rawDelta = (currentTime - this.lastTime) / 1000;
-        const deltaTime = Math.min(rawDelta, 0.1);
+        let deltaTime = Math.min(rawDelta, 0.1);
+
+        // Smoothed FPS so the debug readout is stable enough to read.
+        if (rawDelta > 0) this.fps = this.fps * 0.9 + (1 / rawDelta) * 0.1;
         this.lastTime = currentTime;
         this.lastFrameTime = currentTime;
         
+        // Freeze the simulation, not the render loop. gameTime is held with
+        // it, so waves, boss timers and stage length are unaffected by juice.
+        if (this.hitStop > 0) {
+            this.hitStop = Math.max(0, this.hitStop - rawDelta);
+            this.render();
+            this.animationFrameId = requestAnimationFrame((time) => this.gameLoop(time));
+            return;
+        }
+
+        // Cinematic slow motion. Applied after the hit-stop gate so the two
+        // never fight: hit-stop is a hard freeze, this is a stretch.
+        deltaTime *= this.timeScale;
+
         this.gameTime += deltaTime;
         
         // Throttle achievement checks - only run once per second
@@ -1049,11 +1283,11 @@ class Game {
         if (this.isPaused) return;
         
         // Update player
-        this.player.update(deltaTime, this.keys, this.canvas.width, this.canvas.height);
+        this.player.update(deltaTime, this.keys, this.world.width, this.world.height);
         
         // Update Player 2 in co-op mode
         if (this.player2 && this.player2.health > 0 && !this.player2.downed) {
-            this.player2.update(deltaTime, this.keys2, this.canvas.width, this.canvas.height);
+            this.player2.update(deltaTime, this.keys2, this.world.width, this.world.height);
             this.player2.attack(this, deltaTime);
             this.player2.updateWeapons(deltaTime, this);
         }
@@ -1061,7 +1295,16 @@ class Game {
         // Co-op revive system
         if (this.coopMode && this.player2) {
             this.updateReviveSystem(deltaTime);
+            // One camera, two players — keep them within a shared view.
+            this.enforceCoopLeash(deltaTime);
         }
+
+        this.effects.update(deltaTime);
+
+        // Camera follows once both players have finished moving this frame,
+        // so it never lags a frame behind the thing it is tracking.
+        const focus = this.getCameraFocus();
+        this.camera.update(deltaTime, focus.x, focus.y);
         
         // Check for ultimate activation (Q key for P1)
         if (this.keys['q'] && this.player.ultimateReady) {
@@ -1136,22 +1379,92 @@ class Game {
                     }
                 }
                 
+                // Recycle enemies the players have long outrun. Without this a
+                // scrolling world leaves a trail of stragglers that fill the
+                // enemy cap and starve spawning around the actual fight.
+                if (enemy.type !== 'boss' &&
+                    this.distanceToNearestPlayer(enemy.x, enemy.y) > GAME_CONFIG.world.despawnDistance) {
+                    continue;   // dropped: not written back to the array
+                }
+
                 // Remove dead enemies
                 if (enemy.health <= 0) {
+                    // A bomber killed at point-blank still detonates — clearing
+                    // one off your face is supposed to cost something.
+                    if (enemy.behavior === 'exploder') enemy.detonate();
+
+                    // Splitters seed their children, so area damage matters.
+                    if (enemy.stats && enemy.stats.splitsInto) {
+                        this.spawnSplitChildren(enemy);
+                    }
+
                     this.audioManager.playSound('enemy-death');
                     this.spawnXP(enemy.x, enemy.y, enemy.xpValue);
                     this.player.addKill(enemy);
                     
-                    if (Math.random() < 0.25) {
-                        const healAmount = enemy.type === 'boss' ? 50 : (enemy.type === 'tank' ? 25 : 15);
+                    // Health is a comeback mechanic, not income: it only drops
+                    // while someone is hurt, and heals a share of max HP so it
+                    // scales with the build instead of the kill count.
+                    const pk = GAME_CONFIG.pickups;
+                    if (this.lowestPlayerHealthFraction() < pk.healthDropThreshold &&
+                        Math.random() < pk.healthDropChance) {
+                        let pct = pk.healthDropPercent;
+                        if (enemy.type === 'boss') pct = pk.bossHealthDropPercent;
+                        else if (enemy.type === 'elite') pct = pk.eliteHealthDropPercent;
+                        else if (enemy.type === 'tank') pct = pk.tankHealthDropPercent;
+
+                        const healAmount = Math.max(pk.minHealthDrop, Math.round(this.player.maxHealth * pct));
                         const angle = Math.random() * Math.PI * 2;
                         this.spawnHealth(enemy.x + Math.cos(angle) * 40, enemy.y + Math.sin(angle) * 40, healAmount);
                     }
                     
-                    if (enemy.type !== 'boss' && Math.random() < 0.10) {
+                    // Per-enemy drop chance. A flat 10% of every kill meant the
+                    // drop rate tracked kill rate, which tracks build power — so
+                    // the stronger you got, the more meaningless each drop became.
+                    const equipChance = (enemy.stats && enemy.stats.equipChance !== undefined)
+                        ? enemy.stats.equipChance
+                        : 0.004;
+                    const luckBonus = this.player.getLuck ? this.player.getLuck() : 0;
+                    if (enemy.type !== 'boss' && Math.random() < equipChance * (1 + luckBonus)) {
                         this.dropEquipment(enemy.x, enemy.y);
                     }
+
+                    // Coin drops — Clover Coin (luck) makes them more frequent.
+                    const luck = this.player.getLuck ? this.player.getLuck() : 0;
+                    const coinCfg = GAME_CONFIG.enemy;
+                    if (Math.random() < coinCfg.coinDropChance * (1 + luck)) {
+                        const span = coinCfg.coinDropAmount.max - coinCfg.coinDropAmount.min;
+                        let amount = coinCfg.coinDropAmount.min + Math.floor(Math.random() * (span + 1));
+                        if (enemy.type === 'elite') amount += coinCfg.eliteCoinBonus;
+                        const cp = this.clampToWorld(enemy.x, enemy.y, 20);
+                        this.coinPickups.push(new CoinPickup(cp.x, cp.y, amount));
+                    }
+
+                    // Elites are the main source of chests between bosses.
+                    if (enemy.chestChance && Math.random() < enemy.chestChance * (1 + luck)) {
+                        this.dropChest(enemy.x, enemy.y, 'normal');
+                    }
+
+                    // Bosses always leave a chest behind.
+                    if (enemy.type === 'boss') {
+                        this.dropChest(enemy.x, enemy.y, 'boss');
+                        this.screenShake = GAME_CONFIG.juice.shake.bossDeath;
+                    }
                     
+                    // Plaguebloom: a slain enemy splashes venom onto its neighbours.
+                    const plague = this.player.weapons.find(w => w.type === 'poison' && w.isEvolved);
+                    if (plague) {
+                        const spread = (plague.evolution.traits || {}).spreadRadius || 0;
+                        if (spread > 0) {
+                            for (const other of this.enemies) {
+                                if (other === enemy || other.health <= 0) continue;
+                                if (Math.hypot(other.x - enemy.x, other.y - enemy.y) < spread) {
+                                    other.takeDamage(plague.damage * 0.6);
+                                }
+                            }
+                        }
+                    }
+
                     this.createParticles(enemy.x, enemy.y, enemy.color, enemy.type);
                     // Don't write to array (effectively removes it)
                 } else {
@@ -1174,6 +1487,7 @@ class Game {
                         const enemy = this.enemies[j];
                         if (this.checkCollision(projectile, enemy)) {
                             enemy.takeDamage(projectile.damage);
+                            enemy.applyKnockback(projectile.x, projectile.y, GAME_CONFIG.enemy.knockbackOnHit * 0.1);
                             projectile.hit();
                             if (!projectile.piercing) break;
                         }
@@ -1212,6 +1526,7 @@ class Game {
                 let collected = false;
                 if (this.checkCollision(orb, this.player)) {
                     this.audioManager.playSound('pickup-xp');
+                    this.spawnPickupSparkle(orb.x, orb.y, orb.color);
                     this.player.addXP(orb.value);
                     // Share XP with P2 (50%)
                     if (this.player2 && this.player2.health > 0) {
@@ -1305,12 +1620,7 @@ class Game {
                 
                 if (collected) {
                     this.audioManager.playSound('pickup-equipment');
-                    const existingItem = this.playerInventory.find(item => item.name === drop.equipment.name);
-                    if (!existingItem) {
-                        this.playerInventory.push({ ...drop.equipment });
-                        this.saveInventory();
-                    }
-                    this.showNotification(`Found: ${drop.equipment.name}!`, this.getRarityColor(drop.equipment.rarity));
+                    this.collectEquipment(drop.equipment);
                 } else {
                     this.equipmentDrops[writeIdx++] = drop;
                 }
@@ -1323,6 +1633,59 @@ class Game {
             this.equipmentDrops.length = 5;
         }
         
+        // Update coin pickups (swap-remove)
+        {
+            let writeIdx = 0;
+            for (let i = 0; i < this.coinPickups.length; i++) {
+                const coin = this.coinPickups[i];
+                coin.update(deltaTime, this.nearestPlayerTo(coin));
+
+                let collected = false;
+                for (const p of [this.player, this.player2]) {
+                    if (!p || p.health <= 0 || p.downed) continue;
+                    if (this.checkCollision(coin, p)) {
+                        this.addCoins(coin.value);
+                        collected = true;
+                        break;
+                    }
+                }
+                if (!collected) this.coinPickups[writeIdx++] = coin;
+            }
+            this.coinPickups.length = writeIdx;
+        }
+
+        // Update chests (swap-remove). Chests never expire.
+        {
+            let writeIdx = 0;
+            for (let i = 0; i < this.chests.length; i++) {
+                const chest = this.chests[i];
+                chest.update(deltaTime);
+
+                let taken = false;
+                for (const p of [this.player, this.player2]) {
+                    if (!p || p.health <= 0 || p.downed) continue;
+                    if (this.checkCollision(chest, p)) {
+                        this.collectChest(chest);
+                        taken = true;
+                        break;
+                    }
+                }
+                if (!taken) this.chests[writeIdx++] = chest;
+            }
+            this.chests.length = writeIdx;
+        }
+
+        // Update floating damage numbers (swap-remove)
+        {
+            let writeIdx = 0;
+            for (let i = 0; i < this.damageNumbers.length; i++) {
+                const dn = this.damageNumbers[i];
+                dn.update(deltaTime);
+                if (dn.life > 0) this.damageNumbers[writeIdx++] = dn;
+            }
+            this.damageNumbers.length = writeIdx;
+        }
+
         // Update particles and boss projectiles (swap-remove)
         // Hard cap on mobile BEFORE updating to keep memory low
         if (this.performanceMode && this.particles.length > 20) {
@@ -1359,9 +1722,18 @@ class Game {
         if (this.lastHUDUpdate >= this.hudUpdateInterval) {
             this.lastHUDUpdate = 0;
             this.updateHUD();
+            this.updateLoadoutHUD();
         }
     }
     
+    // Hold the simulation for a moment so an impact registers. Stacking is
+    // deliberately a max, not a sum: a dozen enemies dying in the same frame
+    // must not compound into a visible stall.
+    applyHitStop(seconds) {
+        const cap = GAME_CONFIG.juice.maxHitStop ?? 0.12;
+        this.hitStop = Math.min(cap, Math.max(this.hitStop, seconds));
+    }
+
     updateBossSystem(deltaTime) {
         const stageTime = this.gameTime - this.stageStartTime;
         
@@ -1376,24 +1748,76 @@ class Game {
         if (this.bossWarning) {
             this.bossWarningTime -= deltaTime;
             const warningText = document.getElementById('bossWarningText');
-            warningText.textContent = `BOSS INCOMING IN ${Math.ceil(this.bossWarningTime)}...`;
+            const incoming = (typeof getBossForStage === 'function')
+            ? getBossForStage(this.currentStage).name
+            : 'BOSS';
+        warningText.textContent = `${incoming.toUpperCase()} INCOMING IN ${Math.ceil(this.bossWarningTime)}...`;
             
             if (this.bossWarningTime <= 0) {
                 this.bossWarning = false;
                 document.getElementById('bossWarning').classList.remove('active');
-                // Spawn boss immediately when warning timer ends
-                if (!this.bossActive) {
-                    this.spawnBoss();
-                }
+                // The boss used to spawn straight into an ongoing horde, so its
+                // arrival never registered as an event. Clear the field and hold
+                // silence instead — the absence is what makes the entrance land.
+                if (!this.bossActive) this.beginBossLull();
             }
         }
         
+        if (this.stageIntro > 0) {
+            this.stageIntro -= deltaTime;
+            if (this.stageIntro <= 0) this.endStageIntro();
+        }
+
+        // Run the entrance down in REAL time, not scaled time — the beat is
+        // two seconds on a wall clock regardless of how slow the world is.
+        if (this.bossEntrance > 0) {
+            this.bossEntrance -= deltaTime / Math.max(0.0001, this.timeScale);
+            if (this.currentBoss) {
+                // Ease the push so the camera arrives with the card, rather
+                // than snapping and then waiting.
+                this.cameraOverride = { x: this.currentBoss.x, y: this.currentBoss.y };
+            }
+            if (this.bossEntrance <= 0) this.endBossEntrance();
+        }
+
+        // Hold the quiet, then bring the boss in.
+        if (this.bossLull > 0) {
+            this.bossLull -= deltaTime;
+            if (this.bossLull <= 0) {
+                this.bossLull = 0;
+                this.spawnBoss();
+            }
+        }
+
         // Check if boss is defeated
         if (this.bossActive && this.currentBoss && this.currentBoss.health <= 0) {
             this.defeatBoss();
         }
     }
     
+    // Three seconds of nothing. Spawning stops, the field is swept, and the
+    // music drops out. Silence is the cheapest tension there is, and an arena
+    // that has been loud for ninety seconds makes it very loud indeed.
+    beginBossLull() {
+        this.bossLull = GAME_CONFIG.juice.bossLullSeconds ?? 3.0;
+
+        // Dissolve whatever is still alive rather than letting it chase the
+        // player through the pause. Each one pops on its own beat so the field
+        // empties as a wave instead of blinking out.
+        const doomed = this.enemies.filter(e => e !== this.currentBoss);
+        doomed.forEach((enemy) => {
+            this.createParticles(enemy.x, enemy.y, '#6f8496', enemy.type);
+            this.effects.add(new RingEffect(enemy.x, enemy.y, {
+                fromRadius: 4, toRadius: enemy.radius * 2.4,
+                color: '#8fa3b5', width: 3, endWidth: 1, life: 0.35
+            }));
+        });
+        this.enemies.length = 0;
+
+        this.audioManager.stopMusic();
+        this.screenShake = 0;
+    }
+
     spawnBoss() {
         this.bossActive = true;
         document.getElementById('bossHealthBar').classList.add('active');
@@ -1401,13 +1825,16 @@ class Game {
         // Start boss music
         this.audioManager.playMusic('boss-theme');
         
-        // Spawn from top center
-        const x = this.canvas.width / 2;
-        const y = -100;
+        // Enter from just above whatever the camera is currently showing
+        const view = this.camera.getBounds();
+        const x = (view.left + view.right) / 2;
+        const y = view.top - 100;
         
         this.currentBoss = new Enemy(x, y, 'boss', this.waveMultiplier, this);
         this.enemies.push(this.currentBoss);
         
+        this.beginBossEntrance();
+
         // Screen shake and effects
         this.screenShake = 30;
         
@@ -1417,12 +1844,73 @@ class Game {
             const angle = Math.random() * Math.PI * 2;
             const speed = 100 + Math.random() * 200;
             this.particles.push(new Particle(
-                this.canvas.width / 2, 100, angle, speed, '#8b0000', 2
+                x, view.top + 100, angle, speed, '#8b0000', 2
             ));
         }
     }
     
+    // Two seconds of ceremony: time stretches, the camera leaves the player
+    // and pushes onto the boss, and the name is held on screen. The field was
+    // already swept by the lull, so there is nothing competing for attention.
+    beginStageIntro() {
+        this.stageIntro = GAME_CONFIG.juice.stageIntroSeconds ?? 2.2;
+
+        const wave = (typeof getWaveForTime === 'function')
+            ? getWaveForTime(this.gameTime)
+            : null;
+        const numEl = document.getElementById('stageIntroNumber');
+        const subEl = document.getElementById('stageIntroSub');
+        if (numEl) numEl.textContent = String(this.currentStage);
+        if (subEl) subEl.textContent = wave?.announce || 'The horde thickens';
+        document.getElementById('stageIntro')?.classList.add('active');
+    }
+
+    endStageIntro() {
+        this.stageIntro = 0;
+        document.getElementById('stageIntro')?.classList.remove('active');
+    }
+
+    // Two seconds of ceremony: time stretches, the camera leaves the player
+    // and pushes onto the boss, and the name is held on screen. The field was
+    // already swept by the lull, so there is nothing competing for attention.
+    beginBossEntrance() {
+        const cfg = GAME_CONFIG.juice;
+        this.bossEntrance = cfg.bossEntranceSeconds ?? 2.0;
+        this.timeScale = cfg.bossEntranceTimeScale ?? 0.35;
+
+        const archetype = (typeof getBossForStage === 'function')
+            ? getBossForStage(this.currentStage)
+            : null;
+        const nameEl = document.getElementById('bossEntranceName');
+        const epithetEl = document.getElementById('bossEntranceEpithet');
+        if (nameEl) nameEl.textContent = (archetype?.name || 'BOSS').toUpperCase();
+        if (epithetEl) epithetEl.textContent = archetype?.epithet || '';
+        document.getElementById('bossEntrance')?.classList.add('active');
+
+        // A ring blooming out of the boss marks where the camera is taking you.
+        if (this.currentBoss) {
+            this.effects.add(new RingEffect(this.currentBoss.x, this.currentBoss.y, {
+                fromRadius: 20, toRadius: 340,
+                color: archetype?.color || '#ff8f3c',
+                width: 12, endWidth: 2, life: 1.1
+            }));
+        }
+    }
+
+    endBossEntrance() {
+        this.bossEntrance = 0;
+        this.timeScale = 1;
+        this.cameraOverride = null;
+        document.getElementById('bossEntrance')?.classList.remove('active');
+        // The drop back to full speed is the cue that the fight has started.
+        this.screenShake = Math.max(this.screenShake, 14);
+    }
+
     defeatBoss() {
+        // If the boss somehow died mid-entrance, do not leave the world in
+        // slow motion with the camera parked off the player.
+        if (this.bossEntrance > 0) this.endBossEntrance();
+
         this.audioManager.playSound('boss-defeat');
         this.bossActive = false;
         this.currentBoss = null;
@@ -1432,8 +1920,9 @@ class Game {
         
         document.getElementById('bossHealthBar').classList.remove('active');
         
-        // Track boss defeat for achievements
+        // Track boss defeat for achievements and the run summary
         this.sessionStats.bosses++;
+        this.runStats.bossesDefeated++;
         
         // Victory rewards - defer level up until after stage complete screen
         this.pendingLevelUp = true;
@@ -1497,7 +1986,13 @@ class Game {
     scaleEquipmentStats(baseStats, multiplier) {
         const scaled = {};
         for (const [key, value] of Object.entries(baseStats)) {
-            scaled[key] = Math.floor(value * multiplier);
+            const raw = value * multiplier;
+            // Fractional stats must keep their precision. attackSpeed values
+            // are 0.1-0.3, so flooring silently zeroed them at every rarity and
+            // every level - three items had a stat that never did anything.
+            scaled[key] = Number.isInteger(value)
+                ? Math.floor(raw)
+                : Math.round(raw * 100) / 100;
         }
         return scaled;
     }
@@ -1605,7 +2100,16 @@ class Game {
         const statStrings = [];
         for (const [key, value] of Object.entries(stats)) {
             const formatted = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
-            statStrings.push(`+${value} ${formatted}`);
+            // attackSpeed lands on a base of 1.0 and armor is applied as
+            // value/100, so the raw number reads as meaningless on the card.
+            // Show what the stat actually does instead.
+            if (key === 'attackSpeed') {
+                statStrings.push(`+${Math.round(value * 100)}% Attack Speed`);
+            } else if (key === 'armor') {
+                statStrings.push(`+${value}% Damage Reduction`);
+            } else {
+                statStrings.push(`+${value} ${formatted}`);
+            }
         }
         return statStrings.join(' • ');
     }
@@ -1617,6 +2121,15 @@ class Game {
     }
     
     advanceStage() {
+        if (!this.isRunning || !this.player) return;
+
+        // Campaign runs end. Endless keeps going.
+        if (!this.endlessMode && this.currentStage >= GAME_CONFIG.progression.finalStage) {
+            document.getElementById('stageCompletePanel').classList.remove('active');
+            this.victory();
+            return;
+        }
+
         // Equip the reward equipment if player accepts it
         if (this.pendingEquipment) {
             // Add to inventory
@@ -1657,8 +2170,10 @@ class Game {
             this.player.levelUp(this);
         }
         
-        // Show notification
-        this.showNotification(`Stage ${this.currentStage} - Difficulty Increased!`);
+        // The stage used to change with a toast that faded out mid-fight.
+        // Hold the arena empty instead, stamp the number, then let the next
+        // wave bleed in.
+        this.beginStageIntro();
     }
     
     showNotification(message) {
@@ -1860,6 +2375,130 @@ class Game {
         });
     }
     
+    // Resolve a picked-up item against what is already owned.
+    //
+    // The old rule matched on name alone, so a Legendary 5-star was thrown away
+    // if you happened to hold the Common level-1 of the same item. Now the
+    // better one is kept, and a genuine duplicate is converted to coins rather
+    // than silently evaporating.
+    collectEquipment(equipment) {
+        const index = this.playerInventory.findIndex(item => item.name === equipment.name);
+
+        if (index === -1) {
+            this.playerInventory.push({ ...equipment });
+            this.saveInventory();
+            this.showNotification(`Found: ${equipment.name}!`, this.getRarityColor(equipment.rarity));
+            return;
+        }
+
+        const owned = this.playerInventory[index];
+        if (this.scoreEquipment(equipment) > this.scoreEquipment(owned)) {
+            this.playerInventory[index] = { ...equipment };
+            this.saveInventory();
+
+            // If the weaker copy was equipped, swap the upgrade straight in.
+            for (const slot of ['weapon', 'armor', 'accessory', 'ring']) {
+                const worn = this.player ? this.player.equipment[slot] : this.savedEquipment[slot];
+                if (worn && worn.name === equipment.name) {
+                    if (this.player) this.player.equipItem(equipment);
+                    this.savedEquipment[slot] = equipment;
+                    this.saveSavedEquipment();
+                    break;
+                }
+            }
+            this.showNotification(`Upgraded: ${equipment.name}!`, this.getRarityColor(equipment.rarity));
+            return;
+        }
+
+        // Strictly worse copy — pay it out instead of discarding it.
+        const value = Math.max(10, Math.round(this.calculateEquipmentPrice(equipment) * 0.15));
+        this.addCoins(value);
+        this.showNotification(`Duplicate ${equipment.name} \u2192 ${value} \U0001fa99`);
+    }
+
+    // ---- Equipment optimiser ------------------------------------------
+
+    // Score an item by what it is actually worth in play. Weights are per point
+    // of the stat, calibrated against how each one is applied in
+    // Player.applyEquipmentBonuses:
+    //   armor       value/100 -> a point is 1% damage reduction (very strong)
+    //   attackSpeed added to a base of 1.0 -> a point is +100% attack rate
+    //   speed       added to a base of 120-300 -> a point is worth little
+    // `lifesteal` and `range` are deliberately weighted 0: neither is wired up
+    // to anything yet, so scoring them would produce confidently wrong picks.
+    scoreEquipment(equipment) {
+        if (!equipment || !equipment.stats) return 0;
+        const WEIGHTS = {
+            damage: 10,
+            armor: 12,
+            attackSpeed: 300,
+            health: 1,
+            speed: 0.8,
+            xpGain: 2,
+            lifesteal: 0,
+            range: 0
+        };
+        let score = 0;
+        for (const [stat, value] of Object.entries(equipment.stats)) {
+            score += (WEIGHTS[stat] || 0) * value;
+        }
+        return score;
+    }
+
+    // Best owned item for each slot, by score.
+    getOptimalLoadout() {
+        const best = { weapon: null, armor: null, accessory: null, ring: null };
+        const bestScore = { weapon: -1, armor: -1, accessory: -1, ring: -1 };
+
+        this.playerInventory.forEach(item => {
+            if (!item || !(item.type in best)) return;
+            const score = this.scoreEquipment(item);
+            if (score > bestScore[item.type]) {
+                bestScore[item.type] = score;
+                best[item.type] = item;
+            }
+        });
+        return best;
+    }
+
+    // Equip the best owned item in every slot. Works both in a run (applies to
+    // the live player) and from the menu (writes the saved loadout only).
+    optimizeEquipment() {
+        if (this.playerInventory.length === 0) {
+            this.showNotification('No equipment to optimise yet.');
+            return;
+        }
+
+        const best = this.getOptimalLoadout();
+        const changed = [];
+
+        for (const slot of ['weapon', 'armor', 'accessory', 'ring']) {
+            const item = best[slot];
+            if (!item) continue;
+
+            // Skip slots already holding the best item, so the summary only
+            // reports real changes.
+            const current = this.player ? this.player.equipment[slot] : this.savedEquipment[slot];
+            if (current && current.name === item.name && (current.level || 1) === (item.level || 1)) continue;
+
+            if (this.player) this.player.equipItem(item);
+            this.savedEquipment[slot] = item;
+            changed.push(item.name);
+        }
+
+        this.saveSavedEquipment();
+        this.updateInventoryEquippedSlots();
+        this.renderInventoryItems();
+        if (this.updatePauseMenuEquipment) this.updatePauseMenuEquipment();
+
+        if (changed.length === 0) {
+            this.showNotification('Already wearing your best gear.');
+        } else {
+            this.audioManager.playSound('equip-item');
+            this.showNotification(`Optimised: ${changed.join(', ')}`);
+        }
+    }
+
     equipFromInventory(index) {
         const equipment = this.playerInventory[index];
         if (this.player) {
@@ -1958,19 +2597,31 @@ class Game {
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         this.ctx.restore();
         
-        // Apply screen shake
+        // Screen shake first (outer), so it jitters the whole view in screen
+        // space, then the camera. Order matters: swapping them makes the shake
+        // fight the camera's follow-smoothing.
         this.ctx.save();
         if (this.screenShake > 0) {
             const shakeX = (Math.random() - 0.5) * this.screenShake;
             const shakeY = (Math.random() - 0.5) * this.screenShake;
             this.ctx.translate(shakeX, shakeY);
         }
+
+        // Everything drawn from here until restore() is in WORLD space.
+        this.ctx.translate(-Math.round(this.camera.x), -Math.round(this.camera.y));
         
         // Draw grid (skip on mobile for performance)
         if (!this.performanceMode) {
             this.drawGrid();
         }
+        // The world boundary is drawn on every device — without it the player
+        // has no way to tell where the playfield ends.
+        this.drawWorldBounds();
         
+        // Ground effects are painted on the floor, beneath anything standing
+        // on it — a telegraph the player can walk across, not a sprite.
+        this.effects.draw(this.ctx, 'ground');
+
         // Draw particles (background layer)
         this.particles.forEach(particle => particle.draw(this.ctx));
         
@@ -1982,6 +2633,10 @@ class Game {
         
         // Draw Equipment Drops
         this.equipmentDrops.forEach(drop => drop.draw(this.ctx));
+
+        // Draw coin pickups and chests
+        this.coinPickups.forEach(coin => coin.draw(this.ctx));
+        this.chests.forEach(chest => chest.draw(this.ctx));
         
         // Draw enemies
         this.enemies.forEach(enemy => enemy.draw(this.ctx));
@@ -2000,6 +2655,10 @@ class Game {
             this.player2.drawWeapons(this.ctx);
             this.player2.draw(this.ctx);
         }
+        // Air effects wash over everything in the world — a shockwave passes
+        // in front of the player, not behind them.
+        this.effects.draw(this.ctx, 'air');
+
         // Draw P1 revive indicator if P1 is downed
         if (this.player && this.player.downed) {
             this.drawReviveIndicator(this.ctx, this.player, 'P1');
@@ -2019,10 +2678,69 @@ class Game {
             this.ctx.globalAlpha = 1.0;
         }
         
-        // Draw achievement notifications
-        this.drawAchievementNotifications();
-        
+        // Draw floating damage numbers above everything in the world layer
+        this.damageNumbers.forEach(dn => dn.draw(this.ctx));
+
         this.ctx.restore();
+
+        // --- Screen space from here down ---
+        // These are positioned against the viewport, not the world, so they must
+        // be drawn after the camera transform is restored or they scroll away.
+        this.drawAchievementNotifications();
+        this.drawLowHealthWarning();
+        if (this.showDebug) this.drawDebugOverlay();
+    }
+
+    // Red vignette that pulses when the player is nearly dead.
+    drawLowHealthWarning() {
+        const player = this.player;
+        if (!player || player.health <= 0) return;
+        const ratio = player.health / player.maxHealth;
+        const threshold = GAME_CONFIG.juice.lowHealthThreshold;
+        if (ratio > threshold) return;
+
+        // Stronger the closer to death, and gently pulsing.
+        const severity = 1 - (ratio / threshold);
+        const pulse = 0.5 + 0.5 * Math.sin(this.gameTime * 6);
+        const alpha = 0.18 + severity * 0.42 * pulse;
+
+        const ctx = this.ctx;
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        const grad = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.32, w / 2, h / 2, Math.max(w, h) * 0.62);
+        grad.addColorStop(0, 'rgba(255,0,0,0)');
+        grad.addColorStop(1, `rgba(255,0,0,${alpha.toFixed(3)})`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+    }
+
+    // F3 overlay: the counters that actually matter when hunting a slowdown.
+    drawDebugOverlay() {
+        const ctx = this.ctx;
+        const lines = [
+            `FPS ${Math.round(this.fps)}`,
+            `Enemies ${this.enemies.length}`,
+            `Projectiles ${this.projectiles.length}`,
+            `Particles ${this.particles.length}`,
+            `Pickups ${this.xpOrbs.length + this.healthPickups.length + this.coinPickups.length + this.equipmentDrops.length}`,
+            `Chests ${this.chests.length}`,
+            `Wave ${this.currentWaveId} \u00b7 ${this.currentWaveName}`,
+            `Multiplier x${this.waveMultiplier.toFixed(2)}`
+        ];
+
+        // Bottom-left: the top-left corner belongs to the loadout HUD.
+        const boxHeight = lines.length * 18 + 14;
+        const top = this.canvas.height - boxHeight - 10;
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(0,0,0,0.65)';
+        ctx.fillRect(10, top, 230, boxHeight);
+        ctx.font = '13px monospace';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = '#8ce99a';
+        lines.forEach((line, i) => ctx.fillText(line, 20, top + 7 + i * 18));
+        ctx.restore();
     }
     
     drawAchievementNotifications() {
@@ -2068,116 +2786,231 @@ class Game {
         return 1 - Math.pow(1 - t, 3);
     }
     
+    // World-space background. Only the lines inside the camera view are drawn,
+    // so the cost is bound to the viewport, not to the size of the world.
     drawGrid() {
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-        this.ctx.lineWidth = 1;
-        
+        const ctx = this.ctx;
         const gridSize = 50;
-        for (let x = 0; x < this.canvas.width; x += gridSize) {
-            this.ctx.beginPath();
-            this.ctx.moveTo(x, 0);
-            this.ctx.lineTo(x, this.canvas.height);
-            this.ctx.stroke();
+        const view = this.camera.getBounds();
+
+        const firstX = Math.floor(view.left / gridSize) * gridSize;
+        const firstY = Math.floor(view.top / gridSize) * gridSize;
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let x = firstX; x <= view.right + gridSize; x += gridSize) {
+            ctx.moveTo(x, view.top);
+            ctx.lineTo(x, view.bottom);
         }
-        for (let y = 0; y < this.canvas.height; y += gridSize) {
-            this.ctx.beginPath();
-            this.ctx.moveTo(0, y);
-            this.ctx.lineTo(this.canvas.width, y);
-            this.ctx.stroke();
+        for (let y = firstY; y <= view.bottom + gridSize; y += gridSize) {
+            ctx.moveTo(view.left, y);
+            ctx.lineTo(view.right, y);
         }
+        ctx.stroke();   // one stroke for the whole grid instead of one per line
     }
-    
+
+    // With a scrolling world the screen edge is no longer the arena edge, so
+    // the boundary has to be drawn or the player cannot tell where it is.
+    drawWorldBounds() {
+        const world = this.world;
+        const view = this.camera.getBounds();
+
+        const t = GAME_CONFIG.world.edgeThickness;
+
+        // The border is in view whenever the camera is clamped against an edge
+        // (view.left reaches 0), not only when the view spills past the world —
+        // clamping means it never spills, so a strict test would never fire.
+        const edgeVisible = view.left <= t || view.top <= t ||
+                            view.right >= world.width - t ||
+                            view.bottom >= world.height - t;
+        if (!edgeVisible) return;
+
+        const ctx = this.ctx;
+        ctx.save();
+
+        // Dim the dead space beyond the world so the edge reads as solid.
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        if (view.left < 0) ctx.fillRect(view.left, view.top, -view.left, view.bottom - view.top);
+        if (view.top < 0) ctx.fillRect(view.left, view.top, view.right - view.left, -view.top);
+        if (view.right > world.width) ctx.fillRect(world.width, view.top, view.right - world.width, view.bottom - view.top);
+        if (view.bottom > world.height) ctx.fillRect(view.left, world.height, view.right - view.left, view.bottom - world.height);
+
+        // Inset by half the stroke so the whole line sits inside the world and
+        // none of it is hidden under the dimmed dead space.
+        ctx.strokeStyle = 'rgba(150, 115, 255, 0.75)';
+        ctx.lineWidth = t;
+        ctx.strokeRect(t / 2, t / 2, world.width - t, world.height - t);
+
+        // Faint inner halo so the wall reads as solid rather than as a hairline.
+        ctx.strokeStyle = 'rgba(150, 115, 255, 0.18)';
+        ctx.lineWidth = t * 2.5;
+        ctx.strokeRect(t * 1.75, t * 1.75, world.width - t * 3.5, world.height - t * 3.5);
+        ctx.restore();
+    }
+
     spawnEnemies(deltaTime) {
-        // Increase difficulty over time
-        const timeFactor = 1 + (this.gameTime / 60); // Increase every minute
-        this.waveMultiplier = timeFactor;
-        
-        // Calculate max enemies based on time (starts at 15, increases by 5 every 30 seconds)
-        let maxEnemies = Math.floor(15 + (this.gameTime / 30) * 5);
-        
-        // Cap at lower max on mobile for better performance - prevent crash
-        if (this.performanceMode) {
-            maxEnemies = Math.min(maxEnemies, 8); // Hard cap at 8 enemies on mobile to prevent crash
+        // The pre-boss lull and the stage intro must both actually be empty.
+        if (this.bossLull > 0 || this.stageIntro > 0) return;
+
+        const cfg = GAME_CONFIG;
+        const minutes = this.gameTime / 60;
+
+        // Enemy health drifts up with elapsed time (used as the Enemy multiplier).
+        this.waveMultiplier = 1 + minutes * cfg.enemy.healthGrowthPerMinute;
+
+        // Wave director: which enemies spawn, and how fast, is a function of time.
+        const wave = getWaveForTime(this.gameTime);
+        if (wave.id !== this.currentWaveId) {
+            this.currentWaveId = wave.id;
+            this.currentWaveName = wave.name;
+            if (this.gameTime > 1) this.showNotification(`\u2694\ufe0f ${wave.name} \u2014 ${wave.announce}`);
         }
-        
-        // Reduce max enemies during boss fight
-        if (this.bossActive) {
-            maxEnemies = Math.floor(maxEnemies * 0.3); // Only 30% of normal spawns
-        }
-        
-        // Don't spawn if we've reached the enemy limit
-        if (this.enemies.length >= maxEnemies) {
-            return;
-        }
-        
+
+        // Hard ceiling on live enemies. When it is hit we delay spawning rather
+        // than letting the count run away.
+        let maxEnemies = this.performanceMode
+            ? cfg.spawn.maxEnemiesMobile
+            : Math.min(cfg.spawn.maxEnemiesDesktop, Math.floor(20 + minutes * 12));
+        if (this.bossActive) maxEnemies = Math.floor(maxEnemies * 0.35);
+        if (this.enemies.length >= maxEnemies) return;
+
         const deltaMs = deltaTime * 1000;
-        
-        // Update each enemy type's spawn timer independently
-        Object.entries(this.enemySpawnTimers).forEach(([type, timer]) => {
-            // Check again before each spawn to prevent going over limit
-            if (this.enemies.length >= maxEnemies) {
-                return;
-            }
-            
+        // Spawn rate accelerates over the run, on top of the wave's own rate.
+        const rateScale = wave.rateScale * Math.max(0.45, 1 - minutes * 0.06);
+        const mobileFactor = this.performanceMode ? 1.6 : 1;
+
+        // Rarest types first. When the field is near the enemy cap the loop
+        // breaks early, and the interesting enemies should not be the ones that
+        // get starved out by a crowd of grunts.
+        const types = Object.keys(wave.spawns).sort((a, b) => wave.spawns[b] - wave.spawns[a]);
+
+        for (const type of types) {
+            if (this.enemies.length >= maxEnemies) break;
+
+            let timer = this.enemySpawnTimers[type];
+            if (!timer) timer = this.enemySpawnTimers[type] = { lastSpawn: 0 };
             timer.lastSpawn += deltaMs;
-            
-            // Calculate adjusted cooldown (gets faster over time, but respects minimum rates)
-            let adjustedCooldown = timer.cooldown / timeFactor;
-            
-            // Set minimum cooldowns per type to prevent overwhelming spawns
-            const minCooldowns = {
-                basic: 300,   // At least 0.3s between basic enemies
-                fast: 800,    // At least 0.8s between fast enemies
-                tank: 2000    // At least 2s between tank enemies
-            };
-            adjustedCooldown = Math.max(minCooldowns[type], adjustedCooldown);
-            
-            if (timer.lastSpawn >= adjustedCooldown) {
-                timer.lastSpawn = 0;
-                
-                // Spawn from random edge
-                const side = Math.floor(Math.random() * 4);
-                let x, y;
-                
-                switch(side) {
-                    case 0: // Top
-                        x = Math.random() * this.canvas.width;
-                        y = -50;
-                        break;
-                    case 1: // Right
-                        x = this.canvas.width + 50;
-                        y = Math.random() * this.canvas.height;
-                        break;
-                    case 2: // Bottom
-                        x = Math.random() * this.canvas.width;
-                        y = this.canvas.height + 50;
-                        break;
-                    case 3: // Left
-                        x = -50;
-                        y = Math.random() * this.canvas.height;
-                        break;
-                }
-                
-                this.enemies.push(new Enemy(x, y, type, this.waveMultiplier, this));
-            }
-        });
+
+            const floor = WAVE_MIN_COOLDOWNS[type] || 300;
+            const cooldown = Math.max(floor, wave.spawns[type] * rateScale * mobileFactor);
+            if (timer.lastSpawn < cooldown) continue;
+
+            timer.lastSpawn = 0;
+            const pos = this.pickSpawnPoint();
+            this.enemies.push(new Enemy(pos.x, pos.y, type, this.waveMultiplier, this));
+        }
     }
-    
+
+    // Choose an off-screen spawn point, preferring the candidate furthest from
+    // any living player. Always returns a point — on a small screen every edge
+    // may be close to the player, and starving spawns would stall the run.
+    pickSpawnPoint() {
+        const m = GAME_CONFIG.spawn.offscreenMargin;
+        const wanted = GAME_CONFIG.spawn.minDistanceFromPlayer;
+        let best = null;
+        let bestDist = -1;
+
+        // Spawn just outside what the camera can see, in world coordinates.
+        const view = this.camera.getBounds();
+        const world = this.world;
+
+        for (let attempt = 0; attempt < 10; attempt++) {
+            const side = Math.floor(Math.random() * 4);
+            let x, y;
+            switch (side) {
+                case 0:  x = view.left + Math.random() * (view.right - view.left); y = view.top - m; break;
+                case 1:  x = view.right + m; y = view.top + Math.random() * (view.bottom - view.top); break;
+                case 2:  x = view.left + Math.random() * (view.right - view.left); y = view.bottom + m; break;
+                default: x = view.left - m;  y = view.top + Math.random() * (view.bottom - view.top); break;
+            }
+
+            // Keep spawns inside the world. Near a world edge the ideal ring
+            // point can fall outside it, which would look like enemies walking
+            // in through the wall.
+            x = Math.max(m, Math.min(world.width - m, x));
+            y = Math.max(m, Math.min(world.height - m, y));
+
+            const d = this.distanceToNearestPlayer(x, y);
+            // Prefer a point that is both far enough away AND out of sight, so
+            // enemies do not pop into existence in front of the player.
+            if (d >= wanted && this.camera.isOffscreen(x, y, 0)) return { x, y };
+            if (d > bestDist) { bestDist = d; best = { x, y }; }
+        }
+        return best;
+    }
+
+    // Called once per enemy per frame, so it deliberately avoids allocating.
+    distanceToNearestPlayer(x, y) {
+        let nearest = Infinity;
+        const p1 = this.player;
+        const p2 = this.player2;
+        if (p1 && p1.health > 0) nearest = Math.hypot(p1.x - x, p1.y - y);
+        if (p2 && p2.health > 0) {
+            const d = Math.hypot(p2.x - x, p2.y - y);
+            if (d < nearest) nearest = d;
+        }
+        return nearest === Infinity ? 9999 : nearest;
+    }
+
+    // Tiny burst when a gem is absorbed. Skipped on mobile and when the
+    // particle budget is already spent.
+    spawnPickupSparkle(x, y, color) {
+        if (this.performanceMode) return;
+        if (this.particles.length >= GAME_CONFIG.juice.maxParticlesDesktop) return;
+        for (let i = 0; i < 5; i++) {
+            const angle = (Math.PI * 2 * i) / 5 + Math.random();
+            this.particles.push(new Particle(x, y, angle, 90 + Math.random() * 60, color, 0.6));
+        }
+    }
+
+    // Children inherit the parent's difficulty multiplier so a late-run
+    // splitter does not seed trivially weak spawn.
+    spawnSplitChildren(parent) {
+        const childType = parent.stats.splitsInto;
+        const count = parent.stats.splitCount || 2;
+        // Respect the live enemy cap; a splitter should never be the thing
+        // that blows past it.
+        const cap = this.performanceMode
+            ? GAME_CONFIG.spawn.maxEnemiesMobile
+            : GAME_CONFIG.spawn.maxEnemiesDesktop;
+
+        for (let i = 0; i < count; i++) {
+            if (this.enemies.length >= cap) break;
+            const angle = (Math.PI * 2 * i) / count + Math.random();
+            const pos = this.clampToWorld(
+                parent.x + Math.cos(angle) * 26,
+                parent.y + Math.sin(angle) * 26,
+                20
+            );
+            this.enemies.push(new Enemy(pos.x, pos.y, childType, parent.multiplier, this));
+        }
+    }
+
     spawnXP(x, y, value) {
-        this.xpOrbs.push(new XPOrb(x, y, value));
+        const p = this.clampToWorld(x, y, 15);
+        this.xpOrbs.push(new XPOrb(p.x, p.y, value));
     }
     
     spawnHealth(x, y, healAmount) {
-        this.healthPickups.push(new HealthPickup(x, y, healAmount));
+        const p = this.clampToWorld(x, y, 20);
+        this.healthPickups.push(new HealthPickup(p.x, p.y, healAmount));
     }
     
     dropEquipment(x, y) {
         // Generate random equipment
         const equipment = this.generateEquipmentDrop(this.currentStage);
-        this.equipmentDrops.push(new EquipmentDrop(x, y, equipment));
+        const p = this.clampToWorld(x, y, 30);
+        this.equipmentDrops.push(new EquipmentDrop(p.x, p.y, equipment));
     }
     
     createParticles(x, y, color, enemyType = 'basic') {
+        // Hard particle budget — a big pack dying at once must not cost frames.
+        const cap = this.performanceMode
+            ? GAME_CONFIG.juice.maxParticlesMobile
+            : GAME_CONFIG.juice.maxParticlesDesktop;
+        if (this.particles.length >= cap) return;
+
         // Different particle effects based on enemy type
         let particleCount = 8;
         let particleSpeed = 100;
@@ -2268,9 +3101,11 @@ class Game {
         h.kills.textContent = this.player.kills;
         
         // Ultimate charge
-        const ultimatePercent = (this.player.ultimateCharge / this.player.ultimateMax) * 100;
+        const ultimatePercent = this.player.getUltimateReadiness() * 100;
         h.ultimateBar.style.width = ultimatePercent + '%';
-        h.ultimateText.textContent = `${Math.floor(this.player.ultimateCharge)}/${this.player.ultimateMax}`;
+        h.ultimateText.textContent = this.player.ultimateReady
+            ? 'READY'
+            : `${Math.floor(ultimatePercent)}%`;
         
         // Player 2 HUD (co-op)
         if (this.player2) {
@@ -2297,7 +3132,7 @@ class Game {
                     p2HealthText.textContent = `${Math.ceil(this.player2.health)}/${this.player2.maxHealth}`;
                 }
             }
-            if (p2UltBar) p2UltBar.style.width = ((this.player2.ultimateCharge / this.player2.ultimateMax) * 100) + '%';
+            if (p2UltBar) p2UltBar.style.width = (this.player2.getUltimateReadiness() * 100) + '%';
             // Show revive status text
             if (p2StatusEl) {
                 if (this.player2.downed) {
@@ -2468,7 +3303,72 @@ class Game {
         }
     }
     
+    // Winning the campaign. Deliberately shares gameOver's teardown so a run
+    // always ends the same way, then shows a different face.
+    victory() {
+        // A run can end mid-cinematic. Never leave the world slowed, the
+        // camera parked off the player, or a card stuck on screen.
+        this.timeScale = 1;
+        this.cameraOverride = null;
+        this.hitStop = 0;
+        this.bossEntrance = 0;
+        this.stageIntro = 0;
+        this.bossLull = 0;
+        document.getElementById('bossEntrance')?.classList.remove('active');
+        document.getElementById('stageIntro')?.classList.remove('active');
+
+        this.isRunning = false;
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
+        }
+        this.clearActiveTimers();
+        this.isPaused = false;
+
+        localStorage.setItem(GAME_CONFIG.progression.endlessUnlockKey, 'true');
+        this.audioManager.playSound('boss-defeat');
+        this.screenShake = 0;
+
+        const minutes = Math.floor(this.gameTime / 60);
+        const seconds = Math.floor(this.gameTime % 60);
+        const weapons = this.player.weapons.length
+            ? this.player.weapons.map(w => `${w.getIcon()} ${w.getDisplayName()} Lv${w.level}`).join(', ')
+            : 'None';
+        const evolutions = this.runStats.evolutions.length
+            ? this.runStats.evolutions.join(', ')
+            : 'None';
+
+        const stats = document.getElementById('victoryStats');
+        if (stats) {
+            stats.innerHTML = `
+                <div class="final-stat">\u23f1\ufe0f Cleared in: ${minutes}:${seconds.toString().padStart(2, '0')}</div>
+                <div class="final-stat">\u2b50 Level Reached: ${this.player.level}</div>
+                <div class="final-stat">\U0001f480 Enemies Killed: ${this.player.kills}</div>
+                <div class="final-stat">\U0001f479 Bosses Defeated: ${this.runStats.bossesDefeated}</div>
+                <div class="final-stat">\U0001fa99 Coins Earned: ${this.runStats.coinsEarned}</div>
+                <div class="final-stat final-stat-wide">\u2694\ufe0f Weapons: ${weapons}</div>
+                <div class="final-stat final-stat-wide">\u2728 Evolutions: ${evolutions}</div>
+            `;
+        }
+        document.getElementById('victoryScreen')?.classList.add('active');
+    }
+
+    isEndlessUnlocked() {
+        return localStorage.getItem(GAME_CONFIG.progression.endlessUnlockKey) === 'true';
+    }
+
     gameOver() {
+        // A run can end mid-cinematic. Never leave the world slowed, the
+        // camera parked off the player, or a card stuck on screen.
+        this.timeScale = 1;
+        this.cameraOverride = null;
+        this.hitStop = 0;
+        this.bossEntrance = 0;
+        this.stageIntro = 0;
+        this.bossLull = 0;
+        document.getElementById('bossEntrance')?.classList.remove('active');
+        document.getElementById('stageIntro')?.classList.remove('active');
+
         this.isRunning = false;
         
         // Cancel the game loop and clear active timers
@@ -2492,10 +3392,23 @@ class Game {
         const minutes = Math.floor(this.gameTime / 60);
         const seconds = Math.floor(this.gameTime % 60);
         
+        const weaponList = this.player.weapons.length
+            ? this.player.weapons.map(w => `${w.getIcon()} ${w.getDisplayName()} Lv${w.level}`).join(', ')
+            : 'None';
+        const evolutionList = this.runStats.evolutions.length
+            ? this.runStats.evolutions.join(', ')
+            : 'None';
+
         finalStats.innerHTML = `
             <div class="final-stat">⏱️ Survived: ${minutes}:${seconds.toString().padStart(2, '0')}</div>
-            <div class="final-stat">💀 Kills: ${this.player.kills}</div>
             <div class="final-stat">⭐ Level Reached: ${this.player.level}</div>
+            <div class="final-stat">💀 Enemies Killed: ${this.player.kills}</div>
+            <div class="final-stat">👹 Bosses Defeated: ${this.runStats.bossesDefeated}</div>
+            <div class="final-stat">🎁 Chests Opened: ${this.runStats.chestsOpened}</div>
+            <div class="final-stat">🪙 Coins Earned: ${this.runStats.coinsEarned}</div>
+            <div class="final-stat final-stat-wide">⚔️ Weapons: ${weaponList}</div>
+            <div class="final-stat final-stat-wide">✨ Evolutions: ${evolutionList}</div>
+            <div class="final-stat final-stat-total">🪙 Total Coins: ${this.coins}</div>
         `;
         
         gameOverScreen.classList.add('active');
@@ -2567,6 +3480,381 @@ class Game {
     }
     
     // Achievement System Methods
+    // Nearest living player to a world point, used by magnetised pickups.
+    // ---- Loadout HUD ----------------------------------------------------
+
+    // Weapon and passive list on the HUD. Rebuilt only when the loadout really
+    // changes, so it is safe to call from the throttled HUD update.
+    updateLoadoutHUD() {
+        const container = document.getElementById('loadoutDisplay');
+        if (!container || !this.player) return;
+
+        const weapons = this.player.weapons;
+        const passives = this.player.passives || {};
+        const passiveIds = Object.keys(passives).sort();
+
+        const signature =
+            weapons.map(w => `${w.type}:${w.level}:${w.evolutionId || ''}`).join('|') +
+            '#' + passiveIds.map(id => `${id}:${passives[id]}`).join('|');
+        if (signature === this._loadoutSignature) return;
+        this._loadoutSignature = signature;
+
+        const weaponHTML = weapons.map(w => {
+            const tier = w.getDisplayTier();
+            const maxed = w.isMaxLevel && !w.isEvolved;
+            return `<div class="loadout-item${w.isEvolved ? ' evolved' : ''}${maxed ? ' maxed' : ''}"
+                        title="${w.getDisplayName()} \u2014 Level ${w.level}"
+                        style="border-color:${tier.color}">
+                        <span class="loadout-icon">${w.getIcon()}</span>
+                        <span class="loadout-level">${w.isEvolved ? '\u2605' : w.level}</span>
+                    </div>`;
+        }).join('');
+
+        const passiveHTML = passiveIds.map(id => {
+            const p = getPassiveById(id);
+            if (!p) return '';
+            const lvl = passives[id];
+            return `<div class="loadout-item passive${lvl >= PASSIVE_MAX_LEVEL ? ' maxed' : ''}"
+                        title="${p.name} \u2014 ${p.format(passiveValue(p, lvl))}"
+                        style="border-color:${p.color}">
+                        <span class="loadout-icon">${p.icon}</span>
+                        <span class="loadout-level">${lvl}</span>
+                    </div>`;
+        }).join('');
+
+        container.innerHTML =
+            `<div class="loadout-row">${weaponHTML}</div>` +
+            (passiveHTML ? `<div class="loadout-row">${passiveHTML}</div>` : '');
+    }
+
+    // ---- Permanent upgrade shop ------------------------------------------
+
+    openMetaShop() {
+        this.renderMetaUpgrades();
+        document.getElementById('metaShopPanel')?.classList.add('active');
+    }
+
+    closeMetaShop() {
+        document.getElementById('metaShopPanel')?.classList.remove('active');
+    }
+
+    renderMetaUpgrades() {
+        const grid = document.getElementById('metaUpgradeGrid');
+        if (!grid) return;
+
+        const coinsLabel = document.getElementById('metaShopCoins');
+        if (coinsLabel) coinsLabel.textContent = this.coins;
+
+        grid.innerHTML = META_UPGRADES.map(u => {
+            const level = this.getMetaUpgradeLevel(u.id);
+            const cost = metaUpgradeCost(u, level);
+            const maxed = cost === null;
+            const affordable = !maxed && this.coins >= cost;
+            const current = level > 0 ? u.format(metaUpgradeValue(u, level)) : 'Not purchased';
+
+            return `<div class="meta-item${maxed ? ' maxed' : ''}">
+                <div class="meta-item-icon">${u.icon}</div>
+                <div class="meta-item-name">${u.name}</div>
+                <div class="meta-item-desc">${u.desc}</div>
+                <div class="meta-item-level">Level ${level} / ${u.maxLevel}</div>
+                <div class="meta-item-current">${current}</div>
+                <button class="meta-buy-btn${affordable ? '' : ' disabled'}" data-meta="${u.id}"
+                        ${affordable ? '' : 'disabled'}>
+                    ${maxed ? 'MAXED' : `Buy (${cost} 🪙)`}
+                </button>
+            </div>`;
+        }).join('');
+
+        grid.querySelectorAll('.meta-buy-btn:not(.disabled)').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.audioManager.playSound('button-click');
+                this.purchaseMetaUpgrade(btn.dataset.meta);
+            });
+        });
+    }
+
+    purchaseMetaUpgrade(id) {
+        const upgrade = META_UPGRADES.find(u => u.id === id);
+        if (!upgrade) return;
+
+        const level = this.getMetaUpgradeLevel(id);
+        const cost = metaUpgradeCost(upgrade, level);
+        if (cost === null || this.coins < cost) return;
+
+        this.coins -= cost;
+        this.saveCoins();
+        this.metaUpgradeLevels[id] = level + 1;
+        this.saveMetaUpgrades();
+        this.audioManager.playSound('level-up');
+        this.renderMetaUpgrades();
+    }
+
+    // Testing aid: wipe every saved key this game owns, then reload.
+    resetSaveData() {
+        const keys = [
+            'vitalisArenaAchievements', 'vitalisArenaInventory', 'vitalisArenaCoins',
+            'vitalisArenaSavedEquipment', 'vitalisArenaTotalBosses',
+            'vitalisArenaCharacterWins', 'vitalisArenaMetaUpgrades'
+        ];
+        keys.forEach(k => localStorage.removeItem(k));
+        window.location.reload();
+    }
+
+    // Health fraction of whichever living player is worst off. In co-op a
+    // hurt partner should still pull drops even if the other is untouched.
+    lowestPlayerHealthFraction() {
+        let lowest = 1;
+        for (const p of [this.player, this.player2]) {
+            if (!p || p.health <= 0 || !p.maxHealth) continue;
+            lowest = Math.min(lowest, p.health / p.maxHealth);
+        }
+        return lowest;
+    }
+
+    nearestPlayerTo(obj) {
+        const p1 = this.player;
+        const p2 = this.player2;
+        if (p2 && p2.health > 0 && p1 && p1.health > 0) {
+            const d1 = (obj.x - p1.x) ** 2 + (obj.y - p1.y) ** 2;
+            const d2 = (obj.x - p2.x) ** 2 + (obj.y - p2.y) ** 2;
+            return d2 < d1 ? p2 : p1;
+        }
+        if (p2 && p2.health > 0) return p2;
+        return p1;
+    }
+
+    // ---- Treasure chests ------------------------------------------------
+
+    // Enemies (especially bosses, which enter from off-screen) can die outside
+    // the playfield. Anything the player has to walk onto must be pulled back
+    // inside the arena or it is unreachable forever.
+    clampToWorld(x, y, margin) {
+        return {
+            x: Math.max(margin, Math.min(this.world.width - margin, x)),
+            y: Math.max(margin, Math.min(this.world.height - margin, y))
+        };
+    }
+
+    dropChest(x, y, quality = 'normal') {
+        const pos = this.clampToWorld(x, y, 60);
+        this.chests.push(new Chest(pos.x, pos.y, quality));
+    }
+
+    collectChest(chest) {
+        if (chest.collected) return;
+        chest.collected = true;
+        this.runStats.chestsOpened++;
+        this.audioManager.playSound('pickup-equipment');
+        this.screenShake = GAME_CONFIG.juice.shake.chestOpen;
+        this.showChestScreen(this.rollChestReward(chest));
+    }
+
+    // A weapon evolves when it is at max level AND its required passive is owned.
+    // Purely data-driven — see src/data/Evolutions.js.
+    getEvolvableWeapons(player) {
+        const result = [];
+        player.weapons.forEach(weapon => {
+            if (weapon.isEvolved || !weapon.isMaxLevel) return;
+            const evo = getEvolutionForWeapon(weapon.type);
+            if (!evo) return;
+            if (player.getPassiveLevel(evo.requires) <= 0) return;
+            result.push({ weapon, evolution: evo });
+        });
+        return result;
+    }
+
+    // Decide what a chest gives. Evolution wins whenever it is possible — it is
+    // the headline reward and the reason to hold a weapon at max level.
+    rollChestReward(chest) {
+        const player = this.player;
+        const luck = player.getLuck ? player.getLuck() : 0;
+
+        const evolvable = this.getEvolvableWeapons(player);
+        if (evolvable.length > 0) {
+            const pick = evolvable[Math.floor(Math.random() * evolvable.length)];
+            return { type: 'evolution', weapon: pick.weapon, evolution: pick.evolution };
+        }
+
+        const weapons = player.weapons.filter(w => !w.isMaxLevel);
+        const passives = PASSIVE_POOL.filter(p => {
+            const l = player.getPassiveLevel(p.id);
+            return l > 0 && l < PASSIVE_MAX_LEVEL;
+        });
+
+        const options = [];
+        if (weapons.length) options.push('weapon');
+        if (passives.length) options.push('passive');
+
+        // Nothing left to upgrade — fall back to coins or a full heal.
+        if (options.length === 0) {
+            if (Math.random() < 0.5) {
+                const base = chest.quality === 'boss' ? 250 : 150;
+                return { type: 'coins', amount: Math.floor(base * (1 + luck)) };
+            }
+            return { type: 'heal' };
+        }
+
+        if (options[Math.floor(Math.random() * options.length)] === 'weapon') {
+            return { type: 'weapon_level', weapon: weapons[Math.floor(Math.random() * weapons.length)] };
+        }
+        return { type: 'passive_level', passive: passives[Math.floor(Math.random() * passives.length)] };
+    }
+
+    applyChestReward(reward) {
+        const player = this.player;
+        switch (reward.type) {
+            case 'evolution':
+                reward.weapon.evolve(reward.evolution.id);
+                this.runStats.evolutions.push(reward.evolution.name);
+                this.screenShake = GAME_CONFIG.juice.shake.evolution;
+                this.audioManager.playSound('ultimate');
+                break;
+            case 'weapon_level':
+                reward.weapon.levelUpWeapon();
+                break;
+            case 'passive_level':
+                player.addPassive(reward.passive.id);
+                break;
+            case 'coins':
+                this.addCoins(reward.amount);
+                break;
+            case 'heal':
+                player.health = player.maxHealth;
+                break;
+        }
+        this.updateLoadoutHUD();
+    }
+
+    formatChestReward(reward) {
+        switch (reward.type) {
+            case 'evolution': {
+                const e = reward.evolution;
+                return `<div class="chest-evolved">\u2728 WEAPON EVOLVED! \u2728</div>
+                    <div class="chest-reward-icon">${e.icon}</div>
+                    <div class="chest-reward-name" style="color:${e.color}">${e.name}</div>
+                    <div class="chest-reward-desc">${e.desc}</div>`;
+            }
+            case 'weapon_level':
+                return `<div class="chest-reward-icon">${reward.weapon.getIcon()}</div>
+                    <div class="chest-reward-name">${reward.weapon.getDisplayName()}</div>
+                    <div class="chest-reward-desc">Weapon level ${reward.weapon.level} \u00b7 ${reward.weapon.getDisplayTier().name}</div>`;
+            case 'passive_level': {
+                const p = reward.passive;
+                const lvl = this.player.getPassiveLevel(p.id);
+                return `<div class="chest-reward-icon">${p.icon}</div>
+                    <div class="chest-reward-name" style="color:${p.color}">${p.name}</div>
+                    <div class="chest-reward-desc">Level ${lvl} \u00b7 ${p.format(passiveValue(p, lvl))}</div>`;
+            }
+            case 'coins':
+                return `<div class="chest-reward-icon">🪙</div>
+                    <div class="chest-reward-name">${reward.amount} Coins</div>
+                    <div class="chest-reward-desc">Spend them in the shop between runs.</div>`;
+            default:
+                return `<div class="chest-reward-icon">\u2764\ufe0f</div>
+                    <div class="chest-reward-name">Fully Healed</div>
+                    <div class="chest-reward-desc">Back to full health.</div>`;
+        }
+    }
+
+    // Chest flow: shake, burst, reveal. The reward is applied at the reveal so
+    // the animation and the effect land together.
+    showChestScreen(reward) {
+        const panel = document.getElementById('chestPanel');
+        if (!panel) { this.applyChestReward(reward); return; }
+
+        this.isPaused = true;
+        const anim = document.getElementById('chestAnimation');
+        const result = document.getElementById('chestResult');
+        const hint = document.getElementById('chestHint');
+
+        panel.classList.add('active');
+        anim.className = 'chest-animation shaking';
+        result.innerHTML = '';
+        result.classList.remove('visible');
+        hint.classList.remove('visible');
+        this.chestRewardReady = false;
+
+        const revealTimer = setTimeout(() => {
+            anim.className = 'chest-animation burst';
+            this.applyChestReward(reward);
+            result.innerHTML = this.formatChestReward(reward);
+            result.classList.add('visible');
+            hint.classList.add('visible');
+            this.chestRewardReady = true;
+        }, 900);
+        this.activeTimers.push(revealTimer);
+
+        const close = () => {
+            if (!this.chestRewardReady) return;   // let the reveal finish first
+            this.chestRewardReady = false;
+            panel.classList.remove('active');
+            document.removeEventListener('keydown', keyHandler);
+            panel.removeEventListener('click', close);
+
+            if (!this.isRunning) return;          // run ended while the chest was open
+            const next = [this.player, this.player2].find(p => p && p.pendingLevelUps > 0);
+            if (next) next.processPendingLevelUps();
+            else this.isPaused = false;
+        };
+        const keyHandler = (e) => {
+            if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); close(); }
+        };
+        document.addEventListener('keydown', keyHandler);
+        panel.addEventListener('click', close);
+    }
+
+    createRunStats() {
+        return { bossesDefeated: 0, chestsOpened: 0, coinsEarned: 0, evolutions: [] };
+    }
+
+    // ---- Permanent upgrades -------------------------------------------
+
+    loadMetaUpgrades() {
+        try {
+            const saved = localStorage.getItem('vitalisArenaMetaUpgrades');
+            return saved ? JSON.parse(saved) : {};
+        } catch (e) {
+            console.warn('Could not read permanent upgrades:', e);
+            return {};
+        }
+    }
+
+    saveMetaUpgrades() {
+        localStorage.setItem('vitalisArenaMetaUpgrades', JSON.stringify(this.metaUpgradeLevels));
+    }
+
+    getMetaUpgradeLevel(id) {
+        return this.metaUpgradeLevels[id] || 0;
+    }
+
+    // Resolve every purchased permanent upgrade into a flat bonus object that
+    // Player reads once at spawn.
+    getMetaBonuses() {
+        const bonuses = { maxHealth: 0, damage: 0, moveSpeed: 0, xpGain: 0, pickupRange: 0, startCoins: 0 };
+        META_UPGRADES.forEach(u => {
+            const level = this.getMetaUpgradeLevel(u.id);
+            if (level > 0) bonuses[u.stat] += metaUpgradeValue(u, level);
+        });
+        return bonuses;
+    }
+
+    // ---- Coins ---------------------------------------------------------
+
+    addCoins(amount) {
+        this.coins += amount;
+        this.runStats.coinsEarned += amount;
+        this.saveCoins();
+    }
+
+    // ---- Floating damage numbers ---------------------------------------
+
+    spawnDamageNumber(x, y, amount, color = '#ffffff', big = false) {
+        // Cosmetic only — drop them rather than let them cost frames.
+        if (this.performanceMode) return;
+        if (this.damageNumbers.length >= GAME_CONFIG.juice.maxDamageNumbers) return;
+        this.damageNumbers.push(new DamageNumber(x, y, amount, color, big));
+    }
+
     loadAchievements() {
         const saved = localStorage.getItem('vitalisArenaAchievements');
         if (saved) {
@@ -2759,6 +4047,24 @@ class Player {
         this.game = game;
         this.radius = 20;
         
+        // Permanent upgrades bought between runs, resolved once at spawn.
+        this.metaBonuses = (game && game.getMetaBonuses)
+            ? game.getMetaBonuses()
+            : { maxHealth: 0, damage: 0, moveSpeed: 0, xpGain: 0, pickupRange: 0, startCoins: 0 };
+
+        // Generic attack defaults. These MUST be assigned before
+        // setupCharacter(), because that is what gives each class its defining
+        // trait — the Ranger's multi-shot, the Mage's piercing, the Assassin's
+        // attack speed, the Warrior's armour. Setting them afterwards silently
+        // erased all four.
+        this.attackCooldown = 0;
+        this.attackSpeed = 1.0;
+        this.projectileSpeed = 400;
+        this.projectileDamage = 10;
+        this.projectileCount = 1;
+        this.piercing = false;
+        this.armor = 0;
+
         // Stats based on character type
         this.maxHealthBonus = 0; // Resets on new game, persists only within a run
         this.setupCharacter();
@@ -2770,22 +4076,17 @@ class Player {
         this.xpToLevel = 10;
         this.kills = 0;
         
-        // Attack
-        this.attackCooldown = 0;
-        this.attackSpeed = 1.0;
-        this.projectileSpeed = 400;
-        this.projectileDamage = 10;
-        this.projectileCount = 1;
-        this.piercing = false;
-        this.armor = 0;
-        
         // Special ability
         this.abilityCooldown = 0;
         
         // Ultimate ability (fills with kills)
         this.ultimateCharge = 0;
-        this.ultimateMax = 100; // Requires 100 charge (about 10-15 kills depending on enemy type)
+        this.ultimateMax = GAME_CONFIG.ultimate.max;
         this.ultimateReady = false;
+        // Charge is earned per kill, so on its own it tracks kill rate rather
+        // than time. The cooldown is what actually paces the ultimate.
+        this.ultimateCooldownTime = GAME_CONFIG.ultimate.minCooldown;
+        this.ultimateCooldown = this.ultimateCooldownTime * (1 - GAME_CONFIG.ultimate.startCooldownProgress);
         
         // Invulnerability frames (i-frames)
         this.invulnerable = false;
@@ -2820,6 +4121,78 @@ class Player {
             xpGain: 0,
             lifesteal: 0
         };
+
+        // Passive items: id -> level (1..PASSIVE_MAX_LEVEL)
+        this.passives = {};
+
+        // A single large gem can cross several XP thresholds, so level-ups queue
+        // instead of firing one screen and silently dropping the rest.
+        this.pendingLevelUps = 0;
+    }
+
+    // ---- Passive items ------------------------------------------------
+
+    getPassiveLevel(id) {
+        return this.passives[id] || 0;
+    }
+
+    // Combined bonus for one passive stat across everything the player owns.
+    getPassiveStat(stat) {
+        let total = 0;
+        for (const id in this.passives) {
+            const p = getPassiveById(id);
+            if (p && p.stat === stat) total += passiveValue(p, this.passives[id]);
+        }
+        return total;
+    }
+
+    addPassive(id) {
+        const p = getPassiveById(id);
+        if (!p) return false;
+        const current = this.getPassiveLevel(id);
+        if (current >= PASSIVE_MAX_LEVEL) return false;
+        this.passives[id] = current + 1;
+
+        // Flat health applies immediately, matching the +Max Health level-up.
+        // Multiplier stats are read live, so they need no bookkeeping here.
+        if (p.stat === 'maxHealth') {
+            this.maxHealth += p.perLevel;
+            this.health = Math.min(this.maxHealth, this.health + p.perLevel);
+        }
+        // Weapons bake damage and cooldown modifiers into their stats, so any
+        // change to those has to re-run weapon setup.
+        if (p.stat === 'damageMultiplier' || p.stat === 'cooldownReduction') {
+            this.weapons.forEach(w => w.setupWeapon());
+        }
+        return true;
+    }
+
+    // ---- Derived modifiers --------------------------------------------
+
+    getDamageMultiplier() {
+        return 1 + this.getPassiveStat('damageMultiplier') + this.metaBonuses.damage;
+    }
+
+    // Below 1.0 means faster.
+    getCooldownMultiplier() {
+        return Math.max(0.4, 1 - this.getPassiveStat('cooldownReduction'));
+    }
+
+    getMoveSpeedMultiplier() {
+        return 1 + this.getPassiveStat('moveSpeed') + this.metaBonuses.moveSpeed;
+    }
+
+    getPickupRange() {
+        const base = GAME_CONFIG.player.basePickupRange;
+        return base * (1 + this.getPassiveStat('pickupRange') + this.metaBonuses.pickupRange);
+    }
+
+    getLuck() {
+        return this.getPassiveStat('luck');
+    }
+
+    getXPMultiplier() {
+        return 1 + this.metaBonuses.xpGain + (this.equipmentBonuses.xpGain || 0) / 100;
     }
     
     setupCharacter() {
@@ -2864,9 +4237,12 @@ class Player {
         
         const stat = stats[this.type];
         // Always apply bonus upgrades after base
-        this.maxHealth = stat.maxHealth + (this.maxHealthBonus || 0);
+        this.maxHealth = stat.maxHealth + (this.maxHealthBonus || 0) + (this.metaBonuses ? this.metaBonuses.maxHealth : 0);
         this.speed = stat.speed;
         this.baseDamage = stat.damage;
+        // baseDamage was previously stored and never read — every class fired
+        // for a flat 10. The class damage figure is the real starting value.
+        this.projectileDamage = stat.damage;
         this.color = stat.color;
         this.icon = stat.icon;
         this.armor = stat.armor || 0;
@@ -2885,7 +4261,7 @@ class Player {
         }
     }
     
-    update(deltaTime, keys, canvasWidth, canvasHeight) {
+    update(deltaTime, keys, worldWidth, worldHeight) {
         // Movement
         let dx = 0;
         let dy = 0;
@@ -2901,13 +4277,14 @@ class Player {
             dy *= 0.707;
         }
         
-        // Apply movement
-        this.x += dx * this.speed * deltaTime;
-        this.y += dy * this.speed * deltaTime;
+        // Apply movement (passives and permanent upgrades scale the base speed)
+        const moveSpeed = this.speed * this.getMoveSpeedMultiplier();
+        this.x += dx * moveSpeed * deltaTime;
+        this.y += dy * moveSpeed * deltaTime;
         
-        // Keep in bounds
-        this.x = Math.max(this.radius, Math.min(canvasWidth - this.radius, this.x));
-        this.y = Math.max(this.radius, Math.min(canvasHeight - this.radius, this.y));
+        // Keep inside the world (not the viewport — the camera scrolls)
+        this.x = Math.max(this.radius, Math.min(worldWidth - this.radius, this.x));
+        this.y = Math.max(this.radius, Math.min(worldHeight - this.radius, this.y));
         
         // Update cooldowns
         if (this.attackCooldown > 0) {
@@ -2917,6 +4294,13 @@ class Player {
             this.abilityCooldown -= deltaTime;
         }
         
+        // Ultimate cooldown
+        if (this.ultimateCooldown > 0) {
+            this.ultimateCooldown -= deltaTime;
+            if (this.ultimateCooldown < 0) this.ultimateCooldown = 0;
+        }
+        this.refreshUltimateReady();
+
         // Update invulnerability frames
         if (this.iframeTimer > 0) {
             this.iframeTimer -= deltaTime;
@@ -3113,12 +4497,13 @@ class Player {
     }
     
     useUltimate(game) {
-        if (!this.ultimateReady) return;
+        if (!this.canUseUltimate()) return;
         
         game.audioManager.playSound('ultimate');
         
-        // Reset ultimate charge
+        // Spend the charge and start the cooldown.
         this.ultimateCharge = 0;
+        this.ultimateCooldown = this.ultimateCooldownTime;
         this.ultimateReady = false;
         document.getElementById('ultimateButton').classList.remove('ready');
         // Also reset mobile ultimate button
@@ -3248,6 +4633,40 @@ class Player {
         }
     }
     
+    // The ultimate needs a full charge AND an elapsed cooldown.
+    canUseUltimate() {
+        return this.ultimateCharge >= this.ultimateMax && this.ultimateCooldown <= 0;
+    }
+
+    // How close the ultimate is to available, 0-1, using whichever gate is
+    // furthest from being satisfied. The HUD shows this so the bar never sits
+    // full while the ultimate refuses to fire.
+    getUltimateReadiness() {
+        const charge = this.ultimateCharge / this.ultimateMax;
+        const cooldown = this.ultimateCooldownTime > 0
+            ? 1 - (this.ultimateCooldown / this.ultimateCooldownTime)
+            : 1;
+        return Math.max(0, Math.min(1, Math.min(charge, cooldown)));
+    }
+
+    // Keep the ready flag and its button styling in sync with both gates.
+    refreshUltimateReady() {
+        const ready = this.canUseUltimate();
+        if (ready === this.ultimateReady) return;
+        this.ultimateReady = ready;
+
+        if (this.isP2) return;   // P2 has no dedicated button
+        const btn = document.getElementById('ultimateButton');
+        const fireBtn = document.getElementById('fireButton');
+        if (ready) {
+            btn?.classList.add('ready');
+            fireBtn?.classList.add('ready');
+        } else {
+            btn?.classList.remove('ready');
+            fireBtn?.classList.remove('ready');
+        }
+    }
+
     takeDamage(amount) {
         // Skip damage if invulnerable or already downed
         if (this.invulnerable || this.downed) return;
@@ -3256,6 +4675,19 @@ class Player {
         const reducedDamage = amount * (1 - this.armor);
         this.health -= reducedDamage;
         if (this.health < 0) this.health = 0;
+
+        // Getting hit is the moment the player most needs to notice. Scale the
+        // freeze with the size of the hit so a chip and a boss slam do not feel
+        // the same, and mark the impact on the floor.
+        if (this.game && reducedDamage > 0) {
+            const severity = Math.min(1, reducedDamage / (this.maxHealth * 0.18));
+            this.game.applyHitStop(0.035 + severity * 0.06);
+            this.game.effects.add(new FlashEffect(this.x, this.y, {
+                radius: 60 + severity * 70,
+                color: '#ff6b6b',
+                life: 0.25
+            }));
+        }
         
         // In co-op, enter downed state instead of dying
         if (this.health <= 0 && this.isP2 !== undefined && this.game.coopMode) {
@@ -3272,10 +4704,30 @@ class Player {
     }
     
     addXP(amount) {
-        this.xp += amount;
-        if (this.xp >= this.xpToLevel) {
-            this.levelUp();
+        this.xp += amount * this.getXPMultiplier();
+
+        // Consume every threshold this pickup crossed, not just the first.
+        while (this.xp >= this.xpToLevel) {
+            this.xp -= this.xpToLevel;
+            this.level++;
+            this.xpToLevel = Math.floor(this.xpToLevel * GAME_CONFIG.player.xpCurveMultiplier);
+            this.pendingLevelUps++;
         }
+        this.processPendingLevelUps();
+    }
+
+    // Show one queued level-up screen. Only one screen may be open at a time
+    // across both players, so the rest stay queued until it is dismissed.
+    processPendingLevelUps() {
+        const game = this.game || window.game;
+        if (!game || !game.isRunning) return;
+        if (this.pendingLevelUps <= 0) return;
+        if (game.levelUpScreenOwner) return;
+
+        this.pendingLevelUps--;
+        game.levelUpScreenOwner = this;
+        game.audioManager.playSound('level-up');
+        this.showLevelUpScreen();
     }
     
     addKill() {
@@ -3287,22 +4739,12 @@ class Player {
         // Keep only kills from last 5 seconds
         this.game.sessionStats.recentKills = this.game.sessionStats.recentKills.filter(time => now - time < 5000);
         
-        // Charge ultimate ability (different enemies give different charge amounts)
-        const enemy = arguments[0]; // Get enemy that was killed
-        let chargeGain = 5; // Default for basic
-        if (enemy && enemy.type === 'fast') chargeGain = 8;
-        if (enemy && enemy.type === 'tank') chargeGain = 15;
+        // Charge the ultimate. How much each enemy is worth lives in ENEMY_TYPES.
+        const enemy = arguments[0];
+        const chargeGain = (enemy && enemy.ultCharge) ? enemy.ultCharge : 5;
         
         this.ultimateCharge = Math.min(this.ultimateMax, this.ultimateCharge + chargeGain);
-        
-        if (this.ultimateCharge >= this.ultimateMax && !this.ultimateReady) {
-            this.ultimateReady = true;
-            // Show ultimate button
-            document.getElementById('ultimateButton').classList.add('ready');
-            // Also show mobile ultimate button as ready
-            const fireBtn = document.getElementById('fireButton');
-            if (fireBtn) fireBtn.classList.add('ready');
-        }
+        this.refreshUltimateReady();
     }
     
     equipItem(equipment) {
@@ -3398,154 +4840,185 @@ class Player {
         }
     }
     
+    // A granted level (e.g. a boss reward). Unlike addXP this does not consume
+    // banked XP — the level is a gift, not a purchase.
     levelUp() {
-        const game = window.game;
-        game.audioManager.playSound('level-up');
         this.level++;
-        this.xp -= this.xpToLevel;
-        this.xpToLevel = Math.floor(this.xpToLevel * 1.5);
-        
-        // Show level up screen
-        this.showLevelUpScreen();
+        this.xpToLevel = Math.floor(this.xpToLevel * GAME_CONFIG.player.xpCurveMultiplier);
+        this.pendingLevelUps++;
+        this.processPendingLevelUps();
     }
     
-    showLevelUpScreen() {
-        const game = window.game; // Access global game instance
-        game.isPaused = true;
-        
-        const levelUpScreen = document.getElementById('levelUpScreen');
-        const upgradeOptions = document.getElementById('upgradeOptions');
-        
-        // Generate random upgrades
-        const statUpgrades = [
-            { icon: '❤️', name: 'Max Health +20', desc: 'Increase maximum health', apply: () => {
+    // Plain stat upgrades. Always available, so the pool can never run dry.
+    getStatUpgrades() {
+        return [
+            { icon: '\u2764\ufe0f', name: 'Max Health +20', desc: 'Increase maximum health', detail: 'Stat', apply: () => {
                 this.maxHealthBonus = (this.maxHealthBonus || 0) + 20;
                 this.maxHealth += 20;
                 this.health += 20;
             }},
-            { icon: '⚡', name: 'Speed +15%', desc: 'Move faster', apply: () => {
+            { icon: '\u26a1', name: 'Speed +15%', desc: 'Move faster', detail: 'Stat', apply: () => {
                 this.speed *= 1.15;
             }},
-            { icon: '🗡️', name: 'Damage +20%', desc: 'Deal more damage', apply: () => {
+            { icon: '🗡\ufe0f', name: 'Damage +20%', desc: 'Deal more damage', detail: 'Stat', apply: () => {
                 this.projectileDamage *= 1.2;
             }},
-            { icon: '⚔️', name: 'Attack Speed +25%', desc: 'Attack more frequently', apply: () => {
+            { icon: '\u2694\ufe0f', name: 'Attack Speed +25%', desc: 'Attack more frequently', detail: 'Stat', apply: () => {
                 this.attackSpeed *= 1.25;
             }},
-            { icon: '💨', name: 'Projectile Speed +20%', desc: 'Faster projectiles', apply: () => {
+            { icon: '💨', name: 'Projectile Speed +20%', desc: 'Faster projectiles', detail: 'Stat', apply: () => {
                 this.projectileSpeed *= 1.2;
             }},
-            { icon: '➕', name: 'Extra Projectile', desc: 'Shoot one more projectile', apply: () => {
+            { icon: '\u2795', name: 'Extra Projectile', desc: 'Shoot one more projectile', detail: 'Stat', apply: () => {
                 this.projectileCount += 1;
             }},
-            { icon: '�️', name: 'Armor +10%', desc: 'Reduce incoming damage', apply: () => {
+            { icon: '🛡\ufe0f', name: 'Armor +10%', desc: 'Reduce incoming damage', detail: 'Stat', apply: () => {
                 this.armor = Math.min(0.75, this.armor + 0.10); // Cap at 75% reduction
             }},
-            { icon: '�🔄', name: 'Full Heal', desc: 'Restore all health', apply: () => {
+            { icon: '🔄', name: 'Full Heal', desc: 'Restore all health', detail: 'Stat', apply: () => {
                 this.health = this.maxHealth;
             }}
         ];
-        
-        const weaponUpgrades = [
-            { icon: '⚡', name: 'Lightning Ring', desc: 'Orbiting lightning bolts', type: 'lightning', apply: () => {
-                this.addWeapon('lightning');
-            }},
-            { icon: '🔥', name: 'Fire Aura', desc: 'Burns nearby enemies', type: 'fire', apply: () => {
-                this.addWeapon('fire');
-            }},
-            { icon: '❄️', name: 'Ice Shards', desc: 'Shoots ice in 4 directions', type: 'ice', apply: () => {
-                this.addWeapon('ice');
-            }},
-            { icon: '🌪️', name: 'Boomerang', desc: 'Spinning blade that returns', type: 'boomerang', apply: () => {
-                this.addWeapon('boomerang');
-            }},
-            { icon: '🔮', name: 'Magic Orbs', desc: 'Rotating protective orbs', type: 'orbs', apply: () => {
-                this.addWeapon('orbs');
-            }},
-            { icon: '💚', name: 'Poison Dagger', desc: 'Poisons enemies over time', type: 'poison', apply: () => {
-                this.addWeapon('poison');
-            }},
-            { icon: '💣', name: 'Mega Bomb', desc: 'Clears all enemies (60s cooldown)', type: 'bomb', apply: () => {
-                this.addWeapon('bomb');
-            }}
-        ];
-        
-        // Mix stat and weapon upgrades
-        const allUpgrades = [];
-        
-        // Filter out weapons already owned
-        const availableWeapons = weaponUpgrades.filter(w => 
-            !this.weapons.some(owned => owned.type === w.type)
-        );
-        
-        // Add tier upgrades for owned weapons
-        const tierUpgrades = [];
+    }
+
+    // Every offer available this level-up. Adding a weapon or passive means
+    // adding a data entry, not editing this method.
+    buildUpgradePool() {
+        const offers = [];
+
+        offers.push(...this.getStatUpgrades());
+
+        // New weapons the player does not own yet.
+        const owned = this.weapons.map(w => w.type);
+        for (const type in SpecialWeapon.NAMES) {
+            if (owned.includes(type)) continue;
+            offers.push({
+                kind: 'new_weapon',
+                icon: SpecialWeapon.ICONS[type],
+                name: SpecialWeapon.NAMES[type],
+                desc: SpecialWeapon.DESCRIPTIONS[type],
+                detail: 'New weapon',
+                apply: () => this.addWeapon(type)
+            });
+        }
+
+        // Level-ups for owned weapons. Maxed weapons are never offered.
         this.weapons.forEach(weapon => {
-            if (weapon.tier < 3) { // Can upgrade to next tier
-                const tierInfo = weapon.getTierInfo();
-                const nextTier = [
-                    { name: 'Common', color: '#9e9e9e' },
-                    { name: 'Rare', color: '#2196f3' },
-                    { name: 'Epic', color: '#9c27b0' },
-                    { name: 'Legendary', color: '#ff9800' }
-                ][weapon.tier + 1];
-                
-                const weaponNames = {
-                    lightning: 'Lightning Ring',
-                    fire: 'Fire Aura',
-                    ice: 'Ice Shards',
-                    boomerang: 'Boomerang',
-                    orbs: 'Magic Orbs',
-                    poison: 'Poison Dagger',
-                    bomb: 'Mega Bomb'
-                };
-                
-                tierUpgrades.push({
-                    icon: '⭐',
-                    name: `${weaponNames[weapon.type]} → ${nextTier.name}`,
-                    desc: `Upgrade to ${nextTier.name} tier (+${Math.floor((weapon.getTierInfo().damageMultiplier * 0.5) * 100)}% damage)`,
-                    weapon: weapon,
-                    apply: () => {
-                        weapon.upgradeTier();
-                    }
-                });
-            }
+            if (weapon.isMaxLevel) return;
+            const tier = weapon.getDisplayTier();
+            offers.push({
+                kind: 'weapon_level',
+                icon: weapon.getIcon(),
+                color: tier.color,
+                name: weapon.getDisplayName(),
+                desc: 'More damage, shorter cooldown.',
+                detail: `Lv ${weapon.level} \u2192 ${weapon.level + 1} \u00b7 ${tier.name}`,
+                apply: () => weapon.levelUpWeapon()
+            });
         });
-        
-        // Add stats
-        allUpgrades.push(...statUpgrades);
-        
-        // Add available weapons
-        allUpgrades.push(...availableWeapons);
-        
-        // Add tier upgrades
-        allUpgrades.push(...tierUpgrades);
-        
-        // Pick 3 random upgrades
-        const shuffled = allUpgrades.sort(() => 0.5 - Math.random());
-        const selected = shuffled.slice(0, 3);
-        
+
+        // Passives \u2014 new ones and upgrades. Maxed passives are never offered.
+        PASSIVE_POOL.forEach(p => {
+            const lvl = this.getPassiveLevel(p.id);
+            if (lvl >= PASSIVE_MAX_LEVEL) return;
+            offers.push({
+                kind: lvl === 0 ? 'new_passive' : 'passive_level',
+                icon: p.icon,
+                color: p.color,
+                name: p.name,
+                desc: p.desc,
+                detail: lvl === 0
+                    ? `New passive \u00b7 ${p.format(passiveValue(p, 1))}`
+                    : `Lv ${lvl} \u2192 ${lvl + 1} \u00b7 ${p.format(passiveValue(p, lvl + 1))}`,
+                apply: () => this.addPassive(p.id)
+            });
+        });
+
+        // Fallback if literally nothing is left to offer.
+        if (offers.length === 0) {
+            offers.push({
+                icon: '🔄', name: 'Full Heal', desc: 'Restore all health', detail: 'Fallback',
+                apply: () => { this.health = this.maxHealth; }
+            });
+            offers.push({
+                icon: '🪙', name: '+100 Coins', desc: 'Nothing left to learn', detail: 'Fallback',
+                apply: () => { const g = this.game || window.game; g.addCoins(100); }
+            });
+        }
+
+        return offers;
+    }
+
+    showLevelUpScreen() {
+        const game = this.game || window.game;
+        game.isPaused = true;
+
+        const levelUpScreen = document.getElementById('levelUpScreen');
+        const upgradeOptions = document.getElementById('upgradeOptions');
+
+        // Unbiased shuffle, then take the first three distinct offers.
+        const pool = this.buildUpgradePool();
+        for (let i = pool.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [pool[i], pool[j]] = [pool[j], pool[i]];
+        }
+        const selected = pool.slice(0, 3);
+
+        // Label the screen with whose level-up this is (matters in co-op).
+        const title = document.getElementById('levelUpTitle');
+        if (title) {
+            const who = this.isP2 ? 'Player 2' : (game.coopMode ? 'Player 1' : '');
+            title.textContent = who ? `🎉 ${who} \u2014 Level ${this.level}!` : `🎉 Level ${this.level}!`;
+        }
+
         upgradeOptions.innerHTML = '';
-        selected.forEach(upgrade => {
+        selected.forEach((upgrade, index) => {
             const option = document.createElement('div');
             option.className = 'upgrade-option';
+            if (upgrade.color) option.style.borderColor = upgrade.color;
             option.innerHTML = `
+                <div class="upgrade-key">${index + 1}</div>
                 <div class="upgrade-icon">${upgrade.icon}</div>
-                <div class="upgrade-name">${upgrade.name}</div>
+                <div class="upgrade-name"${upgrade.color ? ` style="color:${upgrade.color}"` : ''}>${upgrade.name}</div>
                 <div class="upgrade-desc">${upgrade.desc}</div>
+                <div class="upgrade-detail">${upgrade.detail || ''}</div>
             `;
-            option.addEventListener('click', () => {
-                game.audioManager.playSound('button-click');
-                upgrade.apply.call(this);
-                levelUpScreen.classList.remove('active');
-                game.isPaused = false;
-            });
+            option.addEventListener('click', () => choose(index));
             upgradeOptions.appendChild(option);
         });
-        
+
+        const self = this;
+        function choose(index) {
+            const upgrade = selected[index];
+            if (!upgrade) return;
+
+            document.removeEventListener('keydown', keyHandler);
+            game.audioManager.playSound('button-click');
+            upgrade.apply.call(self);
+
+            levelUpScreen.classList.remove('active');
+            game.levelUpScreenOwner = null;
+            if (game.updateLoadoutHUD) game.updateLoadoutHUD();
+
+            // Chain straight into the next queued level-up, if any.
+            const next = [game.player, game.player2].find(p => p && p.pendingLevelUps > 0);
+            if (next) next.processPendingLevelUps();
+            else game.isPaused = false;
+        }
+
+        // Keyboard picks: 1, 2, 3.
+        function keyHandler(e) {
+            const n = parseInt(e.key, 10);
+            if (n >= 1 && n <= selected.length) {
+                e.preventDefault();
+                choose(n - 1);
+            }
+        }
+        document.addEventListener('keydown', keyHandler);
+
         levelUpScreen.classList.add('active');
     }
-    
+
     draw(ctx) {
         const size = this.radius * 2.5; // Slightly larger than circle for better visibility
         
@@ -3629,8 +5102,8 @@ class SpecialWeapon {
     constructor(type, player) {
         this.type = type;
         this.player = player;
-        this.level = 1;
-        this.tier = 0; // 0=Common, 1=Rare, 2=Epic, 3=Legendary
+        this.level = 1;               // 1..GAME_CONFIG.weapons.maxLevel
+        this.evolutionId = null;      // set when this weapon evolves
         this.cooldown = 0;
         this.time = 0;
         
@@ -3638,6 +5111,32 @@ class SpecialWeapon {
         this.setupWeapon();
     }
     
+    // Tier is derived from level: every `levelsPerTier` levels promotes a tier.
+    get tier() {
+        const per = GAME_CONFIG.weapons.levelsPerTier;
+        return Math.min(3, Math.floor((this.level - 1) / per));
+    }
+
+    get maxLevel() { return GAME_CONFIG.weapons.maxLevel; }
+    get isMaxLevel() { return this.level >= this.maxLevel; }
+    get evolution() { return this.evolutionId ? getEvolutionById(this.evolutionId) : null; }
+    get isEvolved() { return !!this.evolutionId; }
+
+    // Display name — evolved weapons take the evolution's identity.
+    getDisplayName() {
+        const evo = this.evolution;
+        if (evo) return evo.name;
+        return SpecialWeapon.NAMES[this.type] || this.type;
+    }
+
+    getIcon() {
+        const evo = this.evolution;
+        if (evo) return evo.icon;
+        return SpecialWeapon.ICONS[this.type] || '\u2694\ufe0f';
+    }
+
+    // Stat multipliers for the weapon's current tier. Evolutions build ON TOP of
+    // this — replacing it would make evolving a downgrade at Legendary.
     getTierInfo() {
         const tiers = [
             { name: 'Common', color: '#9e9e9e', damageMultiplier: 1.0, sizeMultiplier: 1.0 },
@@ -3647,14 +5146,28 @@ class SpecialWeapon {
         ];
         return tiers[this.tier];
     }
+
+    // Same multipliers, but wearing the evolution's name and colour. Used for
+    // anything the player looks at: HUD, upgrade cards, weapon rendering.
+    getDisplayTier() {
+        const evo = this.evolution;
+        const tier = this.getTierInfo();
+        if (!evo) return tier;
+        return Object.assign({}, tier, { name: 'Evolved', color: evo.color });
+    }
     
-    upgradeTier() {
-        if (this.tier < 3) {
-            this.tier++;
-            this.setupWeapon(); // Recalculate stats with new tier
-            return true;
-        }
-        return false;
+    levelUpWeapon() {
+        if (this.isMaxLevel) return false;
+        this.level++;
+        this.setupWeapon();
+        return true;
+    }
+
+    // Turn this weapon into its evolved form. Data-driven: the stat changes come
+    // from the evolution entry, applied generically in setupWeapon().
+    evolve(evolutionId) {
+        this.evolutionId = evolutionId;
+        this.setupWeapon();
     }
     
     setupWeapon() {
@@ -3701,9 +5214,55 @@ class SpecialWeapon {
             case 'bomb':
                 this.damage = 999; // Instant kill
                 this.cooldownTime = 60 / (1 + this.tier * 0.3); // Faster cooldown at higher tiers
-                this.cooldown = 0; // Start ready
+                // Only start ready the first time — re-running setup on level-up
+                // must not hand out a free bomb.
+                if (!this._initialised) this.cooldown = 0;
                 break;
         }
+
+        this.applyEvolutionStats();
+        this.applyScaling();
+        this._initialised = true;
+    }
+
+    // Evolutions overwrite the base profile. Every field is optional, so adding
+    // a new evolution never requires touching this method.
+    applyEvolutionStats() {
+        const evo = this.evolution;
+        if (!evo) return;
+        const st = evo.stats || {};
+        if (st.damageMultiplier) this.damage *= st.damageMultiplier;
+        if (st.attackSpeedMultiplier && this.attackSpeed) this.attackSpeed *= st.attackSpeedMultiplier;
+        if (st.radiusMultiplier && this.radius) this.radius *= st.radiusMultiplier;
+        if (st.rangeMultiplier && this.range) this.range *= st.rangeMultiplier;
+        if (st.orbsBonus && this.orbs) this.orbs += st.orbsBonus;
+        if (st.poisonDurationBonus && this.poisonDuration) this.poisonDuration += st.poisonDurationBonus;
+        if (st.cooldownMultiplier && this.cooldownTime) this.cooldownTime *= st.cooldownMultiplier;
+        if (st.directions) this.directions = st.directions;
+    }
+
+    // Per-level growth plus the player's global damage / cooldown modifiers
+    // (passives, permanent upgrades). Baked in here so the hot path stays cheap.
+    applyScaling() {
+        const w = GAME_CONFIG.weapons;
+        const levelBonus = 1 + (this.level - 1) * w.damagePerLevel;
+        // Cooldown multiplier: below 1 means faster.
+        let cdMult = Math.max(0.35, 1 - (this.level - 1) * w.cooldownReductionPerLevel);
+
+        const player = this.player;
+        if (player && player.getCooldownMultiplier) {
+            cdMult *= player.getCooldownMultiplier();
+        }
+
+        this.damage *= levelBonus;
+        if (player && player.getDamageMultiplier) {
+            this.damage *= player.getDamageMultiplier();
+        }
+
+        // attackSpeed is shots-per-second, so dividing by the cooldown
+        // multiplier makes a lower multiplier fire faster.
+        if (this.attackSpeed) this.attackSpeed /= cdMult;
+        if (this.cooldownTime) this.cooldownTime *= cdMult;
     }
     
     update(deltaTime, game) {
@@ -3758,24 +5317,37 @@ class SpecialWeapon {
     updateFire(deltaTime, game) {
         // Fire aura damages nearby enemies
         const range = this.radius + (this.level - 1) * 10;
+        const traits = (this.evolution && this.evolution.traits) || {};
+        let healed = 0;
+
         game.enemies.forEach(enemy => {
             const dx = enemy.x - this.player.x;
             const dy = enemy.y - this.player.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist < range) {
-                enemy.takeDamage(this.damage * deltaTime);
+                enemy.takeDamage(this.damage * deltaTime, { dot: true });
+                if (traits.healOnHit) healed += traits.healOnHit * deltaTime;
             }
         });
+
+        // Infernal Halo feeds the wearer, but only up to a modest trickle so it
+        // cannot outheal being surrounded.
+        if (healed > 0 && this.player.health > 0) {
+            const cap = 6 * deltaTime;
+            this.player.health = Math.min(this.player.maxHealth, this.player.health + Math.min(healed, cap));
+        }
     }
     
     updateIce(deltaTime, game) {
         if (this.cooldown <= 0) {
-            // Shoot ice in 4 cardinal directions
-            const directions = [0, Math.PI/2, Math.PI, Math.PI*3/2];
+            // Cardinal directions by default; evolutions can widen the spread.
+            const dirCount = this.directions || 4;
+            const directions = [];
+            for (let i = 0; i < dirCount; i++) directions.push((Math.PI * 2 * i) / dirCount);
             directions.forEach(angle => {
                 game.projectiles.push(new Projectile(
                     this.player.x, this.player.y, angle,
-                    this.projectileSpeed, this.damage * this.level,
+                    this.projectileSpeed, this.damage,
                     '#4FC3F7', false, 'mage'
                 ));
             });
@@ -3886,7 +5458,7 @@ class SpecialWeapon {
                 const angle = Math.atan2(nearest.y - this.player.y, nearest.x - this.player.x);
                 game.projectiles.push(new Projectile(
                     this.player.x, this.player.y, angle,
-                    500, this.damage * this.level,
+                    500, this.damage,
                     '#7CB342', false, 'assassin'
                 ));
                 this.cooldown = 1 / this.attackSpeed;
@@ -3916,8 +5488,8 @@ class SpecialWeapon {
                 ));
             }
             
-            // Reset cooldown
-            this.cooldown = this.cooldownTime / (1 + (this.level - 1) * 0.2);
+            // cooldownTime already accounts for level and modifiers.
+            this.cooldown = this.cooldownTime;
         }
     }
     
@@ -3943,7 +5515,7 @@ class SpecialWeapon {
     
     drawLightning(ctx) {
         const orbCount = this.orbs + this.level - 1;
-        const tierInfo = this.getTierInfo();
+        const tierInfo = this.getDisplayTier();
         const tierColor = tierInfo.color;
         
         for (let i = 0; i < orbCount; i++) {
@@ -3984,7 +5556,7 @@ class SpecialWeapon {
     
     drawFire(ctx) {
         const range = this.radius + (this.level - 1) * 10;
-        const tierInfo = this.getTierInfo();
+        const tierInfo = this.getDisplayTier();
         const tierColor = tierInfo.color;
         
         // Add tier glow ring if upgraded
@@ -4025,7 +5597,7 @@ class SpecialWeapon {
         if (this.state !== 'ready') {
             const x = this.player.x + Math.cos(this.angle) * this.distance;
             const y = this.player.y + Math.sin(this.angle) * this.distance;
-            const tierInfo = this.getTierInfo();
+            const tierInfo = this.getDisplayTier();
             const tierColor = tierInfo.color;
             
             // Tier glow (before rotation)
@@ -4062,7 +5634,7 @@ class SpecialWeapon {
     
     drawOrbs(ctx) {
         const orbCount = this.orbs + this.level - 1;
-        const tierInfo = this.getTierInfo();
+        const tierInfo = this.getDisplayTier();
         const tierColor = tierInfo.color;
         const rotationSpeed = this.speed + this.tier * 0.8; // Spin faster as tier increases
         
@@ -4110,7 +5682,7 @@ class SpecialWeapon {
         // Draw a cooldown indicator at the top of the screen
         const centerX = this.player.x;
         const centerY = this.player.y - 80;
-        const tierInfo = this.getTierInfo();
+        const tierInfo = this.getDisplayTier();
         const tierColor = tierInfo.color;
         
         // Tier ring (if upgraded)
@@ -4160,6 +5732,24 @@ class SpecialWeapon {
 }
 
 // Enemy Class
+SpecialWeapon.NAMES = {
+    lightning: 'Lightning Ring', fire: 'Fire Aura', ice: 'Ice Shards',
+    boomerang: 'Boomerang', orbs: 'Magic Orbs', poison: 'Poison Dagger', bomb: 'Mega Bomb'
+};
+SpecialWeapon.DESCRIPTIONS = {
+    lightning: 'Orbiting bolts that shock what they touch.',
+    fire: 'A burning aura that scorches anything close.',
+    ice: 'Shards fired outward in every cardinal direction.',
+    boomerang: 'A spinning blade that carves out and returns.',
+    orbs: 'Protective orbs wheeling around you.',
+    poison: 'Venom that keeps working after the hit.',
+    bomb: 'Clears the screen. Long cooldown.'
+};
+SpecialWeapon.ICONS = {
+    lightning: '\u26a1', fire: '🔥', ice: '\u2744\ufe0f',
+    boomerang: '🌪\ufe0f', orbs: '🔮', poison: '💚', bomb: '💣'
+};
+
 class Enemy {
     constructor(x, y, type, multiplier, game) {
         this.x = x;
@@ -4173,46 +5763,31 @@ class Enemy {
         this.health = this.maxHealth * multiplier;
         this.maxHealth = this.health;
         this.stunned = 0;
+        this.hitFlash = 0;   // seconds remaining on the white damage flash
     }
     
     setupType() {
-        const types = {
-            basic: {
-                radius: 15,
-                speed: 60,  // Reduced from 100
-                maxHealth: 20,
-                damage: 5,
-                xpValue: 5,
-                color: '#e03131'
-            },
-            fast: {
-                radius: 12,
-                speed: 110,  // Reduced from 180
-                maxHealth: 15,
-                damage: 8,
-                xpValue: 8,
-                color: '#fd7e14'
-            },
-            tank: {
-                radius: 25,
-                speed: 40,  // Reduced from 60
-                maxHealth: 60,
-                damage: 15,
-                xpValue: 15,
-                color: '#c92a2a'
-            },
-            boss: {
-                radius: 50,
-                speed: 45,  // Reduced from 70
-                maxHealth: 500,
-                damage: 25,
-                xpValue: 100,
-                color: '#8b0000'
-            }
-        };
-        
-        const stats = types[this.type];
+        // Stats come from ENEMY_TYPES (src/data/Waves.js) so new enemies are
+        // added as data, not as new branches here.
+        const types = (typeof ENEMY_TYPES !== 'undefined') ? ENEMY_TYPES : {};
+        const stats = types[this.type] || types.basic;
+        this.stats = stats;
         this.radius = stats.radius;
+        this.drawScale = stats.drawScale || 1.0;
+        this.label = stats.label || this.type;
+        this.ultCharge = stats.ultCharge || 5;
+        this.chestChance = stats.chestChance || 0;
+        this.behavior = stats.behavior || 'chase';
+        this.spriteKey = stats.sprite || ('enemy_' + this.type);
+
+        // Per-behaviour runtime state
+        this.fireTimer = (stats.fireCooldown || 0) * Math.random();  // desync the volley
+        this.chargeState = 'approach';   // approach -> windup -> dash -> recover
+        this.chargeTimer = 0;
+        this.dashX = 0;
+        this.dashY = 0;
+        this.fuseTimer = 0;
+        this.fuseLit = false;
         this.baseSpeed = stats.speed;  // Store base speed
         this.speed = stats.speed;
         this.maxHealth = stats.maxHealth;
@@ -4220,91 +5795,440 @@ class Enemy {
         this.xpValue = stats.xpValue;
         this.color = stats.color;
         
-        // Boss-specific properties
+        // Boss-specific properties. Which archetype is decided by the stage,
+        // so a long run keeps meeting different fights.
         if (this.type === 'boss') {
-            this.attackCooldown = 2; // Brief entry delay before first attack
+            const archetype = (typeof getBossForStage === 'function')
+                ? getBossForStage(this.game.currentStage)
+                : null;
+            this.archetype = archetype;
+
+            this.attackCooldown = 2;   // brief entry delay before the first attack
             this.attackPattern = 0;
-            this.phaseChangeThreshold = 0.5; // Changes attack at 50% health
+            this.enraged = false;
+
+            if (archetype) {
+                this.bossPattern = archetype.pattern;
+                this.bossName = archetype.name;
+                this.spriteKey = archetype.sprite;
+                this.color = archetype.color;
+                this.maxHealth *= archetype.healthMultiplier;
+                this.baseSpeed *= archetype.speedMultiplier;
+                this.speed = this.baseSpeed;
+                this.damage *= archetype.damageMultiplier;
+                this.phaseChangeThreshold = archetype.enrageAt;
+            } else {
+                this.bossPattern = 'warden';
+                this.phaseChangeThreshold = 0.5;
+            }
+
+            // Pattern timers
+            this.summonTimer = 3;
+            this.spiralTimer = 0;
+            this.spiralAngle = Math.random() * Math.PI * 2;
+            this.slamTimer = 3;
+            this.slamState = 'idle';        // idle -> windup -> recover
+            this.pendingGapIndex = 0;
+            this.pendingGapCount = 0;
+            this.pendingGapSlots = 0;
         }
     }
     
     update(deltaTime, player) {
+        if (this.hitFlash > 0) this.hitFlash -= deltaTime;
         if (this.stunned > 0) {
             this.stunned -= deltaTime;
             return;
         }
         
-        // Apply level-based speed scaling
-        // Speed increases by 5% per level (starts at 100% at level 1)
-        const levelSpeedMultiplier = 1 + ((this.game.player.level - 1) * 0.05);
-        const currentSpeed = this.baseSpeed * levelSpeedMultiplier;
+        // Speed scales with player level AND elapsed run time, hard-capped so
+        // late-run enemies stay outrunnable.
+        const cfg = GAME_CONFIG.enemy;
+        const levelPart = (this.game.player.level - 1) * cfg.speedGrowthPerPlayerLevel;
+        const timePart = (this.game.gameTime / 60) * cfg.speedGrowthPerMinute;
+        const speedMultiplier = Math.min(cfg.maxSpeedMultiplier, 1 + levelPart + timePart);
+        const currentSpeed = this.baseSpeed * speedMultiplier;
         
-        // Boss special behavior
-        if (this.type === 'boss') {
-            this.updateBoss(deltaTime, player, currentSpeed);
-            return;
+        // Behaviour dispatch. Adding an enemy means adding a data entry with a
+        // `behavior` key, not another branch here.
+        switch (this.behavior) {
+            case 'boss':     this.updateBoss(deltaTime, player, currentSpeed); return;
+            case 'ranged':   this.updateRanged(deltaTime, player, currentSpeed); return;
+            case 'charger':  this.updateCharger(deltaTime, player, currentSpeed); return;
+            case 'exploder': this.updateExploder(deltaTime, player, currentSpeed); return;
+            default:         this.moveToward(player, currentSpeed, deltaTime);
         }
-        
-        // Move toward player
-        const dx = player.x - this.x;
-        const dy = player.y - this.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        
+    }
+
+    // Shared straight-line pursuit.
+    moveToward(target, speed, deltaTime, sign = 1) {
+        const dx = target.x - this.x;
+        const dy = target.y - this.y;
+        const dist = Math.hypot(dx, dy);
         if (dist > 0) {
-            this.x += (dx / dist) * currentSpeed * deltaTime;
-            this.y += (dy / dist) * currentSpeed * deltaTime;
+            this.x += (dx / dist) * speed * deltaTime * sign;
+            this.y += (dy / dist) * speed * deltaTime * sign;
         }
+        return dist;
+    }
+
+    // Ranged: hold a preferred distance and shoot. Backs away if crowded, so
+    // the player cannot solve it by either fleeing or charging in blindly.
+    updateRanged(deltaTime, player, currentSpeed) {
+        const s = this.stats;
+        const dist = Math.hypot(player.x - this.x, player.y - this.y);
+
+        if (dist > s.preferredRange) {
+            this.moveToward(player, currentSpeed, deltaTime);
+        } else if (dist < s.retreatRange) {
+            this.moveToward(player, currentSpeed * 0.9, deltaTime, -1);
+        }
+
+        this.fireTimer -= deltaTime;
+        if (this.fireTimer <= 0 && dist < s.preferredRange * 1.35) {
+            this.fireTimer = s.fireCooldown;
+            const angle = Math.atan2(player.y - this.y, player.x - this.x);
+            const shot = new BossProjectile(
+                this.x, this.y, angle, s.projectileSpeed, s.projectileDamage, this.game
+            );
+            shot.color = this.color;
+            shot.radius = 7;
+            this.game.particles.push(shot);
+        }
+    }
+
+    // Charger: telegraph, then commit to a straight line. The direction locks
+    // when the wind-up ends, which is what makes a sideways dodge work.
+    updateCharger(deltaTime, player, currentSpeed) {
+        const s = this.stats;
+        this.chargeTimer -= deltaTime;
+
+        switch (this.chargeState) {
+            case 'approach': {
+                const dist = this.moveToward(player, currentSpeed, deltaTime);
+                if (dist < s.chargeRange && this.chargeTimer <= 0) {
+                    this.chargeState = 'windup';
+                    this.chargeTimer = s.windupTime;
+                }
+                break;
+            }
+            case 'windup':
+                // Rooted while winding up — that pause is the player's cue.
+                if (this.chargeTimer <= 0) {
+                    const angle = Math.atan2(player.y - this.y, player.x - this.x);
+                    this.dashX = Math.cos(angle);
+                    this.dashY = Math.sin(angle);
+                    this.chargeState = 'dash';
+                    this.chargeTimer = s.dashTime;
+                }
+                break;
+            case 'dash':
+                this.x += this.dashX * s.dashSpeed * deltaTime;
+                this.y += this.dashY * s.dashSpeed * deltaTime;
+                if (this.chargeTimer <= 0) {
+                    this.chargeState = 'recover';
+                    this.chargeTimer = s.rechargeTime;
+                }
+                break;
+            default:
+                if (this.chargeTimer <= 0) this.chargeState = 'approach';
+        }
+    }
+
+    // Exploder: rush in, light a fuse when close, detonate. Also detonates on
+    // death, so killing one in your face still costs you.
+    updateExploder(deltaTime, player, currentSpeed) {
+        const s = this.stats;
+        const dist = this.moveToward(player, currentSpeed, deltaTime);
+
+        if (!this.fuseLit && dist < s.fuseRange) {
+            this.fuseLit = true;
+            this.fuseTimer = s.fuseTime;
+        }
+        if (this.fuseLit) {
+            this.fuseTimer -= deltaTime;
+            if (this.fuseTimer <= 0) {
+                this.detonate();
+                this.health = 0;
+            }
+        }
+    }
+
+    // Radial blast that hits players regardless of what triggered it.
+    detonate() {
+        if (this.hasDetonated) return;
+        this.hasDetonated = true;
+        const s = this.stats;
+        const radius = s.blastRadius || 100;
+        const damage = s.blastDamage || 20;
+
+        for (const p of [this.game.player, this.game.player2]) {
+            if (!p || p.health <= 0 || p.downed) continue;
+            if (Math.hypot(p.x - this.x, p.y - this.y) < radius + p.radius) {
+                p.takeDamage(damage);
+            }
+        }
+
+        this.game.screenShake = Math.max(this.game.screenShake, 14);
+        this.game.createParticles(this.x, this.y, '#ff9f43', this.type);
+
+        // The blast used to be a puff of the same circles used for every other
+        // death, at a radius the player could not see. Draw the actual radius.
+        const fx = this.game.effects;
+        fx.add(new RingEffect(this.x, this.y, {
+            fromRadius: 10, toRadius: radius,
+            color: '#ff9f43', width: 10, endWidth: 2, life: 0.34
+        }));
+        fx.add(new FlashEffect(this.x, this.y, { radius: radius * 0.9, life: 0.26 }));
+        const chunks = this.game.performanceMode ? 3 : 9;
+        for (let i = 0; i < chunks; i++) {
+            fx.add(new DebrisEffect(this.x, this.y, {
+                speed: 130 + Math.random() * 190,
+                color: '#c9772f', life: 0.5 + Math.random() * 0.4
+            }));
+        }
+        this.game.applyHitStop(0.05);
     }
     
     updateBoss(deltaTime, player, currentSpeed) {
-        this.attackCooldown -= deltaTime;
-        
-        const dx = player.x - this.x;
-        const dy = player.y - this.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        
-        // Change pattern based on health
         const healthPercent = this.health / this.maxHealth;
-        let bossSpeed = currentSpeed;
-        if (healthPercent < this.phaseChangeThreshold && this.attackPattern === 0) {
-            this.attackPattern = 1; // Enraged phase
-            bossSpeed = currentSpeed * 1.5; // 50% faster when low health
+        if (!this.enraged && healthPercent < this.phaseChangeThreshold) {
+            this.enraged = true;
+            this.attackPattern = 1;
             this.game.screenShake = 20;
+            this.game.showNotification(`\u2620\ufe0f ${this.bossName || 'The boss'} is enraged!`);
         }
-        
-        // Pattern 0: Slow pursuit with periodic charges
-        if (this.attackPattern === 0) {
-            if (this.attackCooldown <= 0 && dist > 100) {
-                // Charge attack
-                this.attackCooldown = 4;
-                if (dist > 0) {
-                    this.x += (dx / dist) * bossSpeed * 3 * deltaTime; // 3x speed charge
-                    this.y += (dy / dist) * bossSpeed * 3 * deltaTime;
-                }
-            } else {
-                // Normal movement
-                if (dist > 0) {
-                    this.x += (dx / dist) * bossSpeed * deltaTime;
-                    this.y += (dy / dist) * bossSpeed * deltaTime;
-                }
-            }
-        }
-        // Pattern 1: Aggressive phase - faster movement and spawns projectiles
-        else {
-            // Fast pursuit
-            if (dist > 0) {
-                this.x += (dx / dist) * bossSpeed * deltaTime;
-                this.y += (dy / dist) * bossSpeed * deltaTime;
-            }
-            
-            // Shoot projectiles
-            if (this.attackCooldown <= 0) {
-                this.attackCooldown = this.game.performanceMode ? 4 : 2; // Slower fire rate on mobile
-                this.shootProjectiles();
-            }
+        // Enraged bosses move and act faster across every archetype.
+        const speed = currentSpeed * (this.enraged ? 1.35 : 1);
+
+        switch (this.bossPattern) {
+            case 'summoner': this.updateSummonerBoss(deltaTime, player, speed); break;
+            case 'colossus': this.updateColossusBoss(deltaTime, player, speed); break;
+            default:         this.updateWardenBoss(deltaTime, player, speed);
         }
     }
-    
+
+    // Warden: relentless pursuit punctuated by a committed charge; opens up
+    // with radial bursts once enraged.
+    updateWardenBoss(deltaTime, player, speed) {
+        const a = this.archetype || {};
+        this.attackCooldown -= deltaTime;
+        const dist = Math.hypot(player.x - this.x, player.y - this.y);
+
+        if (!this.enraged) {
+            if (this.attackCooldown <= 0 && dist > 100) {
+                this.attackCooldown = 4;
+                this.moveToward(player, speed * 3, deltaTime);   // lunge
+            } else {
+                this.moveToward(player, speed, deltaTime);
+            }
+            return;
+        }
+
+        this.moveToward(player, speed, deltaTime);
+        if (this.attackCooldown <= 0) {
+            this.attackCooldown = this.game.performanceMode
+                ? (a.burstCooldown || 2) * 2
+                : (a.burstCooldown || 2);
+            this.radialBurst(a.burstCount || 8, 200);
+        }
+    }
+
+    // Emberlord: hangs back, seeds bombers, and sweeps a rotating spiral. The
+    // adds are the real pressure — ignoring them is what kills you.
+    updateSummonerBoss(deltaTime, player, speed) {
+        const a = this.archetype || {};
+        const dist = Math.hypot(player.x - this.x, player.y - this.y);
+
+        // Keep its distance rather than brawling.
+        if (dist > (a.preferredRange || 380)) this.moveToward(player, speed, deltaTime);
+        else if (dist < (a.preferredRange || 380) * 0.6) this.moveToward(player, speed * 0.8, deltaTime, -1);
+
+        this.summonTimer -= deltaTime;
+        if (this.summonTimer <= 0) {
+            this.summonTimer = (a.summonCooldown || 7) * (this.enraged ? 0.6 : 1);
+            this.summonAdds(a.summonType || 'bomber', a.summonCount || 3);
+        }
+
+        this.spiralTimer -= deltaTime;
+        if (this.spiralTimer <= 0) {
+            this.spiralTimer = (a.spiralCooldown || 0.28) * (this.game.performanceMode ? 2.5 : 1);
+            this.spiralAngle += (a.spiralStep || 0.55);
+            this.fireBossShot(this.spiralAngle, a.spiralSpeed || 210);
+            if (this.enraged) this.fireBossShot(this.spiralAngle + Math.PI, a.spiralSpeed || 210);
+        }
+    }
+
+    // Colossus: slow and unstoppable, and every slam throws out a ring with a
+    // single gap. The fight is about finding the gap, not out-damaging it.
+    updateColossusBoss(deltaTime, player, speed) {
+        const a = this.archetype || {};
+        this.slamTimer -= deltaTime;
+
+        // Three phases, the same shape the Charger already uses. The slam used
+        // to fire the instant a timer expired, with damage and shake landing on
+        // the same frame — nothing to read, so it played as random punishment
+        // rather than an attack. The windup is what makes it an attack.
+        if (this.slamState === 'windup') {
+            // Rooted. That pause is the player's cue, and the decal painted at
+            // windup start shows exactly where the safe lane will be.
+            if (this.slamTimer <= 0) {
+                this.slamState = 'recover';
+                this.slamTimer = 0.45;
+                this.performSlam(a);
+            }
+            return;
+        }
+
+        if (this.slamState === 'recover') {
+            if (this.slamTimer <= 0) {
+                this.slamState = 'idle';
+                this.slamTimer = (a.slamCooldown || 4.5) * (this.enraged ? 0.65 : 1);
+            }
+            return;
+        }
+
+        this.moveToward(player, speed, deltaTime);
+        if (this.slamTimer <= 0) {
+            this.slamState = 'windup';
+            this.slamTimer = a.slamWindup || 0.85;
+            this.telegraphSlam(a);
+        }
+    }
+
+    // Choose the safe lane now and show it, so the ring, the projectiles and
+    // the telegraph all agree. Picking it here rather than at fire time is the
+    // whole point: the player gets a beat to read it and move.
+    telegraphSlam(a) {
+        const count = this.game.performanceMode
+            ? Math.ceil((a.ringCount || 26) / 2)
+            : (a.ringCount || 26);
+        const gapSlots = this.game.performanceMode
+            ? Math.ceil((a.ringGap || 4) / 2)
+            : (a.ringGap || 4);
+
+        this.pendingGapIndex = Math.floor(Math.random() * count);
+        this.pendingGapCount = count;
+        this.pendingGapSlots = gapSlots;
+
+        const step = (Math.PI * 2) / count;
+        const gapStart = this.pendingGapIndex * step;
+        const gapSize = gapSlots * step;
+
+        const fx = this.game.effects;
+        // The floor marker: holds under the boss, pulses faster as it closes.
+        fx.add(new DecalEffect(this.x, this.y, {
+            radius: 150,
+            color: '#ff8f3c',
+            life: a.slamWindup || 0.85,
+            gapStart, gapSize,
+            follow: this
+        }));
+        // A ring collapsing INWARD reads as gathering force, the opposite of
+        // the outward wave that follows it.
+        fx.add(new RingEffect(this.x, this.y, {
+            fromRadius: 260, toRadius: 60,
+            color: '#ffb066', width: 2, endWidth: 5,
+            life: a.slamWindup || 0.85,
+            ease: false, fade: 0.85
+        }));
+    }
+
+    performSlam(a) {
+        const speed = a.ringSpeed || 170;
+        const count = this.pendingGapCount || (a.ringCount || 26);
+        const step = (Math.PI * 2) / count;
+        const gapStart = (this.pendingGapIndex || 0) * step;
+        const gapSize = (this.pendingGapSlots || 0) * step;
+
+        this.shockwaveRing(count, this.pendingGapSlots || 0, speed, this.pendingGapIndex || 0);
+
+        const fx = this.game.effects;
+        // The shockwave itself — finally an actual wave. It travels at the same
+        // speed as the projectiles it accompanies, carries the same gap, and is
+        // the thing the player is reading when they run for the lane.
+        const reach = 900;
+        fx.add(new RingEffect(this.x, this.y, {
+            fromRadius: 40, toRadius: reach,
+            color: '#ffd9a0', width: 14, endWidth: 2,
+            life: reach / speed,
+            gapStart, gapSize,
+            ease: false
+        }));
+        // A second, faster, fainter ring gives the wave a leading edge.
+        fx.add(new RingEffect(this.x, this.y, {
+            fromRadius: 40, toRadius: reach,
+            color: '#ff8f3c', width: 5, endWidth: 1,
+            life: (reach / speed) * 0.8,
+            gapStart, gapSize,
+            ease: false, fade: 0.6
+        }));
+        fx.add(new FlashEffect(this.x, this.y, { radius: 260, life: 0.3 }));
+
+        // Debris thrown from the impact — heavier and longer-lived than the
+        // puff every ordinary death uses.
+        const chunks = this.game.performanceMode ? 6 : 18;
+        for (let i = 0; i < chunks; i++) {
+            fx.add(new DebrisEffect(this.x, this.y, {
+                angle: Math.random() * Math.PI * 2,
+                speed: 160 + Math.random() * 260,
+                color: i % 3 === 0 ? '#ffb066' : '#7a6f64',
+                life: 0.7 + Math.random() * 0.5
+            }));
+        }
+
+        this.game.screenShake = 26;
+        this.game.applyHitStop(0.09);
+    }
+
+    // ---- Boss attack primitives ----------------------------------------
+
+    fireBossShot(angle, speed) {
+        const shot = new BossProjectile(this.x, this.y, angle, speed, this.damage, this.game);
+        shot.color = this.color;
+        this.game.particles.push(shot);
+    }
+
+    radialBurst(count, speed) {
+        const n = this.game.performanceMode ? Math.ceil(count / 2) : count;
+        for (let i = 0; i < n; i++) {
+            this.fireBossShot((Math.PI * 2 / n) * i, speed);
+        }
+    }
+
+    // A full ring minus a contiguous gap the player has to move to.
+    // `gapStartSlot` is supplied by the telegraph so the drawn ring and the
+    // real projectiles cannot disagree about where the safe lane is.
+    shockwaveRing(count, gapWidth, speed, gapStartSlot = null) {
+        const n = count;
+        const gap = gapWidth;
+        const gapStart = gapStartSlot !== null
+            ? gapStartSlot
+            : Math.floor(Math.random() * n);
+        for (let i = 0; i < n; i++) {
+            // Skip the gap slots, wrapping around the ring.
+            const inGap = ((i - gapStart + n) % n) < gap;
+            if (inGap) continue;
+            this.fireBossShot((Math.PI * 2 / n) * i, speed);
+        }
+    }
+
+    summonAdds(type, count) {
+        const cap = this.game.performanceMode
+            ? GAME_CONFIG.spawn.maxEnemiesMobile
+            : GAME_CONFIG.spawn.maxEnemiesDesktop;
+        for (let i = 0; i < count; i++) {
+            if (this.game.enemies.length >= cap) break;
+            const angle = (Math.PI * 2 * i) / count + Math.random();
+            const pos = this.game.clampToWorld(
+                this.x + Math.cos(angle) * 90,
+                this.y + Math.sin(angle) * 90,
+                30
+            );
+            this.game.enemies.push(new Enemy(pos.x, pos.y, type, this.multiplier, this.game));
+        }
+    }
+
     shootProjectiles() {
         // Fire projectiles in all directions (fewer on mobile for performance)
         const count = this.game.performanceMode ? 4 : 8;
@@ -4316,14 +6240,48 @@ class Enemy {
         }
     }
     
-    takeDamage(amount) {
+    takeDamage(amount, options) {
         this.health -= amount;
+        this.hitFlash = 0.12;
+
+        // Damage-over-time (fire aura, poison) ticks every frame. Batch those
+        // into one number a few times a second instead of one per frame, and
+        // skip the hit sound entirely so it cannot machine-gun.
+        if (options && options.dot) {
+            this._dotAccum = (this._dotAccum || 0) + amount;
+            const now = this.game.gameTime;
+            if (this._dotAccum >= 1 && now - (this._dotLast || 0) > 0.35) {
+                this._dotLast = now;
+                this.game.spawnDamageNumber(this.x, this.y - this.radius - 6, this._dotAccum, '#ff9f43');
+                this._dotAccum = 0;
+            }
+            return;
+        }
+
         this.game.audioManager.playSound('enemy-hit');
+        // Big enemies get big numbers so the important hits read at a glance.
+        const big = (this.type === 'boss' || this.type === 'elite');
+        this.game.spawnDamageNumber(this.x, this.y - this.radius - 6, amount, big ? '#ffd43b' : '#ffffff', big);
+    }
+
+    // Push an enemy away from an impact point. Kept small so knockback reads as
+    // feedback rather than crowd control.
+    applyKnockback(fromX, fromY, force) {
+        if (this.type === 'boss') return;   // bosses do not flinch
+        const dx = this.x - fromX;
+        const dy = this.y - fromY;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 0) {
+            const scale = this.type === 'elite' ? 0.35 : 1;
+            this.x += (dx / dist) * force * scale;
+            this.y += (dy / dist) * force * scale;
+        }
     }
     
     draw(ctx) {
-        const size = this.radius * 2.5; // Slightly larger for sprites
-        const imageName = `enemy_${this.type}`;
+        // Sprite is drawn larger than the collision circle on purpose.
+        const size = this.radius * 2.5 * (this.drawScale || 1);
+        const imageName = this.spriteKey || `enemy_${this.type}`;
         
         // Check if sprite is loaded
         if (this.game.imagesLoaded && this.game.images[imageName] && this.game.images[imageName].complete) {
@@ -4361,6 +6319,52 @@ class Enemy {
             ctx.fill();
         }
         
+        // Charge wind-up telegraph. The whole point of the charger is that it
+        // is dodgeable, which requires the tell to be unmissable.
+        if (this.chargeState === 'windup') {
+            const progress = 1 - (this.chargeTimer / (this.stats.windupTime || 1));
+            ctx.save();
+            ctx.globalAlpha = 0.35 + 0.4 * Math.sin(progress * Math.PI * 6);
+            ctx.strokeStyle = '#ff6b00';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius + 8 + progress * 10, 0, Math.PI * 2);
+            ctx.stroke();
+            // Show the committed line so the dodge direction is obvious.
+            const angle = Math.atan2(this.game.player.y - this.y, this.game.player.x - this.x);
+            ctx.globalAlpha = 0.3;
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(this.x + Math.cos(angle) * 220, this.y + Math.sin(angle) * 220);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // Lit fuse on an exploder — read as "get away from this one".
+        if (this.fuseLit) {
+            const blink = Math.sin(this.fuseTimer * 40) > 0;
+            ctx.save();
+            ctx.globalAlpha = blink ? 0.85 : 0.3;
+            ctx.strokeStyle = '#ff4444';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, (this.stats.blastRadius || 100) * 0.5, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // White flash on hit — drawn over the body, clipped to the sprite box.
+        if (this.hitFlash > 0) {
+            ctx.save();
+            ctx.globalAlpha = Math.min(0.8, this.hitFlash * 5);
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
         // Health bar (always shown)
         const barWidth = this.radius * 2;
         const barHeight = 4;
@@ -4534,18 +6538,28 @@ class XPOrb {
         this.x = x;
         this.y = y;
         this.value = value;
-        this.radius = 8;
-        this.magnetRange = 150;
         this.attractSpeed = 300;
+
+        // Bigger XP values get a visually distinct gem so the player can read
+        // what is worth walking into.
+        const gems = GAME_CONFIG.xp.gems;
+        let tier = gems[0];
+        for (const g of gems) {
+            if (value >= g.threshold) tier = g;
+        }
+        this.color = tier.color;
+        this.glow = tier.glow;
+        this.radius = tier.radius;
     }
-    
+
     update(deltaTime, player) {
         const dx = player.x - this.x;
         const dy = player.y - this.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        
-        // Magnetic attraction
-        if (dist < this.magnetRange) {
+
+        // Magnet range is a player stat now (Magnet Charm, permanent upgrades).
+        const range = player.getPickupRange ? player.getPickupRange() : 150;
+        if (dist < range && dist > 0) {
             this.x += (dx / dist) * this.attractSpeed * deltaTime;
             this.y += (dy / dist) * this.attractSpeed * deltaTime;
         }
@@ -4555,8 +6569,8 @@ class XPOrb {
         // Skip glow on mobile (createRadialGradient is expensive)
         if (!window.game || !window.game.performanceMode) {
             const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.radius * 2);
-            gradient.addColorStop(0, 'rgba(74, 144, 226, 0.8)');
-            gradient.addColorStop(1, 'rgba(74, 144, 226, 0)');
+            gradient.addColorStop(0, this.glow + '0.8)');
+            gradient.addColorStop(1, this.glow + '0)');
             ctx.fillStyle = gradient;
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.radius * 2, 0, Math.PI * 2);
@@ -4564,7 +6578,7 @@ class XPOrb {
         }
         
         // Core
-        ctx.fillStyle = '#4a90e2';
+        ctx.fillStyle = this.color;
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx.fill();
@@ -4594,8 +6608,10 @@ class HealthPickup {
         const dy = player.y - this.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         
-        // Magnetic attraction
-        if (dist < this.magnetRange) {
+        // Magnetic attraction. The dist > 0 guard matters: a pickup landing
+        // exactly on the player divides by zero and NaNs its position, which
+        // then crashes createRadialGradient on the next draw.
+        if (dist < this.magnetRange && dist > 0) {
             this.x += (dx / dist) * this.attractSpeed * deltaTime;
             this.y += (dy / dist) * this.attractSpeed * deltaTime;
         }
@@ -4655,8 +6671,10 @@ class EquipmentDrop {
         const dy = player.y - this.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         
-        // Magnetic attraction
-        if (dist < this.magnetRange) {
+        // Magnetic attraction. The dist > 0 guard matters: a pickup landing
+        // exactly on the player divides by zero and NaNs its position, which
+        // then crashes createRadialGradient on the next draw.
+        if (dist < this.magnetRange && dist > 0) {
             this.x += (dx / dist) * this.attractSpeed * deltaTime;
             this.y += (dy / dist) * this.attractSpeed * deltaTime;
         }
@@ -4776,8 +6794,7 @@ class BossProjectile {
         }
         
         // Remove if off screen
-        if (this.x < -100 || this.x > this.game.canvas.width + 100 ||
-            this.y < -100 || this.y > this.game.canvas.height + 100) {
+        if (this.game.camera.isOffscreen(this.x, this.y, 100)) {
             this.lifetime = 0;
         }
     }
@@ -4806,11 +6823,9 @@ class BossProjectile {
     }
 }
 
-// Initialize game when page loads
-window.addEventListener('DOMContentLoaded', () => {
-    window.game = new Game();
-});
-
+// Initialize game when page loads.
+// NOTE: exactly one Game may be constructed. A second instance would register a
+// duplicate set of UI listeners on the same buttons, firing every action twice.
 window.addEventListener('DOMContentLoaded', () => {
     window.game = new Game();
     // --- Add the sound toggle logic here ---
@@ -4843,3 +6858,4 @@ window.addEventListener('DOMContentLoaded', () => {
         updateSoundBtn();
     }
 });
+

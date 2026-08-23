@@ -20,7 +20,12 @@
 <body>
     <!-- Title Screen -->
     <div id="titleScreen" class="screen active">
+        <!-- Two layers so the clip can cross-dissolve into itself; src is set
+             from JS so the file is never fetched on mobile or reduced-motion. -->
+        <video id="titleVideoA" class="title-video" muted playsinline preload="auto" poster="images/title-still.jpg"></video>
+        <video id="titleVideoB" class="title-video" muted playsinline preload="auto" poster="images/title-still.jpg"></video>
         <div class="title-content">
+            <h1 class="game-title">Vitalis&nbsp;Arena</h1>
             <div class="press-start">Press Start or Any Key</div>
         </div>
     </div>
@@ -47,6 +52,8 @@
         <button id="achievementsBtn" class="achievements-button">🏆 Achievements</button>
         <button id="menuShopBtn" class="menu-shop-button">🛒 Shop</button>
         <button id="inventoryBtn" class="inventory-button">🎒 Inventory</button>
+        <button id="metaShopBtn" class="meta-shop-button">⭐ Upgrades</button>
+        <button id="endlessToggleBtn" class="endless-toggle-btn" style="display:none;">♾️ Endless: Off</button>
         <div class="character-grid">
             <div class="character-card" data-character="warrior">
                 <div class="character-icon">
@@ -135,6 +142,28 @@
     <!-- Game Screen -->
     <div id="gameScreen" class="screen">
         <canvas id="gameCanvas"></canvas>
+
+        <!-- Full-screen cinematic cards. These live outside #hud on purpose:
+             #hud is a short strip across the top, and a card centred inside it
+             lands on the health and XP bars instead of the middle of the arena. -->
+        <!-- Stage intro. The stage used to change with a toast that faded
+             out mid-fight; this holds the arena empty for a beat so the
+             player feels a chapter close and another open. -->
+        <div id="stageIntro" class="stage-intro">
+            <div id="stageIntroLabel" class="stage-intro-label">STAGE</div>
+            <div id="stageIntroNumber" class="stage-intro-number">2</div>
+            <div id="stageIntroSub" class="stage-intro-sub">The horde thickens</div>
+        </div>
+
+        <!-- Entrance card. Held for two seconds while the camera pushes to
+             the boss and time runs slow, so the arrival is an event rather
+             than another enemy appearing at the top of the screen. -->
+        <div id="bossEntrance" class="boss-entrance">
+            <div class="boss-entrance-rule"></div>
+            <div id="bossEntranceName" class="boss-entrance-name">THE COLOSSUS</div>
+            <div id="bossEntranceEpithet" class="boss-entrance-epithet">The Mountain That Walks</div>
+            <div class="boss-entrance-rule"></div>
+        </div>
         
         <!-- HUD -->
         <div id="hud">
@@ -235,6 +264,9 @@
                 </div>
             </div>
             
+            <!-- Weapons and passives owned this run -->
+            <div id="loadoutDisplay" class="loadout-display"></div>
+
             <!-- Ultimate Button -->
             <button id="ultimateButton" class="ultimate-button">
                 <span class="ultimate-icon">💥</span>
@@ -261,9 +293,18 @@
         <!-- Level Up Screen -->
         <div id="levelUpScreen" class="overlay">
             <div class="level-up-panel">
-                <h2>🎉 Level Up!</h2>
+                <h2 id="levelUpTitle">🎉 Level Up!</h2>
                 <p>Choose an upgrade:</p>
                 <div id="upgradeOptions" class="upgrade-grid"></div>
+            </div>
+        </div>
+
+        <!-- Treasure Chest Reward -->
+        <div id="chestPanel" class="overlay">
+            <div class="chest-panel">
+                <div id="chestAnimation" class="chest-animation">🎁</div>
+                <div id="chestResult" class="chest-result"></div>
+                <div id="chestHint" class="chest-hint">Press SPACE or click to continue</div>
             </div>
         </div>
 
@@ -320,6 +361,17 @@
             </div>
         </div>
         
+        <!-- Victory Screen -->
+        <div id="victoryScreen" class="overlay">
+            <div class="victory-panel">
+                <h2>🏆 Arena Cleared</h2>
+                <p class="victory-sub">You survived every stage. Endless Mode is now unlocked.</p>
+                <div id="victoryStats"></div>
+                <button id="victoryEndlessBtn" class="btn-primary">Enter Endless Mode</button>
+                <button id="victoryMenuBtn" class="btn-secondary">Back to Menu</button>
+            </div>
+        </div>
+
         <!-- Game Over Screen -->
         <div id="gameOverScreen" class="overlay">
             <div class="game-over-panel">
@@ -355,6 +407,8 @@
             <h2>🎒 Inventory</h2>
             <div class="inventory-header">
                 <div class="coins-display">🪙 <span id="inventoryCoins">0</span></div>
+                <button id="optimizeEquipmentBtn" class="optimize-button"
+                        title="Equip the best item you own in every slot">⚡ Optimize</button>
             </div>
             <div class="equipped-section">
                 <h3>Equipped Items</h3>
@@ -385,16 +439,57 @@
         </div>
     </div>
 
+    <!-- Permanent Upgrade Shop -->
+    <div id="metaShopPanel" class="overlay">
+        <div class="meta-shop-content">
+            <div class="shop-header">
+                <h2>⭐ Permanent Upgrades</h2>
+                <div class="shop-coins">
+                    <span id="metaShopCoins" class="coins-amount">0</span> 🪙
+                </div>
+            </div>
+            <p class="meta-shop-note">These carry over to every run.</p>
+            <div id="metaUpgradeGrid" class="meta-upgrade-grid"></div>
+            <div class="shop-footer">
+                <button id="resetSaveBtn" class="btn-danger">Reset Save Data</button>
+                <button id="closeMetaShopBtn" class="btn-primary">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Sound Toggle Button (top-right, global) -->
     <button id="soundToggleBtn" class="sound-toggle-btn" title="Toggle Sound" style="position:fixed;top:16px;right:16px;z-index:1000;display:flex;align-items:center;gap:4px;font-size:1.2em;">
         <span id="soundToggleIcon">🔊</span>
         <span id="soundToggleLabel">Sound On</span>
     </button>
 
+    <!-- Config and content data (plain scripts, loaded before the game) -->
+    <script src="src/config/GameConfig.js"></script>
+    <script src="src/core/Camera.js"></script>
+    <script src="src/data/Passives.js"></script>
+    <script src="src/data/Evolutions.js"></script>
+    <script src="src/data/Waves.js"></script>
+    <script src="src/data/Bosses.js"></script>
+    <script src="src/data/MetaUpgrades.js"></script>
+    <script src="src/entities/Chest.js"></script>
+    <script src="src/entities/CoinPickup.js"></script>
+    <script src="src/systems/DamageNumbers.js"></script>
+    <script src="src/systems/Effects.js"></script>
+    <script src="src/systems/TitleBackground.js"></script>
+
     <script src="script_v2.js"></script>
     <script>
-        // Register Service Worker for PWA
-        if ('serviceWorker' in navigator) {
+        // Register Service Worker for PWA.
+        //
+        // Deliberately skipped on third-party hosts. itch.io serves HTML5 games
+        // from a sandboxed iframe on a CDN subdomain, where registration is
+        // unreliable and the failure mode is severe: a player who caches a bad
+        // build has no way to clear it and never receives an update. Offline
+        // play is a nicety; a permanently broken build is not.
+        const SW_HOSTS = ['localhost', '127.0.0.1', 'ericcancode.github.io'];
+        const swAllowed = SW_HOSTS.includes(location.hostname);
+
+        if ('serviceWorker' in navigator && swAllowed) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('service-worker.js')
                     .then((registration) => {

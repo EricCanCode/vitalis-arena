@@ -5,7 +5,8 @@ A fast-paced roguelike survival game with 5 unique characters, equipment progres
 ## 🎮 Features
 
 - **5 Unique Characters**: Warrior, Ranger, Mage, Assassin, and Tank, each with unique abilities
-- **Equipment System**: 48 items across 5 rarity tiers with 5-star leveling system
+- **Local Co-op**: Two players on one keyboard, with a downed-and-revive system
+- **Equipment System**: 13 items across 5 rarity tiers with 5-star leveling system
 - **Stage Progression**: Battle through stages ending with challenging boss fights
 - **Achievement System**: Track your accomplishments and unlock rewards
 - **Mobile Support**: Touch controls with virtual joystick for mobile devices
@@ -64,10 +65,10 @@ The game includes full PWA support for mobile devices:
 ## 📦 Game Features
 
 - **5 Character Classes** with unique abilities
-- **Equipment System** with 48+ items
-- **5 Rarity Tiers**: Common, Rare, Epic, Legendary, Mythic
+- **Equipment System** with 13 items
+- **5 Rarity Tiers**: Common, Uncommon, Rare, Epic, Legendary
 - **Equipment Leveling**: Upgrade items up to 5 stars
-- **Boss Battles**: Epic fights every 90 seconds
+- **Boss Battles**: Three rotating boss archetypes, one every 90 seconds
 - **Shop System**: Purchase equipment with earned coins
 - **Achievement System**: Track your progress
 

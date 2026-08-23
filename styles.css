@@ -47,8 +47,21 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: url('images/Title screen.png') center center / cover no-repeat;
     position: relative;
+    overflow: hidden;
+    /* Painted base. Everything above it is a layer that may or may not load,
+       so this is what guarantees the screen is never blank or washed out. */
+    background-color: #0d1b24;
+    /* The still is the first frame of the title clip, so mobile, reduced-motion
+       and pre-play all show the same image the video settles into. The
+       gradients stay underneath as the paint of last resort. */
+    background-image:
+        url('images/title-still.jpg'),
+        radial-gradient(ellipse 70% 55% at 50% 72%, rgba(52, 232, 158, 0.22), transparent 70%),
+        radial-gradient(ellipse 90% 70% at 50% 40%, rgba(22, 33, 62, 0.9), #0a0f18 75%);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
 }
 
 #titleScreen::before {
@@ -110,8 +123,18 @@ body {
 #characterSelect {
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    padding: 40px;
+    /* `justify-content: center` on an overflowing flex column pushes content
+       past BOTH edges and makes the overflow unscrollable — that is what was
+       hiding the title above the top and the last cards below the bottom.
+       `safe center` centres only while the content fits; browsers without it
+       fall back to the flex-start declared above. */
+    justify-content: flex-start;
+    justify-content: safe center;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    /* Top and bottom padding keeps cards clear of the fixed button rows. */
+    padding: 76px 30px 88px;
     background: linear-gradient(135deg, #0f3443 0%, #34e89e 100%);
 }
 
@@ -132,10 +155,16 @@ body {
 
 .character-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 30px;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 22px;
     max-width: 1400px;
     width: 100%;
+    margin: 0 auto;
+    /* As a flex item the grid defaults to flex-shrink: 1, so the column
+       container squashed it to less than its content height. Its rows then
+       spilled outside the box WITHOUT contributing to scrollHeight, which is
+       what made the lower cards both cut off and impossible to scroll to. */
+    flex-shrink: 0;
 }
 
 .character-card {
@@ -594,7 +623,18 @@ body {
     border: 3px solid #ffd700;
     border-radius: 20px;
     padding: 40px;
-    max-width: 800px;
+    /* An explicit width is required, not just max-width: as a shrink-to-fit
+       flex item the panel had no definite width, so the auto-fit grid inside
+       collapsed to a single column and stacked the three cards vertically. */
+    width: min(860px, 94vw);
+    max-width: 860px;
+    /* Never taller than the screen. Without this the panel overflowed a short
+       window and, being centred, was clipped at the top as well as the bottom
+       with no way to scroll to either. */
+    max-height: 92vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
     text-align: center;
     box-shadow: 0 0 50px rgba(255, 215, 0, 0.3);
     animation: scaleIn 0.4s ease;
@@ -608,7 +648,9 @@ body {
 
 .upgrade-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    /* Always exactly three offers, so ask for three columns rather than
+       letting auto-fit guess from an indefinite width. */
+    grid-template-columns: repeat(3, 1fr);
     gap: 20px;
     margin-top: 30px;
 }
@@ -712,7 +754,7 @@ body {
 
 /* Achievements */
 .achievements-button {
-    position: absolute;
+    position: fixed;
     top: 20px;
     right: 20px;
     padding: 12px 24px;
@@ -734,7 +776,7 @@ body {
 }
 
 .menu-shop-button {
-    position: absolute;
+    position: fixed;
     top: 20px;
     left: 20px;
     padding: 12px 24px;
@@ -756,7 +798,7 @@ body {
 }
 
 .inventory-button {
-    position: absolute;
+    position: fixed;
     bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
@@ -2135,4 +2177,753 @@ body {
     top: 8px;
     right: 8px;
   }
+}
+
+/* ============================================================
+   NEW CONTENT SYSTEMS
+   Loadout HUD, chests, passives, permanent upgrades
+   ============================================================ */
+
+/* ---- Loadout HUD (weapons + passives owned this run) ---- */
+.loadout-display {
+    position: absolute;
+    top: 70px;
+    left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.loadout-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    max-width: 300px;
+}
+
+.loadout-item {
+    position: relative;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 9px;
+}
+
+.loadout-icon {
+    font-size: 1.15em;
+    line-height: 1;
+}
+
+.loadout-level {
+    position: absolute;
+    bottom: -5px;
+    right: -5px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 3px;
+    background: #1a1a2e;
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    border-radius: 8px;
+    font-size: 0.62em;
+    font-weight: bold;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.loadout-item.maxed .loadout-level {
+    background: #ff9800;
+    color: #000;
+}
+
+/* Evolved weapons get a persistent glow so they read as special */
+.loadout-item.evolved {
+    box-shadow: 0 0 12px 2px rgba(255, 215, 0, 0.75);
+    animation: evolvedPulse 1.8s ease-in-out infinite;
+}
+
+.loadout-item.evolved .loadout-level {
+    background: #ffd700;
+    color: #000;
+}
+
+@keyframes evolvedPulse {
+    0%, 100% { box-shadow: 0 0 10px 1px rgba(255, 215, 0, 0.6); }
+    50%      { box-shadow: 0 0 18px 4px rgba(255, 215, 0, 0.95); }
+}
+
+/* ---- Level-up option extras ---- */
+.upgrade-option {
+    position: relative;
+}
+
+.upgrade-key {
+    position: absolute;
+    top: 8px;
+    left: 10px;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    font-size: 0.72em;
+    font-weight: bold;
+    color: rgba(255, 255, 255, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.upgrade-detail {
+    margin-top: 10px;
+    font-size: 0.8em;
+    font-weight: bold;
+    color: #ffd43b;
+    letter-spacing: 0.02em;
+}
+
+/* ---- Treasure chest reward ---- */
+.chest-panel {
+    background: linear-gradient(135deg, #2d2410 0%, #1a1a2e 100%);
+    border: 3px solid #ffd700;
+    border-radius: 20px;
+    padding: 45px 60px;
+    min-width: 380px;
+    max-width: 560px;
+    text-align: center;
+    box-shadow: 0 0 60px rgba(255, 215, 0, 0.35);
+    animation: scaleIn 0.35s ease;
+}
+
+.chest-animation {
+    font-size: 5em;
+    line-height: 1;
+    margin-bottom: 10px;
+}
+
+.chest-animation.shaking {
+    animation: chestShake 0.14s linear infinite;
+}
+
+.chest-animation.burst {
+    animation: chestBurst 0.55s ease-out;
+}
+
+@keyframes chestShake {
+    0%   { transform: translate(0, 0) rotate(0deg); }
+    25%  { transform: translate(-4px, 1px) rotate(-4deg); }
+    50%  { transform: translate(3px, -2px) rotate(3deg); }
+    75%  { transform: translate(-2px, 2px) rotate(-2deg); }
+    100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+@keyframes chestBurst {
+    0%   { transform: scale(1);   filter: brightness(1); }
+    35%  { transform: scale(1.5); filter: brightness(3) drop-shadow(0 0 32px #fff); }
+    100% { transform: scale(1);   filter: brightness(1); }
+}
+
+.chest-result {
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.chest-result.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.chest-evolved {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: #ffd700;
+    letter-spacing: 0.06em;
+    margin-bottom: 14px;
+    text-shadow: 0 0 18px rgba(255, 215, 0, 0.85);
+    animation: evolvedPulse 1.4s ease-in-out infinite;
+}
+
+.chest-reward-icon {
+    font-size: 3em;
+    margin-bottom: 8px;
+}
+
+.chest-reward-name {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 8px;
+}
+
+.chest-reward-desc {
+    font-size: 0.95em;
+    color: rgba(255, 255, 255, 0.8);
+    line-height: 1.45;
+}
+
+.chest-hint {
+    margin-top: 26px;
+    font-size: 0.85em;
+    color: rgba(255, 255, 255, 0.55);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.chest-hint.visible {
+    opacity: 1;
+}
+
+/* ---- Permanent upgrade shop ---- */
+.meta-shop-button {
+    /* Bottom-left: top-centre is taken by the co-op mode toggle. */
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #845ef7 0%, #5f3dc4 100%);
+    color: #fff;
+    border: none;
+    border-radius: 25px;
+    font-size: 1em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(132, 94, 247, 0.35);
+    z-index: 10;
+}
+
+.meta-shop-button:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgba(132, 94, 247, 0.6);
+}
+
+.meta-shop-content {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-radius: 20px;
+    padding: 30px;
+    max-width: 1000px;
+    width: 92%;
+    max-height: 88vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    animation: scaleIn 0.3s ease;
+}
+
+.meta-shop-note {
+    margin: 0 0 20px 0;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.9em;
+}
+
+.meta-upgrade-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.meta-item {
+    background: rgba(255, 255, 255, 0.06);
+    border: 2px solid rgba(132, 94, 247, 0.45);
+    border-radius: 14px;
+    padding: 18px;
+    text-align: center;
+}
+
+.meta-item.maxed {
+    border-color: rgba(255, 215, 0, 0.7);
+    background: rgba(255, 215, 0, 0.08);
+}
+
+.meta-item-icon   { font-size: 2.1em; margin-bottom: 8px; }
+.meta-item-name   { font-size: 1.1em; font-weight: bold; color: #fff; margin-bottom: 6px; }
+.meta-item-desc   { font-size: 0.82em; color: rgba(255, 255, 255, 0.65); margin-bottom: 10px; min-height: 2.4em; }
+.meta-item-level  { font-size: 0.85em; color: #b197fc; font-weight: bold; }
+.meta-item-current{ font-size: 0.85em; color: #8ce99a; margin-bottom: 12px; min-height: 1.2em; }
+
+.meta-buy-btn {
+    width: 100%;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #845ef7 0%, #5f3dc4 100%);
+    color: #fff;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    pointer-events: all;
+}
+
+.meta-buy-btn:hover:not(.disabled) {
+    transform: scale(1.04);
+    box-shadow: 0 4px 14px rgba(132, 94, 247, 0.5);
+}
+
+.meta-buy-btn.disabled {
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.4);
+    cursor: not-allowed;
+}
+
+.btn-danger {
+    padding: 15px 40px;
+    margin: 10px;
+    border: none;
+    border-radius: 10px;
+    font-size: 1.1em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    pointer-events: all;
+    background: linear-gradient(135deg, #c92a2a 0%, #6b1414 100%);
+    color: #fff;
+}
+
+.btn-danger:hover {
+    transform: scale(1.05);
+    box-shadow: 0 5px 20px rgba(201, 42, 42, 0.5);
+}
+
+/* ---- Run summary extras ---- */
+.final-stat-wide {
+    font-size: 0.85em;
+    text-align: left;
+    line-height: 1.45;
+}
+
+.final-stat-total {
+    background: rgba(255, 215, 0, 0.15);
+    border: 1px solid rgba(255, 215, 0, 0.45);
+    font-weight: bold;
+    color: #ffd700;
+}
+
+/* Keep the HUD loadout out of the way on small screens */
+@media (max-width: 900px), (max-height: 500px) {
+    .loadout-display { top: 60px; left: 10px; gap: 4px; }
+    .loadout-item    { width: 30px; height: 30px; }
+    .loadout-icon    { font-size: 0.95em; }
+    .loadout-row     { max-width: 200px; }
+}
+
+/* ---- Equipment optimiser button ---- */
+.inventory-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.optimize-button {
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #34e89e 0%, #0f3443 100%);
+    color: #fff;
+    border: none;
+    border-radius: 20px;
+    font-size: 0.95em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    pointer-events: all;
+    box-shadow: 0 4px 14px rgba(52, 232, 158, 0.28);
+}
+
+.optimize-button:hover {
+    transform: scale(1.06);
+    box-shadow: 0 6px 20px rgba(52, 232, 158, 0.5);
+}
+
+/* ------------------------------------------------------------------
+   Character select on short windows
+   Five tall cards do not fit a laptop-height window. Compact the
+   chrome and the cards so the grid fits without relying on scrolling,
+   while the scrolling above guarantees nothing is ever unreachable.
+   ------------------------------------------------------------------ */
+@media (max-height: 900px) {
+    #characterSelect            { padding: 68px 24px 80px; }
+    #characterSelect h1         { font-size: 2.4em; margin-bottom: 2px; }
+    .game-subtitle              { font-size: 1.15em; margin-bottom: 14px; }
+    .coop-toggle-container      { margin-bottom: 12px; }
+    .character-grid             { gap: 16px; }
+    .character-card             { padding: 18px 16px; }
+    .character-icon             { margin-bottom: 10px; }
+    .character-sprite           { width: 82px; height: 82px; padding: 6px; border-width: 3px; }
+    .character-card h2          { font-size: 1.25em; margin-bottom: 6px; }
+    .character-ability          { font-size: 0.9em; }
+    .character-desc             { font-size: 0.82em; margin-bottom: 10px; min-height: 0; }
+    .character-stats            { font-size: 0.78em; gap: 3px; }
+}
+
+@media (max-height: 680px) {
+    #characterSelect            { padding: 60px 18px 74px; }
+    #characterSelect h1         { font-size: 1.9em; }
+    .game-subtitle              { font-size: 1em; margin-bottom: 10px; }
+    .character-grid             { gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    .character-card             { padding: 14px 12px; }
+    .character-sprite           { width: 64px; height: 64px; padding: 4px; }
+    .character-card h2          { font-size: 1.1em; }
+    .character-ability          { font-size: 0.84em; }
+    .character-desc             { font-size: 0.76em; margin-bottom: 8px; }
+    .character-stats            { font-size: 0.72em; }
+}
+
+/* Hovering must not lift a card into the fixed button rows. */
+@media (max-height: 900px) {
+    .character-card:hover { transform: translateY(-4px) scale(1.02); }
+}
+
+/* There are exactly five heroes. On a short but reasonably wide window, force
+   them onto one row so the whole roster is visible without scrolling — the
+   scrolling above still covers windows too narrow for that to fit. */
+@media (max-height: 760px) and (min-width: 860px) {
+    .character-grid { grid-template-columns: repeat(5, 1fr); gap: 12px; }
+    .character-card { padding: 14px 10px; }
+    .character-desc { font-size: 0.74em; }
+}
+
+/* ------------------------------------------------------------------
+   Short-landscape corrections
+   ------------------------------------------------------------------ */
+
+/* The shared `.achievements-button, .menu-shop-button { left: 10px }` rule in
+   the short-landscape block also lands on Achievements, which already carries
+   `right: 20px`. An element with BOTH left and right set stretches to span the
+   gap — that is why the Achievements pill filled the whole top bar. Each
+   button gets only the edge it belongs to. */
+@media (max-height: 500px) and (orientation: landscape) {
+    .achievements-button {
+        left: auto;
+        right: 10px;
+    }
+}
+
+/* At this height the fixed button rows sit over the cards. Reclaim the space
+   by dropping the subtitle and tightening the header, so the roster ends above
+   them instead of underneath. */
+@media (max-height: 560px) {
+    #characterSelect        { padding: 52px 18px 64px; }
+    #characterSelect h1     { font-size: 1.6em; margin-bottom: 2px; }
+    .game-subtitle          { display: none; }
+    .coop-toggle-container  { margin-bottom: 8px; }
+    .character-grid         { gap: 10px; }
+    .character-card         { padding: 12px 9px; }
+    .character-sprite       { width: 56px; height: 56px; padding: 4px; border-width: 2px; }
+    .character-icon         { margin-bottom: 7px; }
+    .character-card h2      { font-size: 1em; margin-bottom: 4px; }
+    .character-ability      { font-size: 0.78em; margin-bottom: 3px; }
+    .character-desc         { font-size: 0.7em; margin-bottom: 6px; }
+    .character-stats        { font-size: 0.68em; gap: 2px; }
+}
+
+/* The global sound toggle is pinned top-right at z-index 1000, so Achievements
+   sat underneath it and could not be clicked. Stack it below rather than
+   offsetting sideways — the toggle's label changes width ("Sound On" /
+   "Sound Off"), so a horizontal offset would be a guess. */
+.achievements-button {
+    top: 68px;
+    right: 16px;
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+    .achievements-button {
+        left: auto;
+        right: 10px;
+        /* Must clear the sound toggle, which is ~45px tall from top: 16px. */
+        top: 70px;
+    }
+}
+
+/* ------------------------------------------------------------------
+   Centred panels must never exceed the screen
+   A panel taller than the viewport inside a centred flex overlay is
+   clipped at BOTH ends with no way to scroll to either. The shop,
+   inventory, achievements and upgrade panels already guard against
+   this; these four did not.
+   ------------------------------------------------------------------ */
+.chest-panel,
+.game-over-panel,
+.pause-panel,
+.stage-complete-panel {
+    max-height: 92vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Level-up on short windows: shrink the chrome before the cards, so the
+   three offers stay side by side and readable. */
+@media (max-height: 760px) {
+    .level-up-panel      { padding: 24px 22px; }
+    .level-up-panel h2   { font-size: 1.8em; margin-bottom: 10px; }
+    .level-up-panel p    { font-size: 0.95em; margin: 0; }
+    .upgrade-grid        { gap: 14px; margin-top: 16px; }
+    .upgrade-option      { padding: 16px 12px; }
+    .upgrade-icon        { font-size: 1.9em; margin-bottom: 6px; }
+    .upgrade-name        { font-size: 1em; margin-bottom: 6px; }
+    .upgrade-desc        { font-size: 0.8em; }
+    .upgrade-detail      { margin-top: 7px; font-size: 0.74em; }
+    .upgrade-key         { top: 6px; left: 7px; width: 18px; height: 18px; font-size: 0.66em; }
+}
+
+@media (max-height: 560px) {
+    .level-up-panel      { padding: 16px 16px; }
+    .level-up-panel h2   { font-size: 1.4em; margin-bottom: 6px; }
+    .level-up-panel p    { font-size: 0.85em; }
+    .upgrade-grid        { gap: 10px; margin-top: 10px; }
+    .upgrade-option      { padding: 12px 9px; }
+    .upgrade-icon        { font-size: 1.5em; margin-bottom: 4px; }
+    .upgrade-name        { font-size: 0.9em; margin-bottom: 4px; }
+    .upgrade-desc        { font-size: 0.72em; }
+    .upgrade-detail      { margin-top: 5px; font-size: 0.68em; }
+}
+
+/* Only collapse to a single column when three genuinely cannot fit. */
+@media (max-width: 640px) {
+    .upgrade-grid { grid-template-columns: 1fr; }
+}
+
+/* ------------------------------------------------------------------
+   Animated title backdrop
+   ------------------------------------------------------------------ */
+.title-video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    /* Both layers start hidden; TitleBackground fades the active one in, so a
+       missing or blocked video simply leaves the painted base showing. */
+    opacity: 0;
+    transition: opacity 0.9s ease-in-out;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.title-video.is-visible {
+    opacity: 1;
+}
+
+/* The overlay and content must sit above both video layers. */
+#titleScreen::before {
+    z-index: 1;
+}
+
+.title-content {
+    z-index: 2;
+}
+
+/* The gold lettering used to be baked into the old artwork. As DOM text it
+   stays sharp at any resolution and can be restyled without new art. */
+.game-title {
+    font-size: clamp(2.4rem, 8vw, 5.5rem);
+    line-height: 1;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.35em;
+    background: linear-gradient(180deg, #ffe89a 0%, #ffd700 45%, #b8860b 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: #ffd700;   /* fallback where background-clip: text is unsupported */
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.85))
+            drop-shadow(0 0 26px rgba(255, 215, 0, 0.35));
+}
+
+/* Honour a reduced-motion preference: the backdrop simply stays still. */
+@media (prefers-reduced-motion: reduce) {
+    .title-video {
+        display: none;
+    }
+}
+
+/* ------------------------------------------------------------------
+   Victory — the campaign now ends
+   ------------------------------------------------------------------ */
+.victory-panel {
+    background: linear-gradient(135deg, #2d2410 0%, #16213e 100%);
+    border: 3px solid #ffd700;
+    border-radius: 20px;
+    padding: 40px;
+    max-width: 640px;
+    width: 92%;
+    max-height: 92vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    text-align: center;
+    box-shadow: 0 0 60px rgba(255, 215, 0, 0.35);
+    animation: scaleIn 0.4s ease;
+}
+
+.victory-panel h2 {
+    font-size: 2.4em;
+    margin: 0 0 8px 0;
+    color: #ffd700;
+    text-shadow: 0 0 24px rgba(255, 215, 0, 0.5);
+}
+
+.victory-sub {
+    color: rgba(255, 255, 255, 0.75);
+    margin: 0 0 24px 0;
+    font-size: 0.98em;
+}
+
+#victoryStats {
+    margin-bottom: 26px;
+    font-size: 1.05em;
+}
+
+.endless-toggle-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #495057 0%, #212529 100%);
+    color: #fff;
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    border-radius: 25px;
+    font-size: 1em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    pointer-events: all;
+    z-index: 10;
+}
+
+.endless-toggle-btn.active {
+    background: linear-gradient(135deg, #ffd700 0%, #b8860b 100%);
+    border-color: #ffd700;
+    color: #1a1a2e;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.45);
+}
+
+.endless-toggle-btn:hover { transform: scale(1.06); }
+
+@media (max-height: 560px) {
+    .victory-panel   { padding: 22px; }
+    .victory-panel h2 { font-size: 1.6em; }
+    #victoryStats     { font-size: 0.9em; margin-bottom: 16px; }
+}
+
+/* ------------------------------------------------------------------
+   Boss entrance card
+   ------------------------------------------------------------------
+   The boss used to appear at the top of the screen mid-horde with no
+   more ceremony than a spitter. This is the two seconds that turns a
+   spawn into an arrival: field already swept, time running slow, camera
+   pushed onto the boss, and its name held on screen. */
+.boss-entrance {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.94);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 0 24px;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 60;
+    transition: opacity 0.45s ease, transform 0.45s ease;
+}
+
+.boss-entrance.active {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+.boss-entrance-rule {
+    width: min(420px, 70vw);
+    height: 2px;
+    background: linear-gradient(90deg,
+        transparent, rgba(255, 143, 60, 0.9) 30%,
+        rgba(255, 143, 60, 0.9) 70%, transparent);
+}
+
+.boss-entrance-name {
+    font-size: clamp(1.9rem, 6.5vw, 3.6rem);
+    font-weight: 900;
+    letter-spacing: 0.1em;
+    line-height: 1;
+    color: #ffe0b8;
+    text-shadow: 0 3px 0 rgba(0, 0, 0, 0.85),
+                 0 0 34px rgba(255, 143, 60, 0.55);
+}
+
+.boss-entrance-epithet {
+    font-size: clamp(0.78rem, 2.3vw, 1.05rem);
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+    color: rgba(255, 197, 140, 0.82);
+}
+
+/* The card is decorative; readers who asked for less motion still get it,
+   just without the scale-in. */
+@media (prefers-reduced-motion: reduce) {
+    .boss-entrance { transition: opacity 0.2s ease; transform: translate(-50%, -50%); }
+    .boss-entrance.active { transform: translate(-50%, -50%); }
+}
+
+/* ------------------------------------------------------------------
+   Stage intro
+   ------------------------------------------------------------------
+   Paired with a short spawn-free hold, this is the breath between
+   stages that the old fading toast never gave. */
+.stage-intro {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 60;
+    background: radial-gradient(ellipse at center,
+        rgba(5, 9, 14, 0.55) 0%, rgba(5, 9, 14, 0.88) 100%);
+    transition: opacity 0.5s ease;
+}
+
+.stage-intro.active { opacity: 1; }
+
+.stage-intro-label {
+    font-size: clamp(0.72rem, 2.1vw, 0.95rem);
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: rgba(140, 200, 220, 0.75);
+    margin-left: 0.42em;   /* optical: cancel the trailing letter-space */
+}
+
+.stage-intro-number {
+    font-size: clamp(4rem, 16vw, 9rem);
+    font-weight: 900;
+    line-height: 0.9;
+    color: #eaf4f8;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 4px 0 rgba(0, 0, 0, 0.8),
+                 0 0 46px rgba(61, 220, 164, 0.4);
+}
+
+.stage-intro-sub {
+    margin-top: 10px;
+    font-size: clamp(0.8rem, 2.4vw, 1.05rem);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(61, 220, 164, 0.85);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .stage-intro { transition: opacity 0.2s ease; }
 }
