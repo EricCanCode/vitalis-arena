@@ -107,6 +107,30 @@ const GAME_CONFIG = {
         bossIntervalSeconds: 90
     },
 
+    boss: {
+        // Boss HP rode entirely on the shared enemy time-multiplier
+        // (1 + healthGrowthPerMinute * minutes). At the stage-1 boss that is
+        // only ~1.27x, because the boss arrives 90 seconds into the run.
+        //
+        // Player damage over the same stretch does not grow with time, it grows
+        // with LEVEL, and the level curve is steepest at the start: the player
+        // meets the first boss around level 10, already several weapon upgrades
+        // deep. Measured against the real game, the stage-1 Warden (635 HP) died
+        // in 2.3s on a good upgrade roll — it read as a cutscene, not a fight.
+        //
+        // So the correction has to be front-loaded and then get out of the way:
+        // stage 1 needs roughly 3x, and by stage 3 the time multiplier has
+        // caught up on its own and needs almost nothing. firstStageBonus is the
+        // extra multiplier at stage 1; decay is how fast it falls off per stage.
+        //
+        //   stage 1: 3.00x   stage 2: 1.40x   stage 3: 1.08x   stage 4+: ~1.0x
+        //
+        // These are a starting point sized from one instrumented run, not a
+        // tuned curve. They want playtesting.
+        firstStageBonus: 2.0,
+        decay: 0.2
+    },
+
     weapons: {
         // Special weapons run levels 1-8; every 2 levels promotes a tier
         // (Common -> Rare -> Epic -> Legendary). Level 8 unlocks evolution.

@@ -1183,6 +1183,11 @@ class Game {
         // Keep coins persistent - don't reset
         this.bossActive = false;
         this.bossWarning = false;
+        // A run that ends mid-boss-fight (death, or quit to menu) never reaches
+        // defeatBoss(), which is the only place this is cleared. Left set, it
+        // keeps the previous run's boss alive as the health-bar and camera
+        // target until the next boss happens to overwrite it.
+        this.currentBoss = null;
         this.pendingEquipment = null;
         
         // Spawn timers are created on demand by the wave director.
@@ -5846,6 +5851,12 @@ class Enemy {
                 ? getBossForStage(this.game.currentStage)
                 : null;
             this.archetype = archetype;
+
+            // Front-loaded HP correction: see GAME_CONFIG.boss for why the
+            // first boss needs it and the later ones do not.
+            const bcfg = GAME_CONFIG.boss;
+            const stage = Math.max(1, this.game.currentStage);
+            this.maxHealth *= 1 + bcfg.firstStageBonus * Math.pow(bcfg.decay, stage - 1);
 
             this.attackCooldown = 2;   // brief entry delay before the first attack
             this.attackPattern = 0;
