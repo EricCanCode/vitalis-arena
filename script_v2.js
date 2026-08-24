@@ -1352,16 +1352,7 @@ class Game {
                 
                 // Check collision with player 1 (skip if downed)
                 if (!this.player.downed && this.checkCollision(enemy, this.player)) {
-                    this.player.takeDamage(enemy.damage);
-                    
-                    const knockbackPower = this.player.type === 'warrior' ? 200 : 100;
-                    const dx = enemy.x - this.player.x;
-                    const dy = enemy.y - this.player.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist > 0) {
-                        enemy.x += (dx / dist) * knockbackPower * deltaTime;
-                        enemy.y += (dy / dist) * knockbackPower * deltaTime;
-                    }
+                    this.resolveContact(enemy, this.player, deltaTime);
                     
                     // In co-op: game over only when BOTH players are truly dead (not just downed)
                     if (this.player.health <= 0 && !this.player.downed) {
@@ -1374,16 +1365,7 @@ class Game {
                 
                 // Check collision with player 2 (co-op, skip if downed)
                 if (this.player2 && !this.player2.downed && this.player2.health > 0 && this.checkCollision(enemy, this.player2)) {
-                    this.player2.takeDamage(enemy.damage);
-                    
-                    const knockbackPower = this.player2.type === 'warrior' ? 200 : 100;
-                    const dx = enemy.x - this.player2.x;
-                    const dy = enemy.y - this.player2.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist > 0) {
-                        enemy.x += (dx / dist) * knockbackPower * deltaTime;
-                        enemy.y += (dy / dist) * knockbackPower * deltaTime;
-                    }
+                    this.resolveContact(enemy, this.player2, deltaTime);
                     
                     if (this.player2.health <= 0 && !this.player2.downed && this.player.health <= 0 && !this.player.downed) {
                         this.gameOver();
@@ -3096,6 +3078,29 @@ class Game {
         }
     }
     
+    // An enemy is touching a player. Both players resolve it the same way, and
+    // the class decides how hard the contact answers back: takeDamage owns the
+    // player's i-frames, so this runs every frame of contact but only actually
+    // hurts once per i-frame window.
+    resolveContact(enemy, player, deltaTime) {
+        player.takeDamage(enemy.damage);
+
+        // Per second, not per frame, so frame rate never changes the total.
+        // Routed through the dot channel for the same reason the aura weapons
+        // are: batched damage numbers and no machine-gunned hit sound.
+        if (player.contactDamage > 0 && enemy.health > 0) {
+            enemy.takeDamage(player.projectileDamage * player.contactDamage * deltaTime, { dot: true });
+        }
+
+        const dx = enemy.x - player.x;
+        const dy = enemy.y - player.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 0) {
+            enemy.x += (dx / dist) * player.contactKnockback * deltaTime;
+            enemy.y += (dy / dist) * player.contactKnockback * deltaTime;
+        }
+    }
+
     checkCollision(obj1, obj2) {
         const dx = obj1.x - obj2.x;
         const dy = obj1.y - obj2.y;
@@ -4275,10 +4280,16 @@ class Player {
                 color: '#ffd43b',
                 icon: '🗡️'
             },
+            // The tank was strictly dominated by the warrior: 150 flat HP is
+            // LESS effective HP than the warrior's 120 behind 25% armor, and it
+            // paid for that with half the damage and half the speed. Armor is
+            // what the slowness is supposed to buy, so the tank gets the most
+            // of it in the game (150/0.55 = 273 EHP, ~1.7x the warrior).
             tank: {
                 maxHealth: 150,
                 speed: 120,
-                damage: 8,
+                damage: 12,
+                armor: 0.45,
                 color: '#74c0fc',
                 icon: '🛡️'
             }
@@ -4295,9 +4306,17 @@ class Player {
         this.color = stat.color;
         this.icon = stat.icon;
         this.armor = stat.armor || 0;
-        
+
+        // Contact response, read by Game.resolveContact when an enemy touches
+        // this player. Multiple of projectileDamage per second; 0 = no answer.
+        this.contactDamage = 0;
+        this.contactKnockback = 100;
+
         // Character-specific modifiers
         switch(this.type) {
+            case 'warrior':
+                this.contactKnockback = 200;
+                break;
             case 'ranger':
                 this.projectileCount = 3; // Multi-shot
                 break;
@@ -4306,6 +4325,15 @@ class Player {
                 break;
             case 'assassin':
                 this.attackSpeed = 1.5; // Faster attacks
+                break;
+            case 'tank':
+                // The tank was the only class with no perk at all, which is why
+                // it read as a worse warrior. This is the one that fits: it is
+                // the only class that wants to be INSIDE the horde. Standing in
+                // a crowd becomes offence, so the low weapon damage stops being
+                // a death spiral without inflating the damage number itself.
+                this.contactDamage = 0.8;
+                this.contactKnockback = 420;
                 break;
         }
     }
