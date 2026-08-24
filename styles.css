@@ -499,10 +499,13 @@ body {
 }
 
 /* Boss Health Bar */
+/* Measured, not guessed: .hud-top is a 135px strip, so top:20px put the boss
+   bar straight through the health and level readouts. Clamped rather than
+   fixed so it still clears the strip when the HUD scales on other viewports. */
 .boss-health-container {
     display: none;
     position: absolute;
-    top: 20px;
+    top: clamp(142px, 20vh, 190px);
     left: 50%;
     transform: translateX(-50%);
     z-index: 50;
@@ -511,6 +514,86 @@ body {
 
 .boss-health-container.active {
     display: block;
+}
+
+/* The bar is the only place the boss fight states its own terms: who it is and
+   how far in you are. Width is viewport-relative so it reads as an arena-wide
+   bar on a phone and on a desktop alike. */
+.boss-hp-name {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.5em;
+    margin-bottom: 5px;
+    font-size: clamp(13px, 1.5vw, 17px);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #ffd6d6;
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+    white-space: nowrap;
+}
+
+.boss-hp-epithet {
+    font-size: 0.72em;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: none;
+    color: rgba(255, 214, 214, 0.62);
+}
+
+.boss-hp-track {
+    position: relative;
+    width: min(56vw, 620px);
+    height: 16px;
+    background: rgba(10, 6, 14, 0.85);
+    border: 2px solid rgba(255, 107, 107, 0.55);
+    border-radius: 3px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
+}
+
+/* Two fills: the chip trails the real one, so a big hit leaves a pale streak
+   that drains a moment later. It is how the player sees the SIZE of a hit
+   rather than just the new total. */
+.boss-hp-chip,
+.boss-hp-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    height: 100%;
+    width: 100%;
+}
+
+.boss-hp-chip {
+    background: rgba(255, 220, 220, 0.5);
+    transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.15s;
+}
+
+.boss-hp-fill {
+    background: linear-gradient(180deg, #ff8a8a 0%, #e03131 55%, #8b0000 100%);
+    transition: width 0.12s linear;
+}
+
+.boss-hp-track.enraged {
+    border-color: rgba(255, 212, 59, 0.85);
+}
+
+.boss-hp-track.enraged .boss-hp-fill {
+    background: linear-gradient(180deg, #ffd43b 0%, #ff8a3d 55%, #c92a2a 100%);
+}
+
+.boss-hp-value {
+    margin-top: 4px;
+    text-align: center;
+    font-size: clamp(10px, 1.1vw, 13px);
+    font-variant-numeric: tabular-nums;
+    color: rgba(255, 255, 255, 0.72);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .boss-hp-chip,
+    .boss-hp-fill { transition: none; }
 }
 
 /* Overlay Screens */

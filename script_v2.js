@@ -1393,7 +1393,17 @@ class Game {
                     }
 
                     this.audioManager.playSound('enemy-death');
-                    this.spawnXP(enemy.x, enemy.y, enemy.xpValue);
+                    // A boss is worth a level, and a level's worth of XP in a
+                    // single gem reads as one pickup. Scatter it so the payout
+                    // is something you collect rather than something you step
+                    // on without noticing.
+                    if (enemy.type === 'boss') {
+                        this.spawnXPBurst(enemy.x, enemy.y, enemy.xpValue, 14, 140);
+                    } else if (enemy.type === 'elite') {
+                        this.spawnXPBurst(enemy.x, enemy.y, enemy.xpValue, 4, 70);
+                    } else {
+                        this.spawnXP(enemy.x, enemy.y, enemy.xpValue);
+                    }
                     this.player.addKill(enemy);
                     
                     // Health is a comeback mechanic, not income: it only drops
@@ -1827,6 +1837,14 @@ class Game {
     spawnBoss() {
         this.bossActive = true;
         document.getElementById('bossHealthBar').classList.add('active');
+        const bArch = (typeof getBossForStage === 'function') ? getBossForStage(this.currentStage) : null;
+        const nameEl = document.getElementById('bossHpName');
+        const epEl = document.getElementById('bossHpEpithet');
+        if (nameEl) nameEl.textContent = bArch?.name || 'The Boss';
+        if (epEl) epEl.textContent = bArch?.epithet || '';
+        document.getElementById('bossHpChip')?.classList.remove('instant');
+        this._bossHpTrack = document.querySelector('.boss-hp-track');
+        this._bossHpTrack?.classList.remove('enraged');
         
         // Start boss music
         this.audioManager.playMusic('boss-theme');
@@ -2624,7 +2642,13 @@ class Game {
         // Must reset transform temporarily to ensure the entire buffer is wiped
         this.ctx.save();
         this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-        this.ctx.fillStyle = '#1a1a2e';
+        // A flat slab reads as "no background". A vertical grade alone is
+        // enough to give the arena a floor and a horizon.
+        const bgGrad = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
+        bgGrad.addColorStop(0, '#171429');
+        bgGrad.addColorStop(0.55, '#1a1a2e');
+        bgGrad.addColorStop(1, '#221a33');
+        this.ctx.fillStyle = bgGrad;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         this.ctx.restore();
         
@@ -2643,6 +2667,7 @@ class Game {
         
         // Draw grid (skip on mobile for performance)
         if (!this.performanceMode) {
+            this.drawParallax();
             this.drawGrid();
         }
         // The world boundary is drawn on every device — without it the player
@@ -2717,6 +2742,7 @@ class Game {
         // --- Screen space from here down ---
         // These are positioned against the viewport, not the world, so they must
         // be drawn after the camera transform is restored or they scroll away.
+        this.drawVignette();
         this.drawAchievementNotifications();
         this.drawLowHealthWarning();
         if (this.showDebug) this.drawDebugOverlay();
@@ -2817,6 +2843,72 @@ class Game {
         return 1 - Math.pow(1 - t, 3);
     }
     
+    // A far layer of motes that slides slower than the world. Without it the
+    // arena floor is uniform in every direction, so moving through it gives no
+    // sense of travel — the grid alone is too regular to read as motion.
+    //
+    // Positions come from a hash of the tile coordinates rather than a stored
+    // array, so the field is effectively infinite, stable frame to frame, and
+    // costs no memory.
+    drawParallax() {
+        const ctx = this.ctx;
+        const view = this.camera.getBounds();
+        const TILE = 400;
+        const PER_TILE = 3;
+        // Below 1 the layer lags the camera, which is what sells the depth.
+        const depth = 0.55;
+
+        // Shift the sampled region so the motes trail the camera, then draw
+        // them back in world space at the same shift.
+        const ox = this.camera.x * (1 - depth);
+        const oy = this.camera.y * (1 - depth);
+
+        const left = view.left - ox, right = view.right - ox;
+        const top = view.top - oy, bottom = view.bottom - oy;
+
+        ctx.save();
+        ctx.translate(ox, oy);
+        for (let tx = Math.floor(left / TILE); tx <= Math.floor(right / TILE); tx++) {
+            for (let ty = Math.floor(top / TILE); ty <= Math.floor(bottom / TILE); ty++) {
+                for (let k = 0; k < PER_TILE; k++) {
+                    // Cheap integer hash -> three stable pseudo-randoms.
+                    let hsh = (tx * 73856093) ^ (ty * 19349663) ^ (k * 83492791);
+                    hsh = (hsh ^ (hsh >>> 13)) >>> 0;
+                    const rx = (hsh % 1000) / 1000;
+                    const ry = ((hsh >>> 10) % 1000) / 1000;
+                    const rr = ((hsh >>> 20) % 1000) / 1000;
+
+                    const x = tx * TILE + rx * TILE;
+                    const y = ty * TILE + ry * TILE;
+                    const r = 1 + rr * 2.4;
+                    // Slow breathing so the field is never completely static.
+                    const tw = 0.35 + 0.3 * Math.sin(this.gameTime * 0.6 + rr * 9);
+
+                    ctx.fillStyle = `rgba(168, 148, 255, ${(tw * 0.5).toFixed(3)})`;
+                    ctx.beginPath();
+                    ctx.arc(x, y, r, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+        ctx.restore();
+    }
+
+    // Darkens the corners so the action sits in a pool of light. It is the
+    // cheapest way to stop a flat field from reading as empty space.
+    drawVignette() {
+        const ctx = this.ctx;
+        const w = this.canvas.width, h = this.canvas.height;
+        const grad = ctx.createRadialGradient(
+            w / 2, h / 2, Math.min(w, h) * 0.42,
+            w / 2, h / 2, Math.max(w, h) * 0.78
+        );
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(1, 'rgba(0,0,0,0.55)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+    }
+
     // World-space background. Only the lines inside the camera view are drawn,
     // so the cost is bound to the viewport, not to the size of the world.
     drawGrid() {
@@ -2827,7 +2919,12 @@ class Game {
         const firstX = Math.floor(view.left / gridSize) * gridSize;
         const firstY = Math.floor(view.top / gridSize) * gridSize;
 
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        // Two passes: a faint mesh, then a brighter line every fourth cell.
+        // A single uniform grid gives the eye nothing to fix on, so movement
+        // across it is almost invisible.
+        const MAJOR = gridSize * 4;
+
+        ctx.strokeStyle = 'rgba(180, 165, 255, 0.045)';
         ctx.lineWidth = 1;
         ctx.beginPath();
         for (let x = firstX; x <= view.right + gridSize; x += gridSize) {
@@ -2839,6 +2936,20 @@ class Game {
             ctx.lineTo(view.right, y);
         }
         ctx.stroke();   // one stroke for the whole grid instead of one per line
+
+        const majX = Math.floor(view.left / MAJOR) * MAJOR;
+        const majY = Math.floor(view.top / MAJOR) * MAJOR;
+        ctx.strokeStyle = 'rgba(180, 165, 255, 0.13)';
+        ctx.beginPath();
+        for (let x = majX; x <= view.right + MAJOR; x += MAJOR) {
+            ctx.moveTo(x, view.top);
+            ctx.lineTo(x, view.bottom);
+        }
+        for (let y = majY; y <= view.bottom + MAJOR; y += MAJOR) {
+            ctx.moveTo(view.left, y);
+            ctx.lineTo(view.right, y);
+        }
+        ctx.stroke();
     }
 
     // With a scrolling world the screen edge is no longer the arena edge, so
@@ -3022,6 +3133,19 @@ class Game {
         const p = this.clampToWorld(x, y, 15);
         this.xpOrbs.push(new XPOrb(p.x, p.y, value));
     }
+
+    // One payout split across several gems in a ring. The total is preserved
+    // exactly — the remainder goes on the first gem rather than being rounded
+    // away, so a burst is never worth less than the same kill would have been.
+    spawnXPBurst(x, y, total, count, spread) {
+        const each = Math.floor(total / count);
+        for (let i = 0; i < count; i++) {
+            const a = (i / count) * Math.PI * 2 + Math.random() * 0.4;
+            const d = spread * (0.45 + Math.random() * 0.55);
+            const value = each + (i === 0 ? total - each * count : 0);
+            this.spawnXP(x + Math.cos(a) * d, y + Math.sin(a) * d, value);
+        }
+    }
     
     spawnHealth(x, y, healAmount) {
         const p = this.clampToWorld(x, y, 20);
@@ -3126,12 +3250,43 @@ class Game {
         };
     }
     
+    // The boss health bar markup existed but nothing ever filled it — the
+    // container was an empty div with a "rendered in canvas" note, and the
+    // canvas never drew one either. So a boss fight had no visible progress at
+    // all: the only feedback was the boss eventually falling over.
+    updateBossHealthBar() {
+        if (!this.bossActive || !this.currentBoss) return;
+        if (!this._bossHpEls) {
+            this._bossHpEls = {
+                fill: document.getElementById('bossHpFill'),
+                chip: document.getElementById('bossHpChip'),
+                value: document.getElementById('bossHpValue'),
+                track: document.querySelector('.boss-hp-track')
+            };
+        }
+        const e = this._bossHpEls;
+        if (!e.fill) return;
+
+        const b = this.currentBoss;
+        const pct = Math.max(0, Math.min(1, b.health / b.maxHealth)) * 100;
+        e.fill.style.width = pct + '%';
+        e.chip.style.width = pct + '%';
+        if (e.value) {
+            e.value.textContent = `${Math.max(0, Math.ceil(b.health)).toLocaleString()} / ${Math.ceil(b.maxHealth).toLocaleString()}`;
+        }
+        // The enrage threshold already drives a notification; the bar should
+        // agree with it rather than leaving the player to remember.
+        if (e.track) e.track.classList.toggle('enraged', !!b.enraged);
+    }
+
     updateHUD() {
         if (!this._hudElements) this._cacheHUDElements();
         const h = this._hudElements;
         
         h.stage.textContent = this.currentStage;
         h.coins.textContent = this.coins;
+
+        this.updateBossHealthBar();
         
         // Health
         const healthPercent = (this.player.health / this.player.maxHealth) * 100;
@@ -5265,8 +5420,13 @@ class SpecialWeapon {
                 this.radius = 60 * sizeMult;
                 break;
             case 'ice':
-                this.damage = 20 * dmgMult;
-                this.attackSpeed = 1.5;
+                // Ice fires in every cardinal direction at once, so its damage
+                // has to be read as x4: at 20/1.5 it was putting out ~120 dps
+                // surrounded, against ~20 for the boomerang and ~60 for
+                // lightning. It was the strongest weapon in the game by a
+                // distance while costing nothing to aim.
+                this.damage = 11 * dmgMult;
+                this.attackSpeed = 1.1;
                 this.projectileSpeed = 300;
                 break;
             case 'boomerang':
@@ -5590,47 +5750,72 @@ class SpecialWeapon {
         }
     }
     
+    // A jagged arc tethered to the player, not a floating ball. The old
+    // version was a yellow radial gradient in a circle — identical in
+    // construction to the purple one used for orbs, which is why every
+    // revolving weapon read as "an orb" regardless of what it was.
     drawLightning(ctx) {
         const orbCount = this.orbs + this.level - 1;
         const tierInfo = this.getDisplayTier();
         const tierColor = tierInfo.color;
-        
+
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
         for (let i = 0; i < orbCount; i++) {
             const angle = (this.time * this.speed + (i * Math.PI * 2 / orbCount));
             const x = this.player.x + Math.cos(angle) * this.radius;
             const y = this.player.y + Math.sin(angle) * this.radius;
-            
-            // Tier glow (outer)
-            if (this.tier > 0) {
-                const glowSize = 20 + this.tier * 5;
-                const tierGradient = ctx.createRadialGradient(x, y, 0, x, y, glowSize);
-                tierGradient.addColorStop(0, tierColor + '60');
-                tierGradient.addColorStop(0.5, tierColor + '30');
-                tierGradient.addColorStop(1, tierColor + '00');
-                ctx.fillStyle = tierGradient;
-                ctx.beginPath();
-                ctx.arc(x, y, glowSize, 0, Math.PI * 2);
-                ctx.fill();
+
+            // Jitter is driven by time and index rather than Math.random so the
+            // bolt flickers steadily instead of strobing a new shape per frame.
+            const seed = this.time * 22 + i * 7.3;
+            const segs = 5;
+            const pts = [];
+            for (let k = 0; k <= segs; k++) {
+                const t = k / segs;
+                const px = this.player.x + (x - this.player.x) * t;
+                const py = this.player.y + (y - this.player.y) * t;
+                // Perpendicular offset, pinched to zero at both ends so the
+                // bolt stays anchored to the player and to the tip.
+                const wob = Math.sin(seed + k * 2.1) * 11 * Math.sin(t * Math.PI);
+                pts.push([px + Math.cos(angle + Math.PI / 2) * wob,
+                          py + Math.sin(angle + Math.PI / 2) * wob]);
             }
-            
-            // Lightning glow
-            const gradient = ctx.createRadialGradient(x, y, 0, x, y, 15);
-            gradient.addColorStop(0, '#FFD700');
-            gradient.addColorStop(0.5, '#FFD70080');
-            gradient.addColorStop(1, '#FFD70000');
-            ctx.fillStyle = gradient;
+
+            const trace = () => {
+                ctx.beginPath();
+                ctx.moveTo(pts[0][0], pts[0][1]);
+                for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k][0], pts[k][1]);
+                ctx.stroke();
+            };
+
+            // Outer halo, then the hot core: two passes of the same path.
+            ctx.strokeStyle = this.tier > 0 ? tierColor + '55' : '#FFD70055';
+            ctx.lineWidth = 7;
+            trace();
+            ctx.strokeStyle = '#FFF4B0';
+            ctx.lineWidth = 2;
+            trace();
+
+            // The tip is a four-point spark, not a ball.
+            const flick = 0.75 + 0.25 * Math.sin(this.time * 18 + i);
+            const r = (7 + this.tier * 1.6) * flick;
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.arc(x, y, 15, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Core
-            ctx.fillStyle = '#FFFF00';
-            ctx.beginPath();
-            ctx.arc(x, y, 8, 0, Math.PI * 2);
-            ctx.fill();
+            for (let k = 0; k < 4; k++) {
+                const a = angle + k * Math.PI / 2 + this.time * 3;
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+            }
+            ctx.stroke();
         }
+        ctx.restore();
     }
-    
+
     drawFire(ctx) {
         const range = this.radius + (this.level - 1) * 10;
         const tierInfo = this.getDisplayTier();
@@ -5709,52 +5894,68 @@ class SpecialWeapon {
         }
     }
     
+    // Spinning crystal shards with a motion trail. Sharing the circle-plus-
+    // gradient recipe with lightning was what made two mechanically different
+    // weapons look like the same effect in two colours.
     drawOrbs(ctx) {
         const orbCount = this.orbs + this.level - 1;
         const tierInfo = this.getDisplayTier();
         const tierColor = tierInfo.color;
-        const rotationSpeed = this.speed + this.tier * 0.8; // Spin faster as tier increases
-        
+        const rotationSpeed = this.speed + this.tier * 0.8;
+
+        ctx.save();
         for (let i = 0; i < orbCount; i++) {
             const angle = (-this.time * rotationSpeed + (i * Math.PI * 2 / orbCount));
             const x = this.player.x + Math.cos(angle) * this.radius;
             const y = this.player.y + Math.sin(angle) * this.radius;
-            
-            // Tier glow (if upgraded)
-            if (this.tier > 0) {
-                const tierSize = 25 + this.tier * 5;
-                const tierGradient = ctx.createRadialGradient(x, y, 0, x, y, tierSize);
-                tierGradient.addColorStop(0, tierColor + '80');
-                tierGradient.addColorStop(0.5, tierColor + '40');
-                tierGradient.addColorStop(1, tierColor + '00');
-                ctx.fillStyle = tierGradient;
-                ctx.beginPath();
-                ctx.arc(x, y, tierSize, 0, Math.PI * 2);
-                ctx.fill();
-            }
-            
-            // Glow
-            const gradient = ctx.createRadialGradient(x, y, 0, x, y, 18);
-            gradient.addColorStop(0, '#9C27B0');
-            gradient.addColorStop(0.5, '#9C27B080');
-            gradient.addColorStop(1, '#9C27B000');
-            ctx.fillStyle = gradient;
+
+            // Trail: a short arc along the orbit path behind the shard, which
+            // is what actually communicates that this thing is revolving.
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.strokeStyle = this.tier > 0 ? tierColor + '40' : '#9C27B040';
+            ctx.lineWidth = 7;
             ctx.beginPath();
-            ctx.arc(x, y, 18, 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Core
-            ctx.fillStyle = '#E1BEE7';
+            ctx.arc(this.player.x, this.player.y, this.radius, angle + 0.55, angle, true);
+            ctx.stroke();
+            ctx.globalCompositeOperation = 'source-over';
+
+            // The shard itself: an elongated diamond, tumbling on its own axis
+            // so it catches the eye separately from the orbit.
+            const spin = this.time * 4 + i;
+            const long = 15 + this.tier * 2.5;
+            const wide = 6 + this.tier;
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(spin);
             ctx.beginPath();
-            ctx.arc(x, y, 10, 0, Math.PI * 2);
+            ctx.moveTo(0, -long);
+            ctx.lineTo(wide, 0);
+            ctx.lineTo(0, long);
+            ctx.lineTo(-wide, 0);
+            ctx.closePath();
+
+            const grd = ctx.createLinearGradient(-wide, -long, wide, long);
+            grd.addColorStop(0, '#F3E5F5');
+            grd.addColorStop(0.5, '#CE93D8');
+            grd.addColorStop(1, '#7B1FA2');
+            ctx.fillStyle = grd;
             ctx.fill();
-            
-            ctx.strokeStyle = this.tier > 0 ? tierColor : '#fff';
+            ctx.strokeStyle = this.tier > 0 ? tierColor : '#EDE7F6';
             ctx.lineWidth = 2;
             ctx.stroke();
+
+            // Facet line, so it reads as cut crystal rather than a flat kite.
+            ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, -long);
+            ctx.lineTo(0, long);
+            ctx.stroke();
+            ctx.restore();
         }
+        ctx.restore();
     }
-    
+
     drawBomb(ctx) {
         // Draw a cooldown indicator at the top of the screen
         const centerX = this.player.x;

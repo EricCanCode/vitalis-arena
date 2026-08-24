@@ -115,7 +115,7 @@ const ENEMY_TYPES = {
         label: 'Boss',
         behavior: 'boss', sprite: 'enemy_boss',
         radius: 50, drawScale: 1.0,
-        speed: 45, maxHealth: 500, damage: 25, xpValue: 100,
+        speed: 45, maxHealth: 500, damage: 25, xpValue: 900,
         color: '#8b0000', ultCharge: 25
     }
 };
