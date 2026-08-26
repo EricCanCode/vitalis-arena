@@ -52,7 +52,7 @@ const ENEMY_TYPES = {
         label: 'Spitter',
         // Holds its distance and shoots, so simply outrunning the pack stops
         // being a free answer.
-        behavior: 'ranged', sprite: 'enemy_crawler', equipChance: 0.008,
+        behavior: 'ranged', sprite: 'enemy_spitter', equipChance: 0.008,
         radius: 14, drawScale: 1.0,
         speed: 58, maxHealth: 26, damage: 6, xpValue: 12,
         color: '#9c36b5', ultCharge: 7,
@@ -67,7 +67,7 @@ const ENEMY_TYPES = {
         label: 'Charger',
         // Telegraphs, then commits to a straight line. Rewards dodging
         // sideways; running directly away does not work.
-        behavior: 'charger', sprite: 'enemy_tank', equipChance: 0.015,
+        behavior: 'charger', sprite: 'enemy_charger', equipChance: 0.015,
         radius: 18, drawScale: 1.05,
         speed: 50, maxHealth: 42, damage: 14, xpValue: 14,
         color: '#e8590c', ultCharge: 10,
@@ -82,7 +82,7 @@ const ENEMY_TYPES = {
         label: 'Bomber',
         // Fast and fragile. Punishes letting a crowd pile up behind you, and
         // punishes killing it at point-blank range too.
-        behavior: 'exploder', sprite: 'enemy_fast', equipChance: 0.008,
+        behavior: 'exploder', sprite: 'enemy_bomber', equipChance: 0.008,
         radius: 15, drawScale: 1.0,
         speed: 128, maxHealth: 18, damage: 5, xpValue: 13,
         color: '#f08c00', ultCharge: 9,
@@ -95,7 +95,7 @@ const ENEMY_TYPES = {
     splitter: {
         label: 'Splitter',
         // Killing it is not free — area damage suddenly has a purpose.
-        behavior: 'chase', sprite: 'enemy_elite', equipChance: 0.015,
+        behavior: 'chase', sprite: 'enemy_splitter', equipChance: 0.015,
         radius: 22, drawScale: 1.05,
         speed: 62, maxHealth: 48, damage: 9, xpValue: 16,
         color: '#2f9e44', ultCharge: 12,
@@ -105,7 +105,7 @@ const ENEMY_TYPES = {
 
     spawnling: {
         label: 'Spawnling',
-        behavior: 'chase', sprite: 'enemy_basic', equipChance: 0,
+        behavior: 'chase', sprite: 'enemy_spawnling', equipChance: 0,
         radius: 9, drawScale: 0.8,
         speed: 132, maxHealth: 10, damage: 5, xpValue: 3,
         color: '#69db7c', ultCharge: 2

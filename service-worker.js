@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vitalis-arena-v14';
+const CACHE_NAME = 'vitalis-arena-v15';
 const urlsToCache = [
   '.',
   'index.html',
@@ -33,6 +33,14 @@ const urlsToCache = [
   'images/demon_grunt.png',
   'images/demon.png',
   'images/demon_boss.png',
+  'images/enemy_bomber.png',
+  'images/enemy_charger.png',
+  'images/enemy_spitter.png',
+  'images/enemy_splitter.png',
+  'images/enemy_spawnling.png',
+  'images/boss_warden.png',
+  'images/boss_emberlord.png',
+  'images/boss_colossus.png',
   'sounds/shoot.mp3',
   'sounds/enemy-hit.mp3',
   'sounds/enemy-death.mp3',

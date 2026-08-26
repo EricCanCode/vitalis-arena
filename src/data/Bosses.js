@@ -15,7 +15,7 @@ const BOSS_TYPES = [
         // Shown on the entrance card, under the name.
         epithet: 'Keeper of the First Gate',
         pattern: 'warden',
-        sprite: 'enemy_boss',
+        sprite: 'boss_warden',
         color: '#8b0000',
         healthMultiplier: 1.0,
         speedMultiplier: 1.0,
@@ -31,7 +31,7 @@ const BOSS_TYPES = [
         // Shown on the entrance card, under the name.
         epithet: 'He Who Feeds the Pyre',
         pattern: 'summoner',
-        sprite: 'demon',
+        sprite: 'boss_emberlord',
         color: '#e8590c',
         healthMultiplier: 0.85,      // lower HP; the adds are the real threat
         speedMultiplier: 0.8,
@@ -52,7 +52,7 @@ const BOSS_TYPES = [
         // Shown on the entrance card, under the name.
         epithet: 'The Mountain That Walks',
         pattern: 'colossus',
-        sprite: 'demon_boss',
+        sprite: 'boss_colossus',
         color: '#495057',
         healthMultiplier: 1.5,       // slow and enormously durable
         speedMultiplier: 0.55,

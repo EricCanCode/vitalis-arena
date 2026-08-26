@@ -794,7 +794,23 @@ class Game {
             enemy_tank: 'images/enemy_tank.png',
             enemy_crawler: 'images/demon_grunt.png',
             enemy_elite: 'images/demon.png',
-            enemy_boss: 'images/demon_boss.png'
+            enemy_boss: 'images/demon_boss.png',
+
+            // The five behavioural enemies used to borrow an ordinary enemy's
+            // sprite, so a Bomber (detonates for 24 in a 118px radius) was
+            // pixel-identical to a Stalker (harmless when it dies). The player
+            // could not learn the rule because there was nothing to see.
+            enemy_bomber: 'images/enemy_bomber.png',
+            enemy_charger: 'images/enemy_charger.png',
+            enemy_spitter: 'images/enemy_spitter.png',
+            enemy_splitter: 'images/enemy_splitter.png',
+            enemy_spawnling: 'images/enemy_spawnling.png',
+
+            // Each boss archetype now has its own art too — the Emberlord was
+            // sharing the elite sprite and the Colossus the generic boss one.
+            boss_warden: 'images/boss_warden.png',
+            boss_emberlord: 'images/boss_emberlord.png',
+            boss_colossus: 'images/boss_colossus.png'
         };
         
         let loadedCount = 0;
@@ -2651,6 +2667,12 @@ class Game {
         this.ctx.fillStyle = bgGrad;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         this.ctx.restore();
+
+        // The art is pixel art. Bilinear filtering is the default and it
+        // softens every sprite edge in the game; nearest-neighbour is what
+        // keeps the pixels reading as pixels. Set per frame because canvas
+        // state is not guaranteed across a context resize.
+        this.ctx.imageSmoothingEnabled = false;
         
         // Screen shake first (outer), so it jitters the whole view in screen
         // space, then the camera. Order matters: swapping them makes the shake
