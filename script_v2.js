@@ -141,6 +141,9 @@ class AudioManager {
             'pickup-xp':   80,
             'shoot':       60,
             'enemy-death': 150,  // was 50ms
+            'coin':          80,
+            'bomber-fuse':  300,  // several bombers can light up at once
+            'charger-windup': 300,
         };
         this.soundLastPlayed = {};
 
@@ -868,6 +871,23 @@ this.currentBoss = null;
         this.audioManager.loadSound('equip-item', 'sounds/equip-item.mp3');
         this.audioManager.loadSound('ultimate', 'sounds/ultimate.mp3');
         this.audioManager.loadSound('button-click', 'sounds/button-click.mp3');
+
+        // Events that had no voice of their own. Until the files exist these
+        // resolve to nothing and playSound is a no-op, so shipping the calls
+        // ahead of the audio is safe.
+        this.audioManager.loadSound('boss-phase', 'sounds/boss-phase.mp3');
+        this.audioManager.loadSound('player-death', 'sounds/player-death.mp3');
+        this.audioManager.loadSound('bomber-fuse', 'sounds/bomber-fuse.mp3');
+        this.audioManager.loadSound('charger-windup', 'sounds/charger-windup.mp3');
+        this.audioManager.loadSound('event-pack', 'sounds/event-pack.mp3');
+        this.audioManager.loadSound('event-surge', 'sounds/event-surge.mp3');
+        this.audioManager.loadSound('event-cache', 'sounds/event-cache.mp3');
+        this.audioManager.loadSound('chest-open', 'sounds/chest-open.mp3');
+        this.audioManager.loadSound('bomb', 'sounds/bomb.mp3');
+        this.audioManager.loadSound('evolution', 'sounds/evolution.mp3');
+        this.audioManager.loadSound('stage-complete', 'sounds/stage-complete.mp3');
+        this.audioManager.loadSound('boss-slam', 'sounds/boss-slam.mp3');
+        this.audioManager.loadSound('coin', 'sounds/coin.mp3');
         
         // Register music paths (lazy-loaded on demand to save memory)
         this.audioManager.loadMusic('menu-theme', 'sounds/menu-theme.m4a');
@@ -1687,6 +1707,7 @@ this.currentBoss = null;
                     if (!p || p.health <= 0 || p.downed) continue;
                     if (this.checkCollision(coin, p)) {
                         this.addCoins(coin.value);
+                        this.audioManager.playSound('coin');
                         collected = true;
                         break;
                     }
@@ -2129,6 +2150,7 @@ this.currentBoss = null;
     
     showStageComplete(coinsEarned, equipment) {
         this.isPaused = true;
+        this.audioManager.playSound('stage-complete');
         
         const panel = document.getElementById('stageCompletePanel');
         const stageNum = document.getElementById('stageCompleteNumber');
@@ -3831,6 +3853,7 @@ this.currentBoss = null;
     }
 
     gameOver() {
+        this.audioManager.playSound('player-death');
         // A run can end mid-cinematic. Never leave the world slowed, the
         // camera parked off the player, or a card stuck on screen.
         this.timeScale = 1;
@@ -4117,7 +4140,7 @@ this.currentBoss = null;
         if (chest.collected) return;
         chest.collected = true;
         this.runStats.chestsOpened++;
-        this.audioManager.playSound('pickup-equipment');
+        this.audioManager.playSound('chest-open');
         this.screenShake = GAME_CONFIG.juice.shake.chestOpen;
         this.showChestScreen(this.rollChestReward(chest));
     }
@@ -4180,6 +4203,7 @@ this.currentBoss = null;
                 reward.weapon.evolve(reward.evolution.id);
                 this.runStats.evolutions.push(reward.evolution.name);
                 this.screenShake = GAME_CONFIG.juice.shake.evolution;
+                this.audioManager.playSound('evolution');
                 this.audioManager.playSound('ultimate');
                 break;
             case 'weapon_level':
@@ -5170,6 +5194,11 @@ class Player {
         // Apply armor damage reduction
         const reducedDamage = amount * (1 - this.armor);
         this.health -= reducedDamage;
+
+        // player-hit.mp3 was loaded and rate-limited from the start but nothing
+        // ever played it, so the single most important feedback moment in the
+        // game — being hit — was silent.
+        if (this.game && reducedDamage > 0) this.game.audioManager.playSound('player-hit');
         if (this.health < 0) this.health = 0;
 
         // Getting hit is the moment the player most needs to notice. Scale the
@@ -5979,7 +6008,8 @@ class SpecialWeapon {
             
             // Screen shake
             game.screenShake = 20;
-            
+            game.audioManager.playSound('bomb');
+
             // Add central explosion flash
             for (let i = 0; i < 50; i++) {
                 const angle = Math.random() * Math.PI * 2;
@@ -6470,6 +6500,7 @@ class Enemy {
                 const dist = this.moveToward(player, currentSpeed, deltaTime);
                 if (dist < s.chargeRange && this.chargeTimer <= 0) {
                     this.chargeState = 'windup';
+                    this.game.audioManager.playSound('charger-windup');
                     this.chargeTimer = s.windupTime;
                 }
                 break;
@@ -6505,6 +6536,7 @@ class Enemy {
 
         if (!this.fuseLit && dist < s.fuseRange) {
             this.fuseLit = true;
+            this.game.audioManager.playSound('bomber-fuse');
             this.fuseTimer = s.fuseTime;
         }
         if (this.fuseLit) {
@@ -6584,7 +6616,7 @@ class Enemy {
         // The beat itself.
         g.applyHitStop(GAME_CONFIG.juice.maxHitStop);
         g.screenShake = 26;
-        g.audioManager.playSound('boss-warning');
+        g.audioManager.playSound('boss-phase');
 
         const tint = this.phase >= this.phaseCount ? '#ff4444' : '#ffd43b';
         g.effects.add(new RingEffect(this.x, this.y, {
@@ -6706,6 +6738,7 @@ class Enemy {
         this.moveToward(player, speed, deltaTime);
         if (this.slamTimer <= 0) {
             this.slamState = 'windup';
+            this.game.audioManager.playSound('boss-slam');
             this.slamTimer = a.slamWindup || 0.85;
             this.telegraphSlam(a);
         }

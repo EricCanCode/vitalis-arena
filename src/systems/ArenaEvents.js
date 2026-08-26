@@ -127,7 +127,7 @@ class ArenaEventDirector {
         // the name is the handle, not a claim about which one is strongest.
         const leader = spawned[0];
         g.announceEvent('⚔️ THE PACK', leader ? `${leader.eliteName} leads them.` : 'They came together.');
-        g.audioManager.playSound('boss-warning');
+        g.audioManager.playSound('event-pack');
     }
 
     // ---- Swarm surge ------------------------------------------------------
@@ -158,7 +158,7 @@ class ArenaEventDirector {
         }));
 
         g.announceEvent('🌊 THE TIDE', 'Something is coming. Not from where you are looking.');
-        g.audioManager.playSound('boss-warning');
+        g.audioManager.playSound('event-surge');
     }
 
     releaseSurge(surge) {
@@ -227,7 +227,7 @@ class ArenaEventDirector {
         }));
 
         g.announceEvent('🎁 THE CACHE', 'It will not wait for you.');
-        g.audioManager.playSound('pickup-equipment');
+        g.audioManager.playSound('event-cache');
     }
 }
 
