@@ -143,6 +143,16 @@
     <div id="gameScreen" class="screen">
         <canvas id="gameCanvas"></canvas>
 
+            <!-- Minimap. Sits in #gameScreen, NOT #hud: #hud is a 135px top
+                 strip, so bottom-anchoring inside it puts this at the top of
+                 the screen. Bottom-left is the only free corner — the ultimate
+                 button owns bottom-centre, pause and the equipment panel own
+                 the right, and .hud-bottom-right is the co-op P2 panel. -->
+            <div id="minimapWrap" class="minimap-wrap">
+                <canvas id="minimap" class="minimap" width="336" height="190"></canvas>
+                <div class="minimap-key">M</div>
+            </div>
+
         <!-- Full-screen cinematic cards. These live outside #hud on purpose:
              #hud is a short strip across the top, and a card centred inside it
              lands on the health and XP bars instead of the middle of the arena. -->

@@ -498,6 +498,48 @@ body {
     50% { transform: translateX(-50%) scale(1.15); }
 }
 
+/* Minimap */
+.minimap-wrap {
+    position: absolute;
+    bottom: 14px;
+    left: 14px;
+    z-index: 40;
+    pointer-events: none;
+    line-height: 0;
+    border: 2px solid rgba(150, 115, 255, 0.45);
+    border-radius: 4px;
+    background: rgba(10, 8, 18, 0.72);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55);
+    transition: opacity 0.2s ease;
+}
+
+.minimap-wrap.hidden { opacity: 0; }
+
+/* Backing store is 2x the CSS size so the dots stay crisp on Retina. */
+.minimap {
+    display: block;
+    width: 168px;
+    height: 95px;
+}
+
+.minimap-key {
+    position: absolute;
+    top: 3px;
+    right: 5px;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    color: rgba(255, 255, 255, 0.35);
+    line-height: 1;
+}
+
+@media (max-width: 820px) {
+    .minimap { width: 118px; height: 66px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .minimap-wrap { transition: none; }
+}
+
 /* Boss Health Bar */
 /* Measured, not guessed: .hud-top is a 135px strip, so top:20px put the boss
    bar straight through the health and level readouts. Clamped rather than

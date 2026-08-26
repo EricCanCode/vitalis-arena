@@ -457,7 +457,14 @@ class Game {
         this.bossActive = false;
         this.bossWarning = false;
         this.bossWarningTime = 0;
-        this.currentBoss = null;
+this.currentBoss = null;
+
+        // Minimap starts on; the preference survives between runs.
+        this.minimapVisible = true;
+        try {
+            const saved = localStorage.getItem('vitalisArenaMinimap');
+            if (saved !== null) this.minimapVisible = saved === '1';
+        } catch (err) {}
         this.pendingLevelUp = false;
         
         // Equipment system
@@ -669,6 +676,15 @@ class Game {
                 }
             }
             
+            // M toggles the minimap. Some players want the screen clean, and
+            // co-op in particular is already busy in that corner.
+            if (e.key.toLowerCase() === 'm' && this.isRunning) {
+                this.minimapVisible = !this.minimapVisible;
+                document.getElementById('minimapWrap')
+                    ?.classList.toggle('hidden', !this.minimapVisible);
+                try { localStorage.setItem('vitalisArenaMinimap', this.minimapVisible ? '1' : '0'); } catch (err) {}
+            }
+
             // ESC key toggles pause
             if (e.key === 'Escape' && this.isRunning) {
                 this.togglePause();
@@ -1188,6 +1204,12 @@ class Game {
             document.getElementById(id)?.classList.remove('active');
         });
         this.isPaused = false;
+
+        // The saved minimap preference has to reach the DOM at run start too,
+        // not only when the key is pressed — otherwise a player who turned it
+        // off last session sees it again every time they start.
+        document.getElementById('minimapWrap')
+            ?.classList.toggle('hidden', !this.minimapVisible);
 
         // Permanent upgrade: bonus coins at the start of every run
         const startCoins = this.getMetaBonuses().startCoins;
@@ -2687,10 +2709,10 @@ class Game {
         // Everything drawn from here until restore() is in WORLD space.
         this.ctx.translate(-Math.round(this.camera.x), -Math.round(this.camera.y));
         
-        // Draw grid (skip on mobile for performance)
+        // Draw the arena floor (skip on mobile for performance)
         if (!this.performanceMode) {
             this.drawParallax();
-            this.drawGrid();
+            this.drawArenaFloor();
         }
         // The world boundary is drawn on every device — without it the player
         // has no way to tell where the playfield ends.
@@ -2765,6 +2787,7 @@ class Game {
         // These are positioned against the viewport, not the world, so they must
         // be drawn after the camera transform is restored or they scroll away.
         this.drawVignette();
+        this.drawMinimap();
         this.drawAchievementNotifications();
         this.drawLowHealthWarning();
         if (this.showDebug) this.drawDebugOverlay();
@@ -2916,6 +2939,109 @@ class Game {
         ctx.restore();
     }
 
+    // The minimap.
+    //
+    // The world is 3456x1944 and the camera shows well under a third of it, so
+    // most of what matters is off-screen most of the time: the boss you are
+    // running from, the cache with twelve seconds on it, the pack that just
+    // landed behind you. None of that was knowable without walking into it.
+    //
+    // Drawn on its own small canvas rather than into the main one, so it is
+    // not subject to the camera transform, the screen shake, or the vignette.
+    drawMinimap() {
+        if (!this.minimapVisible) return;
+        if (!this._mm) {
+            const c = document.getElementById('minimap');
+            if (!c) { this.minimapVisible = false; return; }
+            this._mm = { canvas: c, ctx: c.getContext('2d') };
+        }
+        const { canvas, ctx } = this._mm;
+        const W = canvas.width, H = canvas.height;
+        const world = this.world;
+        const sx = W / world.width, sy = H / world.height;
+
+        // Device pixels per CSS pixel. The backing store is deliberately larger
+        // than the displayed size so the dots stay crisp on Retina, which means
+        // every radius below has to be expressed in CSS pixels and scaled up,
+        // or the whole map draws at half the intended weight. Read from the
+        // live element rather than hardcoded, because the CSS width changes at
+        // the mobile breakpoint while the backing store does not.
+        const u = W / (canvas.clientWidth || 168);
+
+        ctx.clearRect(0, 0, W, H);
+
+        // Floor, so the map reads as the same place as the arena.
+        ctx.fillStyle = 'rgba(26, 23, 40, 0.9)';
+        ctx.fillRect(0, 0, W, H);
+
+        // The slice the player can actually see. Without it the dots have no
+        // frame of reference and the map cannot be used to steer.
+        const v = this.camera.getBounds();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+        ctx.lineWidth = 1.5 * u;
+        ctx.strokeRect(v.left * sx, v.top * sy,
+                       (v.right - v.left) * sx, (v.bottom - v.top) * sy);
+
+        const dot = (x, y, r, fill) => {
+            ctx.fillStyle = fill;
+            ctx.beginPath();
+            ctx.arc(x * sx, y * sy, r * u, 0, Math.PI * 2);
+            ctx.fill();
+        };
+
+        // Ordinary enemies first and smallest, so nothing important is buried
+        // under the horde. A cap keeps a 90-enemy screen cheap.
+        const cap = 90;
+        let drawn = 0;
+        for (const e of this.enemies) {
+            if (drawn >= cap) break;
+            if (e.type === 'boss' || e.isElite || e.type === 'elite') continue;
+            drawn++;
+            dot(e.x, e.y, 1.5, 'rgba(224, 49, 49, 0.72)');
+        }
+
+        // Then the things worth crossing the arena for, or away from.
+        for (const c of this.chests) {
+            const expiring = c.expires !== undefined;
+            // A timed cache blinks, and blinks faster as it runs out — the map
+            // has to carry the urgency, not just the position.
+            let show = true;
+            if (expiring && c.maxExpires) {
+                const frac = Math.max(0, c.expires / c.maxExpires);
+                show = Math.sin(this.gameTime * (6 + (1 - frac) * 14)) > -0.35;
+            }
+            if (!show) continue;
+            ctx.fillStyle = '#ffd43b';
+            ctx.fillRect(c.x * sx - 2.5 * u, c.y * sy - 2.5 * u, 5 * u, 5 * u);
+        }
+
+        for (const e of this.enemies) {
+            if (e.isElite || e.type === 'elite') dot(e.x, e.y, 2.6, ELITE_MARK_COLOR);
+        }
+
+        if (this.bossActive && this.currentBoss && this.currentBoss.health > 0) {
+            const b = this.currentBoss;
+            const pulse = 0.55 + 0.45 * Math.sin(this.gameTime * 5);
+            ctx.strokeStyle = `rgba(255, 80, 80, ${pulse.toFixed(2)})`;
+            ctx.lineWidth = 1.5 * u;
+            ctx.beginPath();
+            ctx.arc(b.x * sx, b.y * sy, 6.5 * u, 0, Math.PI * 2);
+            ctx.stroke();
+            dot(b.x, b.y, 3.5, '#ff4444');
+        }
+
+        // Players last so they are never covered.
+        const me = this.player;
+        if (me && me.health > 0) {
+            dot(me.x, me.y, 4, '#ffffff');
+            dot(me.x, me.y, 2.4, me.color || '#4dabf7');
+        }
+        if (this.player2 && this.player2.health > 0) {
+            dot(this.player2.x, this.player2.y, 4, '#ffffff');
+            dot(this.player2.x, this.player2.y, 2.4, this.player2.color || '#51cf66');
+        }
+    }
+
     // Darkens the corners so the action sits in a pool of light. It is the
     // cheapest way to stop a flat field from reading as empty space.
     drawVignette() {
@@ -2931,47 +3057,151 @@ class Game {
         ctx.fillRect(0, 0, w, h);
     }
 
-    // World-space background. Only the lines inside the camera view are drawn,
-    // so the cost is bound to the viewport, not to the size of the world.
-    drawGrid() {
+    // Deterministic pseudo-random from a pair of integers. Same input always
+    // gives the same output, so the floor is stable frame to frame and between
+    // runs without storing a single tile.
+    static hash2(x, y, k) {
+        let h = (x * 73856093) ^ (y * 19349663) ^ (k * 83492791);
+        h = Math.imul(h ^ (h >>> 15), 2246822519);
+        h = Math.imul(h ^ (h >>> 13), 3266489917);
+        return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+    }
+
+    // The arena floor.
+    //
+    // This used to be a flat fill plus a uniform 50px grid at 5% white, which
+    // read as a black void with graph paper on it — nothing to navigate by and
+    // no sense of place. It is now cracked flagstone with the occasional
+    // buried rune, which is the same world the title art already establishes.
+    //
+    // Everything is derived from a hash of the tile coordinates rather than
+    // stored, so the floor is effectively infinite, identical every frame, and
+    // costs no memory. Only tiles inside the camera view are touched.
+    drawArenaFloor() {
         const ctx = this.ctx;
-        const gridSize = 50;
         const view = this.camera.getBounds();
+        const T = 192;
 
-        const firstX = Math.floor(view.left / gridSize) * gridSize;
-        const firstY = Math.floor(view.top / gridSize) * gridSize;
+        const x0 = Math.floor(view.left / T), x1 = Math.floor(view.right / T);
+        const y0 = Math.floor(view.top / T), y1 = Math.floor(view.bottom / T);
 
-        // Two passes: a faint mesh, then a brighter line every fourth cell.
-        // A single uniform grid gives the eye nothing to fix on, so movement
-        // across it is almost invisible.
-        const MAJOR = gridSize * 4;
+        ctx.save();
 
-        ctx.strokeStyle = 'rgba(180, 165, 255, 0.045)';
-        ctx.lineWidth = 1;
+        for (let tx = x0; tx <= x1; tx++) {
+            for (let ty = y0; ty <= y1; ty++) {
+                const px = tx * T, py = ty * T;
+                const r = Game.hash2(tx, ty, 1);
+
+                // Slab shade. The spread is deliberately narrow: the sprites
+                // have to stay the highest-contrast thing on screen.
+                const lift = Math.floor(r * 10);
+                ctx.fillStyle = `rgb(${26 + lift}, ${23 + lift}, ${40 + lift})`;
+                ctx.fillRect(px, py, T, T);
+
+                // Mortar. Drawn per slab rather than as one big grid stroke so
+                // each seam can sit at its own weight.
+                ctx.strokeStyle = 'rgba(8, 6, 14, 0.55)';
+                ctx.lineWidth = 2 + r * 1.5;
+                ctx.strokeRect(px, py, T, T);
+
+                // A highlight along the top and left of each slab reads as
+                // relief — the single cheapest thing that stops a tiled floor
+                // looking like a flat colour chart.
+                ctx.strokeStyle = 'rgba(150, 130, 220, 0.05)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(px + 1, py + T - 1);
+                ctx.lineTo(px + 1, py + 1);
+                ctx.lineTo(px + T - 1, py + 1);
+                ctx.stroke();
+
+                this.drawFloorDetail(tx, ty, px, py, T);
+            }
+        }
+
+        ctx.restore();
+    }
+
+    // Per-slab decoration. One bucket per slab, so the floor stays sparse —
+    // decoration on every tile would be texture, and texture competes with the
+    // enemies for attention.
+    drawFloorDetail(tx, ty, px, py, T) {
+        const ctx = this.ctx;
+        const pick = Game.hash2(tx, ty, 7);
+
+        if (pick < 0.40) return;                       // most slabs stay bare
+
+        if (pick < 0.62) {
+            // Rubble: a few chips of stone.
+            ctx.fillStyle = 'rgba(10, 8, 18, 0.5)';
+            for (let i = 0; i < 4; i++) {
+                const a = Game.hash2(tx, ty, 20 + i);
+                const b = Game.hash2(tx, ty, 40 + i);
+                const sz = 2 + a * 4;
+                ctx.fillRect(px + 20 + a * (T - 50), py + 20 + b * (T - 50), sz, sz);
+            }
+            return;
+        }
+
+        if (pick < 0.86) {
+            // A crack. Walked as a short polyline across the slab so it reads
+            // as a fracture with direction rather than a scratch.
+            const steps = 5;
+            const sx = px + 20 + Game.hash2(tx, ty, 3) * (T - 40);
+            const sy = py + 20 + Game.hash2(tx, ty, 4) * (T - 40);
+            let cx = sx, cy = sy;
+            const dir = Game.hash2(tx, ty, 5) * Math.PI * 2;
+
+            ctx.strokeStyle = 'rgba(6, 4, 10, 0.72)';
+            ctx.lineWidth = 1 + Game.hash2(tx, ty, 6) * 2;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            for (let i = 0; i < steps; i++) {
+                const wob = (Game.hash2(tx, ty, 60 + i) - 0.5) * 1.5;
+                const len = 14 + Game.hash2(tx, ty, 80 + i) * 22;
+                cx += Math.cos(dir + wob) * len;
+                cy += Math.sin(dir + wob) * len;
+                ctx.lineTo(cx, cy);
+            }
+            ctx.stroke();
+            return;
+        }
+
+        // A buried rune. Rare on purpose: at roughly one slab in seven it is a
+        // landmark the player can steer by, which is the thing a uniform grid
+        // could never provide.
+        const cx = px + T / 2, cy = py + T / 2;
+        const rad = 34 + Game.hash2(tx, ty, 9) * 20;
+        // Each ring breathes on its own offset so a screen holding several of
+        // them never pulses in unison.
+        const phase = Game.hash2(tx, ty, 10) * Math.PI * 2;
+        const pulse = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(this.gameTime * 1.1 + phase));
+
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = `rgba(34, 184, 207, ${(0.16 * pulse).toFixed(3)})`;
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        for (let x = firstX; x <= view.right + gridSize; x += gridSize) {
-            ctx.moveTo(x, view.top);
-            ctx.lineTo(x, view.bottom);
-        }
-        for (let y = firstY; y <= view.bottom + gridSize; y += gridSize) {
-            ctx.moveTo(view.left, y);
-            ctx.lineTo(view.right, y);
-        }
-        ctx.stroke();   // one stroke for the whole grid instead of one per line
+        ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+        ctx.stroke();
 
-        const majX = Math.floor(view.left / MAJOR) * MAJOR;
-        const majY = Math.floor(view.top / MAJOR) * MAJOR;
-        ctx.strokeStyle = 'rgba(180, 165, 255, 0.13)';
+        ctx.strokeStyle = `rgba(34, 184, 207, ${(0.10 * pulse).toFixed(3)})`;
         ctx.beginPath();
-        for (let x = majX; x <= view.right + MAJOR; x += MAJOR) {
-            ctx.moveTo(x, view.top);
-            ctx.lineTo(x, view.bottom);
-        }
-        for (let y = majY; y <= view.bottom + MAJOR; y += MAJOR) {
-            ctx.moveTo(view.left, y);
-            ctx.lineTo(view.right, y);
+        ctx.arc(cx, cy, rad * 0.62, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Spokes, so it reads as carved rather than as a lens flare.
+        const spokes = 6;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (let i = 0; i < spokes; i++) {
+            const a = phase + (i / spokes) * Math.PI * 2;
+            ctx.moveTo(cx + Math.cos(a) * rad * 0.62, cy + Math.sin(a) * rad * 0.62);
+            ctx.lineTo(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad);
         }
         ctx.stroke();
+        ctx.restore();
     }
 
     // With a scrolling world the screen edge is no longer the arena edge, so
