@@ -6777,6 +6777,13 @@ class Enemy {
     }
     
     takeDamage(amount, options) {
+        // A boss must not be deletable by a single hit. See
+        // GAME_CONFIG.boss.maxHitFraction for the measurement behind this.
+        if (this.type === 'boss') {
+            const cap = this.maxHealth * GAME_CONFIG.boss.maxHitFraction;
+            if (amount > cap) amount = cap;
+        }
+
         this.health -= amount;
         this.hitFlash = 0.12;
 

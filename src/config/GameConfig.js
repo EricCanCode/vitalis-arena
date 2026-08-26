@@ -127,8 +127,26 @@ const GAME_CONFIG = {
         //
         // These are a starting point sized from one instrumented run, not a
         // tuned curve. They want playtesting.
-        firstStageBonus: 2.0,
-        decay: 0.2
+        // Raised from 2.0 after play reported the fight still ending early.
+        // Stage 1 lands at 3.6x (about 2290 HP); stages 3+ are barely touched,
+        // because by then the shared time multiplier has caught up on its own.
+        firstStageBonus: 2.6,
+        decay: 0.2,
+
+        // No single hit may remove more than this fraction of a boss's health.
+        //
+        // Measured on a real stage-1 fight: the bomb weapon deals a flat 999
+        // ("instant kill") to EVERY enemy in the world with no radius and no
+        // falloff, which scales to ~1240 by the time it lands. Against a 1905
+        // HP Warden that is 65% of the fight gone in one frame — one hit did
+        // more than the other 36 hits of that fight combined.
+        //
+        // Capping per hit fixes the whole class of problem — the bomb, the
+        // class ultimates, any burst weapon added later — without touching
+        // sustained damage, which is what a boss fight should be made of. The
+        // bomb still clears the screen of trash, and still takes a real bite
+        // out of a boss; it just cannot end the fight on its own.
+        maxHitFraction: 0.10
     },
 
     weapons: {
