@@ -127,10 +127,11 @@ const GAME_CONFIG = {
         //
         // These are a starting point sized from one instrumented run, not a
         // tuned curve. They want playtesting.
-        // Raised from 2.0 after play reported the fight still ending early.
-        // Stage 1 lands at 3.6x (about 2290 HP); stages 3+ are barely touched,
-        // because by then the shared time multiplier has caught up on its own.
-        firstStageBonus: 2.6,
+        // Back to 2.0 now that phases carry the length. It was raised to 2.6
+        // when the fight was a single bar; leaving it there on top of a
+        // three-phase fight compounds to more than twice the health the fight
+        // had two changes ago, which is a slog rather than a climax.
+        firstStageBonus: 2.0,
         decay: 0.2,
 
         // No single hit may remove more than this fraction of a boss's health.
@@ -146,7 +147,41 @@ const GAME_CONFIG = {
         // sustained damage, which is what a boss fight should be made of. The
         // bomb still clears the screen of trash, and still takes a real bite
         // out of a boss; it just cannot end the fight on its own.
-        maxHitFraction: 0.10
+        maxHitFraction: 0.10,
+
+        // Boss phases.
+        //
+        // One long bar has no shape: it drains at a constant rate and the only
+        // event in the whole fight is the end of it. Three bars escalate — each
+        // one is a checkpoint the player has visibly earned, and the boss that
+        // killed them was demonstrably harder than the one they started on.
+        //
+        // healthScale is per phase, not per fight: at 0.42 across 3 phases the
+        // whole fight carries 1.26x the health a single bar did, so it is
+        // longer, but nowhere near three times longer.
+        phases: {
+            count: 3,
+            // 3 x 0.42 = 1.26x the health the old single bar carried. The
+            // phases are not meant to triple the fight — they are meant to
+            // give it shape, and the boss getting faster and hitting harder
+            // each phase raises the difficulty without raising the duration.
+            healthScale: 0.42,
+
+            // Index 0 is phase one. The last phase also flips the boss into
+            // its `enraged` behaviour, which every archetype already defines —
+            // radial bursts for the Warden, faster summons for the Emberlord.
+            // That is the extra attack, and it costs no new combat code.
+            speed: [1.0, 1.25, 1.5],
+            damage: [1.0, 1.35, 1.75],
+
+            // The boss is untouchable while the bar refills, so a burst that
+            // overkills one phase cannot spill into the next and skip it.
+            breakSeconds: 1.4,
+
+            // Fraction of the boss's XP paid out at each phase break, so
+            // clearing a bar is a reward and not just a milestone.
+            phaseXpFraction: 0.2
+        }
     },
 
     weapons: {

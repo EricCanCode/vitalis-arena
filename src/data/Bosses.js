@@ -21,7 +21,6 @@ const BOSS_TYPES = [
         speedMultiplier: 1.0,
         damageMultiplier: 1.0,
         // Phase two opens up when health drops below this fraction.
-        enrageAt: 0.5,
         burstCount: 8,
         burstCooldown: 2.0
     },
@@ -36,7 +35,6 @@ const BOSS_TYPES = [
         healthMultiplier: 0.85,      // lower HP; the adds are the real threat
         speedMultiplier: 0.8,
         damageMultiplier: 1.0,
-        enrageAt: 0.45,
         // Hangs back and lets its summons do the work.
         preferredRange: 380,
         summonCooldown: 7.0,
@@ -57,7 +55,6 @@ const BOSS_TYPES = [
         healthMultiplier: 1.5,       // slow and enormously durable
         speedMultiplier: 0.55,
         damageMultiplier: 1.3,
-        enrageAt: 0.4,
         slamCooldown: 4.5,
         // The tell. Long enough to read the safe lane and run for it.
         slamWindup: 0.85,

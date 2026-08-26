@@ -1880,9 +1880,8 @@ this.currentBoss = null;
         const epEl = document.getElementById('bossHpEpithet');
         if (nameEl) nameEl.textContent = bArch?.name || 'The Boss';
         if (epEl) epEl.textContent = bArch?.epithet || '';
-        document.getElementById('bossHpChip')?.classList.remove('instant');
-        this._bossHpTrack = document.querySelector('.boss-hp-track');
-        this._bossHpTrack?.classList.remove('enraged');
+        // Force the bar back to phase 1 for the new boss.
+        this._bossHpPhase = null;
         
         // Start boss music
         this.audioManager.playMusic('boss-theme');
@@ -3513,7 +3512,8 @@ this.currentBoss = null;
                 fill: document.getElementById('bossHpFill'),
                 chip: document.getElementById('bossHpChip'),
                 value: document.getElementById('bossHpValue'),
-                track: document.querySelector('.boss-hp-track')
+                track: document.getElementById('bossHpTrack'),
+                pips: document.getElementById('bossHpPips')
             };
         }
         const e = this._bossHpEls;
@@ -3524,11 +3524,23 @@ this.currentBoss = null;
         e.fill.style.width = pct + '%';
         e.chip.style.width = pct + '%';
         if (e.value) {
-            e.value.textContent = `${Math.max(0, Math.ceil(b.health)).toLocaleString()} / ${Math.ceil(b.maxHealth).toLocaleString()}`;
+            e.value.textContent =
+                `${Math.max(0, Math.ceil(b.health)).toLocaleString()} / ${Math.ceil(b.maxHealth).toLocaleString()}`
+                + `  \u00b7  PHASE ${b.phase}/${b.phaseCount}`;
         }
-        // The enrage threshold already drives a notification; the bar should
-        // agree with it rather than leaving the player to remember.
-        if (e.track) e.track.classList.toggle('enraged', !!b.enraged);
+
+        // Phase colour, and pips for how many bars are already spent. A single
+        // draining bar cannot say "two more of these to go".
+        if (e.track && b.phase !== this._bossHpPhase) {
+            this._bossHpPhase = b.phase;
+            e.track.classList.remove('phase-1', 'phase-2', 'phase-3');
+            e.track.classList.add('phase-' + Math.min(b.phase, 3));
+            if (e.pips) {
+                [...e.pips.children].forEach((pip, i) => {
+                    pip.classList.toggle('spent', i < b.phase - 1);
+                });
+            }
+        }
     }
 
     updateHUD() {
@@ -6339,9 +6351,19 @@ class Enemy {
             const stage = Math.max(1, this.game.currentStage);
             this.maxHealth *= 1 + bcfg.firstStageBonus * Math.pow(bcfg.decay, stage - 1);
 
+            // maxHealth now means ONE PHASE, which keeps every existing health
+            // bar and percentage calculation correct without touching them.
+            this.maxHealth *= bcfg.phases.healthScale;
+
             this.attackCooldown = 2;   // brief entry delay before the first attack
             this.attackPattern = 0;
+            // Enrage is no longer a health threshold; it IS the final phase.
             this.enraged = false;
+
+            const ph = GAME_CONFIG.boss.phases;
+            this.phase = 1;
+            this.phaseCount = ph.count;
+            this.phaseBreak = 0;
 
             if (archetype) {
                 this.bossPattern = archetype.pattern;
@@ -6352,11 +6374,15 @@ class Enemy {
                 this.baseSpeed *= archetype.speedMultiplier;
                 this.speed = this.baseSpeed;
                 this.damage *= archetype.damageMultiplier;
-                this.phaseChangeThreshold = archetype.enrageAt;
             } else {
                 this.bossPattern = 'warden';
-                this.phaseChangeThreshold = 0.5;
             }
+
+            // Phase escalation multiplies these, so they have to be captured
+            // before the first phase is applied or each phase would compound
+            // on the last one's already-multiplied value.
+            this.phaseBaseSpeed = this.baseSpeed;
+            this.phaseBaseDamage = this.damage;
 
             // Pattern timers
             this.summonTimer = 3;
@@ -6526,16 +6552,69 @@ class Enemy {
         this.game.applyHitStop(0.05);
     }
     
+    // One bar cleared. Refill, escalate, and make a moment of it.
+    advanceBossPhase() {
+        const ph = GAME_CONFIG.boss.phases;
+        const g = this.game;
+
+        this.phase++;
+        this.health = this.maxHealth;
+        this.phaseBreak = ph.breakSeconds;
+
+        // Escalate from the phase-1 baseline, never from the current value.
+        const i = Math.min(this.phase - 1, ph.speed.length - 1);
+        this.baseSpeed = this.phaseBaseSpeed * ph.speed[i];
+        this.speed = this.baseSpeed;
+        this.damage = this.phaseBaseDamage * ph.damage[i];
+
+        // The final phase turns on the archetype's own enraged behaviour,
+        // which is where the extra attack comes from.
+        this.enraged = (this.phase === this.phaseCount);
+        if (this.enraged) this.attackPattern = 1;
+
+        // Reset the pattern timers so the new phase opens with an attack
+        // rather than resuming mid-windup from the old one.
+        this.attackCooldown = 1.2;
+        this.slamState = 'idle';
+        this.summonTimer = 1.5;
+
+        // Clearing a bar should pay, not just tick a counter.
+        g.spawnXPBurst(this.x, this.y, Math.round(this.xpValue * ph.phaseXpFraction), 6, 110);
+
+        // The beat itself.
+        g.applyHitStop(GAME_CONFIG.juice.maxHitStop);
+        g.screenShake = 26;
+        g.audioManager.playSound('boss-warning');
+
+        const tint = this.phase >= this.phaseCount ? '#ff4444' : '#ffd43b';
+        g.effects.add(new RingEffect(this.x, this.y, {
+            fromRadius: 20, toRadius: 320, life: 0.65,
+            color: tint, width: 8, endWidth: 1
+        }));
+        g.effects.add(new FlashEffect(this.x, this.y, {
+            radius: 200, color: tint, life: 0.35
+        }));
+
+        const label = this.phase >= this.phaseCount ? 'FINAL STAND' : 'SECOND WIND';
+        const sub = this.phase >= this.phaseCount
+            ? 'It has nothing left to hold back.'
+            : 'It was not fighting seriously.';
+        g.announceEvent(`\u2620\ufe0f ${(this.bossName || 'THE BOSS').toUpperCase()} \u2014 ${label}`, sub);
+    }
+
     updateBoss(deltaTime, player, currentSpeed) {
-        const healthPercent = this.health / this.maxHealth;
-        if (!this.enraged && healthPercent < this.phaseChangeThreshold) {
-            this.enraged = true;
-            this.attackPattern = 1;
-            this.game.screenShake = 20;
-            this.game.showNotification(`\u2620\ufe0f ${this.bossName || 'The boss'} is enraged!`);
+        // Between phases the boss neither moves nor attacks. The pause is what
+        // makes the escalation legible — without it the bar just refills and
+        // the player never registers that anything changed.
+        if (this.phaseBreak > 0) {
+            this.phaseBreak -= deltaTime;
+            return;
         }
-        // Enraged bosses move and act faster across every archetype.
-        const speed = currentSpeed * (this.enraged ? 1.35 : 1);
+
+        // Speed escalation lives in baseSpeed, which currentSpeed is already
+        // derived from, so there is deliberately no extra multiplier here —
+        // applying one as well would compound to 2x by the final phase.
+        const speed = currentSpeed;
 
         switch (this.bossPattern) {
             case 'summoner': this.updateSummonerBoss(deltaTime, player, speed); break;
@@ -6780,11 +6859,20 @@ class Enemy {
         // A boss must not be deletable by a single hit. See
         // GAME_CONFIG.boss.maxHitFraction for the measurement behind this.
         if (this.type === 'boss') {
+            // Untouchable while the bar refills between phases.
+            if (this.phaseBreak > 0) return;
             const cap = this.maxHealth * GAME_CONFIG.boss.maxHitFraction;
             if (amount > cap) amount = cap;
         }
 
         this.health -= amount;
+
+        // Intercept death here rather than letting the game's own check see
+        // health <= 0: a boss with phases left does not die, it escalates.
+        if (this.type === 'boss' && this.health <= 0 && this.phase < this.phaseCount) {
+            this.advanceBossPhase();
+            return;
+        }
         this.hitFlash = 0.12;
 
         // Damage-over-time (fire aura, poison) ticks every frame. Batch those
@@ -6825,6 +6913,39 @@ class Enemy {
         // Sprite is drawn larger than the collision circle on purpose.
         const size = this.radius * 2.5 * (this.drawScale || 1);
         const imageName = this.spriteKey || `enemy_${this.type}`;
+
+        // Phase has to be readable on the battlefield, not only on the HUD —
+        // the player is watching the boss, not the top of the screen. An aura
+        // in the phase colour, brighter and faster the further in you are.
+        if (this.type === 'boss' && this.phase > 1) {
+            const final = this.phase >= this.phaseCount;
+            const beat = 0.55 + 0.45 * Math.sin(this.game.gameTime * (final ? 7 : 4));
+            const r = size * 0.62;
+            const g2 = ctx.createRadialGradient(this.x, this.y, r * 0.55, this.x, this.y, r);
+            const tint = final ? '255, 60, 60' : '255, 200, 60';
+            g2.addColorStop(0, `rgba(${tint}, 0)`);
+            g2.addColorStop(1, `rgba(${tint}, ${(0.34 * beat).toFixed(3)})`);
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = g2;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // While the bar refills the boss is untouchable, and it has to LOOK
+        // untouchable or the player reads the missing damage as a bug.
+        if (this.type === 'boss' && this.phaseBreak > 0) {
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.strokeStyle = `rgba(255, 255, 255, ${(0.35 + 0.45 * Math.sin(this.game.gameTime * 20)).toFixed(3)})`;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, size * 0.5 + 10, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
         
         // Check if sprite is loaded
         if (this.game.imagesLoaded && this.game.images[imageName] && this.game.images[imageName].complete) {
