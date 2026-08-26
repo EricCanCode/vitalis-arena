@@ -455,6 +455,12 @@ class Game {
         this.stageTimeLimit = 90; // 90 seconds per stage before boss
         this.stageStartTime = 0;
         this.coins = 0; // Currency for shop
+        // Scrap: the upgrade currency. Coins BUY gear, scrap IMPROVES it, and
+        // scrap comes only from selling gear you have outgrown — so the two
+        // economies feed different things and a hoard of one cannot solve the
+        // other. Levelling used to cost coins, which meant shop purchases and
+        // upgrades competed for the same pile.
+        this.scrap = 0;
         
         // Boss system
         this.bossActive = false;
@@ -520,6 +526,7 @@ this.currentBoss = null;
         // Load saved data
         this.loadInventory();
         this.loadCoins();
+        this.loadScrap();
         this.loadSavedEquipment();
         
         window.addEventListener('resize', () => this.resizeCanvas());
@@ -1070,6 +1077,13 @@ this.currentBoss = null;
         
         // Optimise equipment button
         document.getElementById('optimizeEquipmentBtn')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
+            this.optimizeEquipment();
+        });
+
+        // Same optimiser, offered at the moment it is most useful: a stage has
+        // just handed you a new item, so the loadout is most likely stale here.
+        document.getElementById('stageOptimizeBtn')?.addEventListener('click', () => {
             this.audioManager.playSound('button-click');
             this.optimizeEquipment();
         });
@@ -2107,35 +2121,32 @@ this.currentBoss = null;
         if (!equipment || equipment.level >= 5) return;
         
         const cost = this.getLevelUpCost(equipment);
-        if (this.coins < cost) {
-            this.showNotification('Not enough coins!');
+        if (this.scrap < cost) {
+            this.showNotification(`Need ${cost - this.scrap} more scrap \u2014 sell gear you have outgrown.`);
             return;
         }
-        
-        // Deduct coins
-        this.coins -= cost;
-        this.saveCoins();
-        
-        // Level up
+
+        this.scrap -= cost;
+        this.saveScrap();
+
+        // The live player has to let go of the item BEFORE its stats change.
+        // Inventory entries and player.equipment are the SAME object, so
+        // mutating stats first made unequipItem subtract the new values
+        // instead of the old ones. Measured before the fix: the item went
+        // 30 -> 39 damage and the player gained nothing at all.
+        const wasEquipped = this.player &&
+            this.player.equipment[equipment.type] === equipment;
+        if (wasEquipped) this.player.unequipItem(equipment.type);
+
         equipment.level++;
-        
-        // Recalculate stats with new level
         const levelMultiplier = this.getLevelMultiplier(equipment.level);
         equipment.stats = this.scaleEquipmentStats(
             equipment.baseStats,
             equipment.rarityData.statMultiplier * levelMultiplier
         );
-        
-        // Save inventory
+
         this.saveInventory();
-        
-        // Update if equipped
-        if (this.player) {
-            const equippedItem = this.player.equipment[equipment.type];
-            if (equippedItem && equippedItem.name === equipment.name) {
-                this.player.equipItem(equipment);
-            }
-        }
+        if (wasEquipped) this.player.equipItem(equipment);
         
         // Update saved equipment loadout
         if (this.savedEquipment[equipment.type]?.name === equipment.name) {
@@ -2143,6 +2154,8 @@ this.currentBoss = null;
             this.saveSavedEquipment();
         }
         
+        this.audioManager.playSound('equip-item');
+        this.audioManager.playSound('equip-item');
         this.showNotification(`${equipment.name} upgraded to ⭐${'⭐'.repeat(equipment.level - 1)}!`);
         this.updateInventoryEquippedSlots();
         this.renderInventoryItems();
@@ -2151,6 +2164,8 @@ this.currentBoss = null;
     showStageComplete(coinsEarned, equipment) {
         this.isPaused = true;
         this.audioManager.playSound('stage-complete');
+        const optResult = document.getElementById('stageOptimizeResult');
+        if (optResult) { optResult.textContent = ''; optResult.classList.remove('shown'); }
         
         const panel = document.getElementById('stageCompletePanel');
         const stageNum = document.getElementById('stageCompleteNumber');
@@ -2392,6 +2407,8 @@ this.currentBoss = null;
     openInventory() {
         // Update coins display
         document.getElementById('inventoryCoins').textContent = this.coins;
+        const scrapEl = document.getElementById('inventoryScrap');
+        if (scrapEl) scrapEl.textContent = this.scrap;
         
         // Update equipped slots
         this.updateInventoryEquippedSlots();
@@ -2458,24 +2475,39 @@ this.currentBoss = null;
             itemDiv.style.borderColor = this.getRarityColor(equipment.rarity);
             itemDiv.onclick = () => this.equipFromInventory(index);
             
+            const sellValue = this.getSellValue(equipment);
+            const affordable = this.scrap >= levelUpCost;
+
             itemDiv.innerHTML = `
                 <div class="inventory-item-level">${this.getStarsDisplay(equipment.level)}</div>
                 <div class="inventory-item-name" style="color: ${this.getRarityColor(equipment.rarity)};">${equipment.name}</div>
                 <div class="inventory-item-type">${equipment.type}</div>
                 <div class="inventory-item-stats">${this.formatEquipmentStats(equipment)}</div>
-                ${canLevelUp ? `
-                    <button class="level-up-btn" data-index="${index}">
-                        ⬆️ Level Up (${levelUpCost} 🪙)
-                    </button>
-                ` : '<div class="max-level">MAX LEVEL</div>'}
+                <div class="inventory-item-actions">
+                    ${canLevelUp ? `
+                        <button class="level-up-btn${affordable ? '' : ' unaffordable'}" data-index="${index}"
+                                title="${affordable ? 'Spend scrap to raise this item a level' : 'Not enough scrap yet'}">
+                            ⬆️ ${levelUpCost} ⚙️
+                        </button>
+                    ` : '<div class="max-level">MAX LEVEL</div>'}
+                    ${isEquipped
+                        ? '<div class="sell-locked" title="Unequip it before selling">In use</div>'
+                        : `<button class="sell-btn" data-index="${index}"
+                                   title="Sell for scrap to upgrade something else">💰 ${sellValue} ⚙️</button>`}
+                </div>
             `;
-            
-            // Add level-up button handler
+
             if (canLevelUp) {
-                const levelUpBtn = itemDiv.querySelector('.level-up-btn');
-                levelUpBtn.onclick = (e) => {
-                    e.stopPropagation(); // Don't trigger equip
+                itemDiv.querySelector('.level-up-btn').onclick = (e) => {
+                    e.stopPropagation();          // clicking the card equips it
                     this.levelUpEquipment(index);
+                };
+            }
+            const sellBtn = itemDiv.querySelector('.sell-btn');
+            if (sellBtn) {
+                sellBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.sellEquipment(index);
                 };
             }
             
@@ -2599,12 +2631,21 @@ this.currentBoss = null;
         this.renderInventoryItems();
         if (this.updatePauseMenuEquipment) this.updatePauseMenuEquipment();
 
-        if (changed.length === 0) {
-            this.showNotification('Already wearing your best gear.');
-        } else {
-            this.audioManager.playSound('equip-item');
-            this.showNotification(`Optimised: ${changed.join(', ')}`);
+        const message = changed.length === 0
+            ? 'Already wearing your best gear.'
+            : `Equipped ${changed.join(', ')}`;
+
+        if (changed.length > 0) this.audioManager.playSound('equip-item');
+        this.showNotification(changed.length === 0 ? message : `Optimised: ${changed.join(', ')}`);
+
+        // The stage-complete panel has its own inline readout, because a
+        // toast that appears behind a full-screen panel is a toast nobody sees.
+        const out = document.getElementById('stageOptimizeResult');
+        if (out) {
+            out.textContent = message;
+            out.classList.add('shown');
         }
+        return changed;
     }
 
     equipFromInventory(index) {
@@ -4393,6 +4434,53 @@ this.currentBoss = null;
     
     saveCoins() {
         localStorage.setItem('vitalisArenaCoins', this.coins.toString());
+    }
+
+    loadScrap() {
+        const saved = localStorage.getItem('vitalisArenaScrap');
+        if (saved !== null) this.scrap = parseInt(saved) || 0;
+    }
+
+    saveScrap() {
+        localStorage.setItem('vitalisArenaScrap', this.scrap.toString());
+    }
+
+    // What an item is worth on the rack. Scales with rarity and with the
+    // levels already invested in it, so selling an upgraded item returns a
+    // fair share of what went into it rather than punishing the investment.
+    getSellValue(equipment) {
+        if (!equipment) return 0;
+        const base = this.calculateEquipmentPrice(equipment);
+        const level = Math.max(1, equipment.level || 1);
+        return Math.max(10, Math.round(base * 0.5 * (1 + 0.5 * (level - 1))));
+    }
+
+    sellEquipment(inventoryIndex) {
+        const equipment = this.playerInventory[inventoryIndex];
+        if (!equipment) return;
+
+        // Selling what you are wearing is almost always a misclick, and it
+        // silently strips a slot mid-run. Compared by name and slot, matching
+        // both the card that renders the button and every other equipment
+        // comparison in the codebase — an identity check here would disagree
+        // with the UI about what counts as "worn".
+        const wornName = (this.player && this.player.equipment[equipment.type]?.name)
+            || this.savedEquipment[equipment.type]?.name;
+        if (wornName === equipment.name) {
+            this.showNotification('Unequip it first \u2014 that one is in use.');
+            return;
+        }
+
+        const value = this.getSellValue(equipment);
+        this.playerInventory.splice(inventoryIndex, 1);
+        this.scrap += value;
+        this.saveInventory();
+        this.saveScrap();
+
+        this.audioManager.playSound('pickup-equipment');
+        this.showNotification(`Sold ${equipment.name} \u2192 ${value} scrap`);
+        this.updateInventoryEquippedSlots();
+        this.renderInventoryItems();
     }
     
     loadSavedEquipment() {

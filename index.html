@@ -352,7 +352,12 @@
                         <div id="stageEquipmentInfo" class="equipment-reward-container"></div>
                     </div>
                 </div>
-                <button id="nextStageBtn" class="btn-primary btn-large">Continue to Next Stage</button>
+                <div class="stage-complete-actions">
+                    <button id="stageOptimizeBtn" class="btn-secondary"
+                            title="Equip the best item you own in every slot">⚡ Optimize Loadout</button>
+                    <div id="stageOptimizeResult" class="stage-optimize-result"></div>
+                    <button id="nextStageBtn" class="btn-primary btn-large">Continue to Next Stage</button>
+                </div>
             </div>
         </div>
 
@@ -437,6 +442,7 @@
             <h2>🎒 Inventory</h2>
             <div class="inventory-header">
                 <div class="coins-display">🪙 <span id="inventoryCoins">0</span></div>
+                <div class="scrap-display" title="Scrap upgrades gear. Sell what you have outgrown to earn it.">⚙️ <span id="inventoryScrap">0</span></div>
                 <button id="optimizeEquipmentBtn" class="optimize-button"
                         title="Equip the best item you own in every slot">⚡ Optimize</button>
             </div>

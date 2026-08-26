@@ -498,6 +498,75 @@ body {
     50% { transform: translateX(-50%) scale(1.15); }
 }
 
+/* Scrap: the upgrade currency, sat beside coins so the two read as a pair. */
+.scrap-display {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 700;
+    color: #9fb3c8;
+}
+
+/* Item actions sit on one row so upgrade and sell are weighed against each
+   other, which is the actual decision the player is making. */
+.inventory-item-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.inventory-item-actions > * { flex: 1; }
+
+.sell-btn {
+    background: rgba(159, 179, 200, 0.14);
+    border: 1px solid rgba(159, 179, 200, 0.45);
+    color: #cbd8e4;
+    border-radius: 5px;
+    padding: 6px 4px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.sell-btn:hover { background: rgba(159, 179, 200, 0.28); }
+.sell-btn:focus-visible { outline: 2px solid #9fb3c8; outline-offset: 2px; }
+
+/* Unaffordable is dimmed rather than hidden: the cost is the information. */
+.level-up-btn.unaffordable { opacity: 0.45; }
+
+.sell-locked {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.4);
+    border: 1px dashed rgba(255, 255, 255, 0.2);
+    border-radius: 5px;
+}
+
+.stage-complete-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.stage-optimize-result {
+    min-height: 1.2em;
+    text-align: center;
+    font-size: 13px;
+    color: #ffd43b;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.stage-optimize-result.shown { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+    .stage-optimize-result, .sell-btn { transition: none; }
+}
+
 /* Minimap */
 .minimap-wrap {
     position: absolute;
