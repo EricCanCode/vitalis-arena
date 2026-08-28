@@ -2683,7 +2683,7 @@ this.currentBoss = null;
         // Strictly worse copy — pay it out instead of discarding it.
         const value = Math.max(10, Math.round(this.calculateEquipmentPrice(equipment) * 0.15));
         this.addCoins(value);
-        this.showNotification(`Duplicate ${equipment.name} \u2192 ${value} \U0001fa99`);
+        this.showNotification(`Duplicate ${equipment.name} \u2192 ${value} 🪙`);
     }
 
     // ---- Equipment optimiser ------------------------------------------
@@ -4022,9 +4022,9 @@ this.currentBoss = null;
             stats.innerHTML = `
                 <div class="final-stat">\u23f1\ufe0f Cleared in: ${minutes}:${seconds.toString().padStart(2, '0')}</div>
                 <div class="final-stat">\u2b50 Level Reached: ${this.player.level}</div>
-                <div class="final-stat">\U0001f480 Enemies Killed: ${this.player.kills}</div>
-                <div class="final-stat">\U0001f479 Bosses Defeated: ${this.runStats.bossesDefeated}</div>
-                <div class="final-stat">\U0001fa99 Coins Earned: ${this.runStats.coinsEarned}</div>
+                <div class="final-stat">💀 Enemies Killed: ${this.player.kills}</div>
+                <div class="final-stat">👹 Bosses Defeated: ${this.runStats.bossesDefeated}</div>
+                <div class="final-stat">🪙 Coins Earned: ${this.runStats.coinsEarned}</div>
                 <div class="final-stat final-stat-wide">\u2694\ufe0f Weapons: ${weapons}</div>
                 <div class="final-stat final-stat-wide">\u2728 Evolutions: ${evolutions}</div>
             `;
