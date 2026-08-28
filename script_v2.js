@@ -1659,6 +1659,15 @@ this.currentBoss = null;
                     }
                 }
                 
+                // Keep enemies inside the arena. Nothing else did: movement,
+                // dashes and contact knockback all write x/y directly, and a
+                // boss is exempt from the recycle below -- so a boss shoved out
+                // by knockback stayed out, and the player, who IS clamped,
+                // could only press against the wall while it sat there.
+                const bound = this.clampToWorld(enemy.x, enemy.y, enemy.radius);
+                enemy.x = bound.x;
+                enemy.y = bound.y;
+
                 // Recycle enemies the players have long outrun. Without this a
                 // scrolling world leaves a trail of stragglers that fill the
                 // enemy cap and starve spawning around the actual fight.
@@ -7682,9 +7691,13 @@ class Enemy {
 
     // ---- Boss attack primitives ----------------------------------------
 
-    fireBossShot(angle, speed, damageScale = 1) {
+    fireBossShot(angle, speed, damageScale = 1, options = null) {
         const shot = new BossProjectile(this.x, this.y, angle, speed, this.damage * damageScale, this.game);
         shot.color = this.color;
+        if (options) {
+            if (options.telegraphed) shot.telegraphed = true;
+            if (options.ringId) shot.ringId = options.ringId;
+        }
         this.game.particles.push(shot);
     }
 
@@ -7704,6 +7717,8 @@ class Enemy {
         const gapStart = gapStartSlot !== null
             ? gapStartSlot
             : Math.floor(Math.random() * n);
+        // One id for the whole ring, so it can only damage a player once.
+        const ringId = this.game.shockwaveSeq = (this.game.shockwaveSeq || 0) + 1;
         for (let i = 0; i < n; i++) {
             // Skip the gap slots, wrapping around the ring.
             const inGap = ((i - gapStart + n) % n) < gap;
@@ -7712,7 +7727,8 @@ class Enemy {
             // carry the special multiplier. radialBurst uses an identical call
             // and deliberately does not — that is an ordinary attack.
             this.fireBossShot((Math.PI * 2 / n) * i, speed,
-                              GAME_CONFIG.boss.special.damageMultiplier);
+                              GAME_CONFIG.boss.special.damageMultiplier,
+                              { telegraphed: true, ringId });
         }
     }
 
@@ -8441,6 +8457,10 @@ class BossProjectile {
         this.radius = 8;
         this.lifetime = 5;
         this.color = '#ff0000';
+        // Set by fireBossShot. A shockwave is a telegraphed special and
+        // pierces i-frames; an ordinary radial burst deliberately does not.
+        this.telegraphed = false;
+        this.ringId = 0;
     }
     
     update(deltaTime) {
@@ -8454,8 +8474,7 @@ class BossProjectile {
         const dist = Math.sqrt(dx * dx + dy * dy);
         
         if (dist < this.radius + this.game.player.radius) {
-            this.game.player.takeDamage(this.damage);
-            this.lifetime = 0;
+            this.hitPlayer(this.game.player);
         }
         
         // Check collision with player 2 (co-op)
@@ -8464,8 +8483,7 @@ class BossProjectile {
             const dy2 = this.game.player2.y - this.y;
             const dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
             if (dist2 < this.radius + this.game.player2.radius) {
-                this.game.player2.takeDamage(this.damage);
-                this.lifetime = 0;
+                this.hitPlayer(this.game.player2);
             }
         }
         
@@ -8473,6 +8491,19 @@ class BossProjectile {
         if (this.game.camera.isOffscreen(this.x, this.y, 100)) {
             this.lifetime = 0;
         }
+    }
+
+    hitPlayer(player) {
+        // A ring is one attack. Its projectiles leave the boss together and
+        // only separate as they expand, so close in they are packed tighter
+        // than the player is wide and two or three would land at once --
+        // three times painful, at a range where one hit is the intended cost.
+        if (this.ringId) {
+            if (player.lastRingHit === this.ringId) { this.lifetime = 0; return; }
+            player.lastRingHit = this.ringId;
+        }
+        player.takeDamage(this.damage, this.telegraphed ? { telegraphed: true } : undefined);
+        this.lifetime = 0;
     }
     
     draw(ctx) {
