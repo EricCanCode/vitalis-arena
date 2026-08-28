@@ -1632,8 +1632,13 @@ this.currentBoss = null;
                     // while someone is hurt, and heals a share of max HP so it
                     // scales with the build instead of the kill count.
                     const pk = GAME_CONFIG.pickups;
+                    // During a boss fight the drop rate is throttled, so the
+                    // adds a boss summons cannot fund the player through it.
+                    const dropChance = this.bossActive
+                        ? pk.healthDropChance * pk.bossFightDropScale
+                        : pk.healthDropChance;
                     if (this.lowestPlayerHealthFraction() < pk.healthDropThreshold &&
-                        Math.random() < pk.healthDropChance) {
+                        Math.random() < dropChance) {
                         let pct = pk.healthDropPercent;
                         if (enemy.type === 'boss') pct = pk.bossHealthDropPercent;
                         else if (enemy.type === 'elite') pct = pk.eliteHealthDropPercent;

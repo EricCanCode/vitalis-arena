@@ -105,6 +105,18 @@ const GAME_CONFIG = {
         // healing income scales with kill rate — which itself scales with
         // difficulty — so the two cancel out and the run never gets harder.
         healthDropChance: 0.10,
+
+        // Health drops are throttled hard during a boss fight.
+        //
+        // Measured on a geared player standing perfectly still against the
+        // Emberlord: 1,038 damage taken and 732 health received back — pickups
+        // were cancelling 70% of everything the boss did. The Emberlord
+        // summons adds, the adds die, the adds drop health, and the fight
+        // becomes a sustain race the player cannot lose by standing still.
+        //
+        // A boss is meant to be the fight you have to play well. Healing
+        // during one should be a rare relief, not an income stream.
+        bossFightDropScale: 0.15,
         healthDropThreshold: 0.75,   // only drops below this fraction of max HP
         // Healed amount is a fraction of max HP, so it stays meaningful as
         // builds grow instead of becoming rounding error.
@@ -272,7 +284,12 @@ const GAME_CONFIG = {
             // the pre-phase version. Deliberately generous: a boss fight is
             // supposed to be the thing the stage was building toward, and the
             // escalation between bars only lands if there is time to feel it.
-            healthScale: 0.60,
+            // Back from 0.60. The problem was never that bosses died too
+            // fast — it was that they could not threaten, so every fight was
+            // decided by attrition. With healing throttled and specials
+            // hitting for 3x, the danger is real, and a fight that lasts
+            // minutes is a slog rather than a climax.
+            healthScale: 0.42,
 
             // Index 0 is phase one. The last phase also flips the boss into
             // its `enraged` behaviour, which every archetype already defines —
