@@ -2544,12 +2544,7 @@ this.currentBoss = null;
     }
     
     openInventory() {
-        // Update coins display
-        document.getElementById('inventoryCoins').textContent = this.coins;
-        const scrapEl = document.getElementById('inventoryScrap');
-        if (scrapEl) scrapEl.textContent = this.scrap;
-        
-        // Update equipped slots
+        // Counters are refreshed by renderInventoryItems() below.
         this.updateInventoryEquippedSlots();
         
         // Render inventory items
@@ -2590,6 +2585,18 @@ this.currentBoss = null;
     }
     
     renderInventoryItems() {
+        // Refresh the header counters here rather than in openInventory().
+        // They used to be written only when the panel opened, so selling or
+        // upgrading updated the balance, saved it, and left the number on
+        // screen frozen at whatever it was when you walked in — scrap looked
+        // stuck at 0 no matter how much you scrapped. Every mutation already
+        // calls this method, so putting them here means they cannot drift
+        // apart again.
+        const coinsEl = document.getElementById('inventoryCoins');
+        if (coinsEl) coinsEl.textContent = this.coins;
+        const scrapEl = document.getElementById('inventoryScrap');
+        if (scrapEl) scrapEl.textContent = this.scrap;
+
         const inventoryGrid = document.getElementById('inventoryGrid');
         inventoryGrid.innerHTML = '';
         
