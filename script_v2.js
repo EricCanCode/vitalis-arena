@@ -7007,7 +7007,13 @@ class Enemy {
                     this.dashX = Math.cos(angle);
                     this.dashY = Math.sin(angle);
                     this.chargeState = 'dash';
-                    this.chargeTimer = s.dashTime;
+                    // Long enough to cross the gap AND keep going, so the
+                    // charge commits past the player instead of pulling up at
+                    // where they used to be. Dodging sideways is the answer;
+                    // standing still no longer is.
+                    const gap = Math.hypot(player.x - this.x, player.y - this.y);
+                    const travel = gap + (s.chargeOvershoot ?? 170);
+                    this.chargeTimer = Math.min(s.maxDashTime ?? 1.15, travel / s.dashSpeed);
                 }
                 break;
             case 'dash':

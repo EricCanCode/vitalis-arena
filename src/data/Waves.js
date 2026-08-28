@@ -74,7 +74,14 @@ const ENEMY_TYPES = {
         chargeRange: 430,
         windupTime: 0.65,         // long enough to read and react to
         dashSpeed: 620,
-        dashTime: 0.42,
+        // The dash runs THROUGH the locked position and out the far side, so
+        // its duration is derived from the distance at lock time rather than
+        // being fixed. It used to be a flat 0.42s = 260px of travel, while the
+        // charge could start from anywhere inside chargeRange (430px) — so
+        // from range it stopped 170px short of the target it had just spent
+        // 0.65s telegraphing at, and standing still was safe.
+        chargeOvershoot: 170,     // px past the locked point
+        maxDashTime: 1.15,        // ceiling, so a long lock cannot dash forever
         rechargeTime: 2.6
     },
 
