@@ -325,6 +325,17 @@
             <div id="loadoutDisplay" class="loadout-display"></div>
 
             <!-- Ultimate Button -->
+            <!-- Queued upgrades and the bomb both sit beside the ultimate,
+                 because all three are "you have something ready, spend it". -->
+            <button id="levelUpBadge" class="action-badge levelup-badge" style="display:none;">
+                <span class="badge-count" id="levelUpCount">0</span>
+                <span class="badge-label">Upgrades &middot; L</span>
+            </button>
+            <button id="bombButton" class="action-badge bomb-badge" style="display:none;">
+                <span class="badge-icon">💣</span>
+                <span class="badge-label" id="bombLabel">Bomb &middot; E</span>
+            </button>
+
             <button id="ultimateButton" class="ultimate-button">
                 <span class="ultimate-icon">💥</span>
                 <span class="ultimate-label">ULTIMATE!</span>

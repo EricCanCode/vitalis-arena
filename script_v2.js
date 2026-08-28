@@ -769,6 +769,17 @@ this.currentBoss = null;
                 }
             }
             
+            // L cashes in a queued upgrade. Queued rather than automatic, so
+            // the player chooses when to stop and read three cards.
+            if (e.key.toLowerCase() === 'l' && this.isRunning && !this.isPaused) {
+                this.openQueuedLevelUp();
+            }
+
+            // E fires the bomb, the same way Q fires the ultimate.
+            if (e.key.toLowerCase() === 'e' && this.isRunning && !this.isPaused) {
+                this.triggerBomb();
+            }
+
             // M toggles the minimap. Some players want the screen clean, and
             // co-op in particular is already busy in that corner.
             if (e.key.toLowerCase() === 'm' && this.isRunning) {
@@ -1171,6 +1182,13 @@ this.currentBoss = null;
             this.openInventory();
         });
         
+        document.getElementById('levelUpBadge')?.addEventListener('click', () => {
+            this.openQueuedLevelUp();
+        });
+        document.getElementById('bombButton')?.addEventListener('click', () => {
+            this.triggerBomb();
+        });
+
         // Optimise equipment button
         document.getElementById('optimizeEquipmentBtn')?.addEventListener('click', () => {
             this.audioManager.playSound('button-click');
@@ -1269,6 +1287,48 @@ this.currentBoss = null;
             ? 'No end. How long can you last?'
             : 'Clear the Campaign to unlock.';
         this.refreshEndlessToggle();
+    }
+
+    // How many upgrades are waiting, and whether the bomb is ready. Both live
+    // beside the ultimate because all three answer the same question: is there
+    // something I can spend right now?
+    refreshLevelUpBadge() {
+        const badge = document.getElementById('levelUpBadge');
+        const count = document.getElementById('levelUpCount');
+        if (!badge) return;
+        const n = (this.player?.pendingLevelUps || 0) + (this.player2?.pendingLevelUps || 0);
+        badge.style.display = n > 0 ? '' : 'none';
+        if (count) count.textContent = n;
+    }
+
+    // Open the next queued upgrade, if the player has one and nothing else
+    // owns the screen.
+    openQueuedLevelUp() {
+        if (!this.isRunning || this.levelUpScreenOwner) return;
+        const who = [this.player, this.player2].find(p => p && p.pendingLevelUps > 0);
+        if (!who) return;
+        who.processPendingLevelUps();
+        this.refreshLevelUpBadge();
+    }
+
+    refreshBombButton() {
+        const btn = document.getElementById('bombButton');
+        const label = document.getElementById('bombLabel');
+        if (!btn) return;
+        const bomb = this.player?.weapons?.find(w => w.type === 'bomb');
+        if (!bomb) { btn.style.display = 'none'; return; }
+        btn.style.display = '';
+        const ready = bomb.cooldown <= 0;
+        btn.classList.toggle('ready', ready);
+        if (label) label.textContent = ready ? 'Bomb \u00b7 E' : `${Math.ceil(bomb.cooldown)}s`;
+    }
+
+    triggerBomb() {
+        if (!this.isRunning || this.isPaused) return;
+        const bomb = this.player?.weapons?.find(w => w.type === 'bomb');
+        if (!bomb || bomb.cooldown > 0) return;
+        bomb.detonate(this);
+        this.refreshBombButton();
     }
 
     // The toggle stays hidden until there is something to toggle.
@@ -3988,6 +4048,8 @@ this.currentBoss = null;
         h.coins.textContent = this.coins;
 
         this.updateBossHealthBar();
+        this.refreshLevelUpBadge();
+        this.refreshBombButton();
         
         // Health
         const healthPercent = (this.player.health / this.player.maxHealth) * 100;
@@ -4706,9 +4768,10 @@ this.currentBoss = null;
             panel.removeEventListener('click', close);
 
             if (!this.isRunning) return;          // run ended while the chest was open
-            const next = [this.player, this.player2].find(p => p && p.pendingLevelUps > 0);
-            if (next) next.processPendingLevelUps();
-            else this.isPaused = false;
+            // Queued level-ups are no longer chained automatically; the badge
+            // tells the player they are waiting and they open them by choice.
+            this.isPaused = false;
+            this.refreshLevelUpBadge();
         };
         const keyHandler = (e) => {
             if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); close(); }
@@ -5731,7 +5794,11 @@ class Player {
             this.xpToLevel = Math.floor(this.xpToLevel * GAME_CONFIG.player.xpCurveMultiplier);
             this.pendingLevelUps++;
         }
-        this.processPendingLevelUps();
+        // Deliberately NOT opened here. Early levels arrive within seconds of
+        // each other, and every one froze the game mid-fight — the opening of
+        // a run was a slideshow. They queue instead, and the player cashes
+        // them in when there is a moment to spend on the decision.
+        if (this.game) this.game.refreshLevelUpBadge();
     }
 
     // Show one queued level-up screen. Only one screen may be open at a time
@@ -6018,10 +6085,10 @@ class Player {
             game.levelUpScreenOwner = null;
             if (game.updateLoadoutHUD) game.updateLoadoutHUD();
 
-            // Chain straight into the next queued level-up, if any.
-            const next = [game.player, game.player2].find(p => p && p.pendingLevelUps > 0);
-            if (next) next.processPendingLevelUps();
-            else game.isPaused = false;
+            // No longer chains into the next queued level-up — the badge says
+            // how many are waiting and the player opens them deliberately.
+            game.isPaused = false;
+            game.refreshLevelUpBadge();
         }
 
         // Keyboard picks: 1, 2, 3.
@@ -6515,9 +6582,16 @@ class SpecialWeapon {
     }
     
     updateBomb(deltaTime, game) {
-        // Bomb triggers automatically when off cooldown
-        if (this.cooldown <= 0 && game.enemies.length > 0) {
-            // Create massive explosion effect
+        // Held, not automatic. It used to fire itself the moment it came off
+        // cooldown, which meant the biggest button in the game was pressed for
+        // you — usually on a handful of trash while you were saving it.
+        game.refreshBombButton && game.refreshBombButton();
+    }
+
+    // Fired by the player. Same blast the automatic version used.
+    detonate(game) {
+        if (this.cooldown > 0) return;
+        {
             game.enemies.forEach(enemy => {
                 // Create explosion particles at each enemy position
                 game.createParticles(enemy.x, enemy.y, enemy.color, 'tank');
