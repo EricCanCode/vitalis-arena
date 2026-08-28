@@ -7128,15 +7128,23 @@ class Enemy {
     
     takeDamage(amount, options) {
         // A boss must not be deletable by a single hit. See
-        // GAME_CONFIG.boss.maxHitFraction for the measurement behind this.
+        // GAME_CONFIG.boss.softHitFraction for the measurement behind this.
         if (this.type === 'boss') {
             // Untouchable while the bar refills between phases.
             if (this.phaseBreak > 0) return;
-            // Resistance first, then the per-hit ceiling, so the cap is a
-            // ceiling on what actually lands rather than on what was asked for.
-            amount *= GAME_CONFIG.boss.damageTakenScale;
-            const cap = this.maxHealth * GAME_CONFIG.boss.maxHitFraction;
-            if (amount > cap) amount = cap;
+            // Resistance first, then the per-hit curve, so the curve shapes
+            // what actually lands rather than what was asked for.
+            const bc = GAME_CONFIG.boss;
+            amount *= bc.damageTakenScale;
+
+            const soft = this.maxHealth * bc.softHitFraction;
+            if (amount > soft) {
+                const hard = this.maxHealth * bc.hardHitFraction;
+                const scale = soft * bc.hitSoftness;
+                // Saturating curve: every point above the soft cap still adds
+                // something, less and less, asymptotically approaching hard.
+                amount = soft + (hard - soft) * (1 - Math.exp(-(amount - soft) / scale));
+            }
         }
 
         this.health -= amount;

@@ -160,7 +160,23 @@ const GAME_CONFIG = {
         // sustained damage, which is what a boss fight should be made of. The
         // bomb still clears the screen of trash, and still takes a real bite
         // out of a boss; it just cannot end the fight on its own.
-        maxHitFraction: 0.08,
+        // Per-hit damage curve, as fractions of ONE phase bar.
+        //
+        // A flat cap was a wall. Measured on a damage-stacking build: 49% of
+        // every hit was clipped and 4,665 damage was thrown away against 827
+        // that landed — the cap ate 85% of what the build produced, and going
+        // from 40 to 207 damage a hit moved the applied figure from 24 to 64
+        // and then stopped paying anything at all.
+        //
+        // So the ceiling is now a curve, not a wall. Below softHitFraction
+        // nothing is touched. Above it, the excess still counts but with
+        // sharply diminishing returns, approaching hardHitFraction and never
+        // reaching it — so investment always buys something, and nothing can
+        // delete a phase in one hit. hitSoftness sets how fast the returns
+        // fall off, in multiples of the soft cap.
+        softHitFraction: 0.08,
+        hardHitFraction: 0.20,
+        hitSoftness: 2.5,
 
         // Bosses shrug off a share of everything. This does the same job as
         // more health but without inflating the number on the bar — a boss
