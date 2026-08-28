@@ -5594,9 +5594,17 @@ class Player {
         }
     }
 
-    takeDamage(amount) {
-        // Skip damage if invulnerable or already downed
-        if (this.invulnerable || this.downed) return;
+    takeDamage(amount, options) {
+        if (this.downed) return;
+
+        // Telegraphed boss attacks ignore i-frames on purpose. They paint
+        // where they will land and wait more than a second before landing
+        // there, so being protected from one because a grunt brushed you a
+        // moment earlier makes the tell meaningless — measured: a Pyre Bloom
+        // dealt 31 standing on the mark in isolation, and 0 in a real fight,
+        // because something else had already started the 2s window.
+        const pierces = options && options.telegraphed;
+        if (this.invulnerable && !pierces) return;
         
         // Apply armor damage reduction, clamped. See GAME_CONFIG.player.maxArmor:
         // stacked armor can exceed 1.0, at which point this expression turns
@@ -6885,6 +6893,13 @@ class Enemy {
             this.phaseBaseSpeed = this.baseSpeed;
             this.phaseBaseDamage = this.damage;
 
+            // Telegraphed special. The Colossus keeps its own slam timer,
+            // which was already built this way; this drives the Warden and the
+            // Emberlord, and feeds the countdown ring for all three.
+            this.specialTimer = GAME_CONFIG.boss.special.cooldown[0];
+            this.specialState = 'idle';      // idle -> telegraph -> (fire)
+            this.specialData = null;
+
             // Pattern timers
             this.summonTimer = 3;
             this.spiralTimer = 0;
@@ -7091,6 +7106,89 @@ class Enemy {
         this.game.applyHitStop(0.05);
     }
     
+    // ---- Telegraphed boss specials ------------------------------------
+    //
+    // Each one paints where it will land, waits, then lands there. The player
+    // is meant to spend the tell deciding, not reacting.
+
+    beginBossSpecial(player) {
+        const fx = this.game.effects;
+        this.game.audioManager.playSound('boss-slam');
+
+        if (this.bossPattern === 'summoner') {
+            // Emberlord — Pyre Bloom. Marks patches of ground, one of them
+            // directly under the player, and sets them alight. The answer is
+            // to move OFF the marks, which is the opposite question to the
+            // Colossus's "find the gap and move THROUGH it".
+            const spots = [{ x: player.x, y: player.y }];
+            const extra = this.game.performanceMode ? 2 : 4;
+            for (let i = 0; i < extra; i++) {
+                const a = Math.random() * Math.PI * 2;
+                const d = 140 + Math.random() * 320;
+                spots.push(this.game.clampToWorld(player.x + Math.cos(a) * d,
+                                                 player.y + Math.sin(a) * d, 60));
+            }
+            this.specialData = { kind: 'bloom', spots, radius: 108 };
+            spots.forEach(p => fx.add(new DecalEffect(p.x, p.y, {
+                radius: 108, life: GAME_CONFIG.boss.special.telegraph,
+                color: '#ff8f3c', fillAlpha: 0.16
+            })));
+            return;
+        }
+
+        // Warden — Gate Charge. Paints the lane it is about to cross, then
+        // crosses it. Sideways is safe; directly away is not, which is the
+        // read its archetype was always described by.
+        const angle = Math.atan2(player.y - this.y, player.x - this.x);
+        const reach = 760;
+        this.specialData = { kind: 'charge', angle, reach };
+        const steps = 7;
+        for (let i = 1; i <= steps; i++) {
+            const t = i / steps;
+            fx.add(new DecalEffect(this.x + Math.cos(angle) * reach * t,
+                                   this.y + Math.sin(angle) * reach * t, {
+                radius: 74, life: GAME_CONFIG.boss.special.telegraph,
+                color: '#ff6b6b', fillAlpha: 0.13
+            }));
+        }
+    }
+
+    fireBossSpecial() {
+        const d = this.specialData;
+        if (!d) return;
+        const fx = this.game.effects;
+
+        if (d.kind === 'bloom') {
+            d.spots.forEach(p => {
+                fx.add(new FlashEffect(p.x, p.y, { radius: d.radius, color: '#ff8f3c', life: 0.4 }));
+                fx.add(new RingEffect(p.x, p.y, {
+                    fromRadius: 10, toRadius: d.radius,
+                    color: '#ffd9a0', width: 6, endWidth: 1, life: 0.35
+                }));
+                // Anything standing in it, player included. Tracked per cast
+                // so overlapping patches cannot stack into one lethal frame.
+                for (const pl of [this.game.player, this.game.player2]) {
+                    if (!pl || pl.health <= 0 || pl.downed) continue;
+                    if (d.hitAlready && d.hitAlready.has(pl)) continue;
+                    if (Math.hypot(pl.x - p.x, pl.y - p.y) <= d.radius) {
+                        pl.takeDamage(this.damage, { telegraphed: true });
+                        (d.hitAlready = d.hitAlready || new Set()).add(pl);
+                    }
+                }
+            });
+            this.game.screenShake = 18;
+            this.specialData = null;
+            return;
+        }
+
+        // Charge: cross the painted lane at speed. Handled as a timed dash so
+        // it can hit anything standing in the way on the journey rather than
+        // teleporting to the end.
+        this.chargeDash = { angle: d.angle, remaining: d.reach, speed: 900 };
+        this.game.screenShake = 14;
+        this.specialData = null;
+    }
+
     // One bar cleared. Refill, escalate, and make a moment of it.
     advanceBossPhase() {
         const ph = GAME_CONFIG.boss.phases;
@@ -7154,6 +7252,52 @@ class Enemy {
         // derived from, so there is deliberately no extra multiplier here —
         // applying one as well would compound to 2x by the final phase.
         const speed = currentSpeed;
+
+        // A Gate Charge in progress owns the boss's movement until it ends.
+        if (this.chargeDash) {
+            const step = this.chargeDash.speed * deltaTime;
+            const sx = Math.cos(this.chargeDash.angle) * step;
+            const sy = Math.sin(this.chargeDash.angle) * step;
+            this.x += sx; this.y += sy;
+            this.noteMovement(sx, sy);
+
+            // Its own hit, once per charge, ignoring i-frames. Relying on the
+            // ordinary contact check meant the charge did nothing whenever the
+            // player had been grazed in the previous two seconds — a
+            // telegraphed attack that lands for zero teaches nothing.
+            if (!this.chargeDash.hit) {
+                for (const pl of [this.game.player, this.game.player2]) {
+                    if (!pl || pl.health <= 0 || pl.downed) continue;
+                    if (Math.hypot(pl.x - this.x, pl.y - this.y) <= this.radius + pl.radius + 6) {
+                        pl.takeDamage(this.damage, { telegraphed: true });
+                        this.chargeDash.hit = true;
+                        this.game.applyHitStop(0.08);
+                        break;
+                    }
+                }
+            }
+
+            this.chargeDash.remaining -= step;
+            if (this.chargeDash.remaining <= 0) this.chargeDash = null;
+            return;
+        }
+
+        // Telegraphed special. The Colossus already runs its own slam on this
+        // shape, so it is skipped here rather than given a second one.
+        if (this.bossPattern !== 'colossus') {
+            const sp = GAME_CONFIG.boss.special;
+            this.specialTimer -= deltaTime;
+            if (this.specialState === 'idle' && this.specialTimer <= 0) {
+                this.specialState = 'telegraph';
+                this.specialTimer = sp.telegraph;
+                this.beginBossSpecial(player);
+            } else if (this.specialState === 'telegraph' && this.specialTimer <= 0) {
+                this.specialState = 'idle';
+                const i = Math.min(this.phase || 1, sp.cooldown.length) - 1;
+                this.specialTimer = sp.cooldown[i];
+                this.fireBossSpecial();
+            }
+        }
 
         // An Ascendant's own attack, layered over whatever its archetype does.
         // Not gated on phase: being a rematch is the reason it has this.
@@ -7489,6 +7633,50 @@ class Enemy {
         // Sprite is drawn larger than the collision circle on purpose.
         const size = this.radius * 2.5 * (this.drawScale || 1);
         const imageName = this.spriteKey || `enemy_${this.type}`;
+
+        // Countdown to the next telegraphed special, as an arc that fills
+        // around the boss. One language for all three archetypes — the
+        // Colossus reads from its own slam timer, which predates this — so the
+        // player learns the tell once and it means the same thing every fight.
+        if (this.type === 'boss' && this.health > 0 && this.phaseBreak <= 0) {
+            let frac = null, urgent = false;
+            const sp = GAME_CONFIG.boss.special;
+            if (this.bossPattern === 'colossus') {
+                const cd = (this.archetype?.slamCooldown || 4.5);
+                if (this.slamState === 'idle') frac = 1 - Math.max(0, this.slamTimer) / cd;
+                else { frac = 1; urgent = true; }
+            } else if (this.specialState === 'telegraph') {
+                frac = 1; urgent = true;
+            } else {
+                const i = Math.min(this.phase || 1, sp.cooldown.length) - 1;
+                frac = 1 - Math.max(0, this.specialTimer) / sp.cooldown[i];
+            }
+
+            if (frac !== null) {
+                const r = size * 0.5 + 14;
+                ctx.save();
+                ctx.lineCap = 'round';
+                // Track, so the empty part still reads as a gauge.
+                ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
+                ctx.stroke();
+
+                const flash = urgent ? (0.55 + 0.45 * Math.sin(this.game.gameTime * 18)) : 1;
+                ctx.strokeStyle = urgent
+                    ? `rgba(255, 90, 90, ${flash.toFixed(2)})`
+                    : 'rgba(255, 212, 59, 0.85)';
+                ctx.lineWidth = urgent ? 5 : 3;
+                ctx.beginPath();
+                // Starts at 12 o'clock and sweeps clockwise, which is how a
+                // clock reads and therefore needs no explaining.
+                ctx.arc(this.x, this.y, r, -Math.PI / 2,
+                        -Math.PI / 2 + Math.PI * 2 * Math.max(0, Math.min(1, frac)));
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
 
         // An Ascendant carries its own aura in a colour no ordinary boss uses,
         // so the rematch is identifiable on the battlefield and not only from

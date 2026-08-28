@@ -213,6 +213,22 @@ const GAME_CONFIG = {
             epithet: 'Returned, and no longer holding back'
         },
 
+        // Telegraphed specials.
+        //
+        // The Colossus already had one — a decal marking the safe lane, a
+        // windup, then a gapped shockwave you run through. That is the shape
+        // worth having on all three: an attack you can see coming, plan around,
+        // and be punished for ignoring. The other two had nothing you could
+        // read, so their fights were about damage races rather than decisions.
+        //
+        // Cooldown is per phase, so the pressure tightens as the fight escalates.
+        special: {
+            cooldown: [9.5, 7.5, 6.0],
+            // How long the tell is up before the attack lands. Long enough to
+            // cross the arena, which is what makes it a decision.
+            telegraph: 1.25
+        },
+
         // The Warden specifically. It is the stage-1 boss — the first one
         // anybody meets — and it had no attack at all outside its final phase,
         // which made it a slow object rather than a fight. These scale its
