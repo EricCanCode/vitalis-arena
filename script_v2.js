@@ -2343,7 +2343,10 @@ this.currentBoss = null;
         // pays for upgrades was invisible at the exact moment the player is
         // handed new gear and is deciding what to do with the old.
         const scrapEl = document.getElementById('stageScrapTotal');
-        if (scrapEl) scrapEl.textContent = `${this.scrap} \u2699\ufe0f  \u2014 sell gear to earn more`;
+        // Number only. The hint is its own element, so it can wrap in the
+        // narrow half-width box on short windows without dragging the value
+        // font down with it.
+        if (scrapEl) scrapEl.textContent = `${this.scrap} \u2699\ufe0f`;
         
         // Show equipment reward
         const rarityColor = equipment.rarityData.color;

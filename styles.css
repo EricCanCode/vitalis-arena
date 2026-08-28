@@ -2937,6 +2937,52 @@ body {
     -webkit-overflow-scrolling: touch;
 }
 
+.reward-hint {
+    display: block;
+    margin-top: 3px;
+    font-size: 0.8em;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+/* Stage complete on short windows.
+   The panel gained a Scrap row, an Optimize button and a result line, and at
+   560px tall that pushed its content to 832px inside a 515px box — it still
+   scrolled, but "Continue to Next Stage" sat 239px below the fold, so the
+   primary action was invisible and the panel looked broken.
+   Shrink the chrome, and put the two currency lines side by side, which
+   removes a whole row rather than just trimming padding off one. */
+/* Threshold measured, not guessed: the roomy layout renders at 850px of
+   content, so anything under ~950px of window overflows once the panel's own
+   padding and the overlay margin are counted. */
+@media (max-height: 950px) {
+    .stage-complete-panel      { padding: 20px 24px; }
+    .stage-complete-panel h2   { font-size: 1.7em; margin-bottom: 12px; }
+    .stage-rewards             { gap: 10px; margin-bottom: 14px; }
+    .reward-item               { padding: 10px 14px; }
+    .reward-label              { font-size: 0.85em; }
+    .reward-hint               { font-size: 0.72em; }
+    .reward-value              { font-size: 1.15em; }
+
+    /* Coins and Scrap are both one short line; side by side they cost one
+       row instead of two. The equipment card keeps the full width. */
+    .stage-rewards {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        align-items: stretch;
+    }
+    .stage-rewards > .reward-item:nth-child(3) { grid-column: 1 / -1; }
+
+    .equipment-reward          { padding: 10px 12px; gap: 10px; }
+    .equipment-name            { font-size: 1.05em; }
+    .equipment-stats           { font-size: 0.82em; }
+    .equipment-level-display   { font-size: 0.8em; }
+
+    .stage-complete-actions    { gap: 6px; }
+    .btn-secondary             { padding: 9px 18px; font-size: 0.95em; }
+    .stage-complete-panel .btn-large { padding: 12px 26px; font-size: 1.05em; }
+    .stage-optimize-result     { font-size: 12px; min-height: 1em; }
+}
+
 /* Level-up on short windows: shrink the chrome before the cards, so the
    three offers stay side by side and readable. */
 @media (max-height: 760px) {
