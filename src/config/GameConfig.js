@@ -189,6 +189,30 @@ const GAME_CONFIG = {
         // the boss's entire threat is this number divided by two.
         damageScale: 2.5,
 
+        // Second-cycle bosses.
+        //
+        // getBossForStage is (stage - 1) % 3, so stages 4-6 are the same three
+        // archetypes again. Only the shared time multiplier separated them,
+        // which meant the stage-4 Warden looked, sounded and was named exactly
+        // like the stage-1 one — the player had no way to know they had earned
+        // a harder version rather than repeated an easier one.
+        //
+        // Everything here is per completed cycle, so an Endless run at stage
+        // 7-9 escalates again on the same rules.
+        ascended: {
+            healthScale: 1.4,
+            damageScale: 1.25,
+            // An attack every archetype gains on top of its own pattern, so
+            // the rematch is not just bigger numbers. Fires regardless of
+            // phase — being an Ascendant IS the difference.
+            burstCooldown: 3.4,
+            burstCount: 9,
+            burstSpeed: 195,
+            // Reads as "not the one you fought before" at a glance.
+            auraColor: '177, 151, 252',
+            epithet: 'Returned, and no longer holding back'
+        },
+
         // The Warden specifically. It is the stage-1 boss — the first one
         // anybody meets — and it had no attack at all outside its final phase,
         // which made it a slow object rather than a fight. These scale its

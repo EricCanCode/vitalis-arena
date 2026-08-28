@@ -2020,11 +2020,6 @@ this.currentBoss = null;
     spawnBoss() {
         this.bossActive = true;
         document.getElementById('bossHealthBar').classList.add('active');
-        const bArch = (typeof getBossForStage === 'function') ? getBossForStage(this.currentStage) : null;
-        const nameEl = document.getElementById('bossHpName');
-        const epEl = document.getElementById('bossHpEpithet');
-        if (nameEl) nameEl.textContent = bArch?.name || 'The Boss';
-        if (epEl) epEl.textContent = bArch?.epithet || '';
         // Force the bar back to phase 1 for the new boss.
         this._bossHpPhase = null;
         
@@ -2038,6 +2033,15 @@ this.currentBoss = null;
         
         this.currentBoss = new Enemy(x, y, 'boss', this.waveMultiplier, this);
         this.enemies.push(this.currentBoss);
+
+        // Label the bar AFTER the boss exists. Reading currentBoss before the
+        // assignment above meant the header described the PREVIOUS boss, so an
+        // Ascendant was announced under the name of the one it is a rematch of.
+        const bArch = (typeof getBossForStage === 'function') ? getBossForStage(this.currentStage) : null;
+        const nameEl = document.getElementById('bossHpName');
+        const epEl = document.getElementById('bossHpEpithet');
+        if (nameEl) nameEl.textContent = this.currentBoss.bossName || bArch?.name || 'The Boss';
+        if (epEl) epEl.textContent = this.currentBoss.bossEpithet || bArch?.epithet || '';
         
         this.beginBossEntrance();
 
@@ -2109,8 +2113,11 @@ this.currentBoss = null;
             : null;
         const nameEl = document.getElementById('bossEntranceName');
         const epithetEl = document.getElementById('bossEntranceEpithet');
-        if (nameEl) nameEl.textContent = (archetype?.name || 'BOSS').toUpperCase();
-        if (epithetEl) epithetEl.textContent = archetype?.epithet || '';
+        // Read the BOSS, which knows whether it is an Ascendant. The archetype
+        // does not — it is shared by every cycle.
+        const bossNow = this.currentBoss;
+        if (nameEl) nameEl.textContent = (bossNow?.bossName || archetype?.name || 'BOSS').toUpperCase();
+        if (epithetEl) epithetEl.textContent = bossNow?.bossEpithet || archetype?.epithet || '';
         document.getElementById('bossEntrance')?.classList.add('active');
 
         // A ring blooming out of the boss marks where the camera is taking you.
@@ -6749,7 +6756,17 @@ class Enemy {
             // first boss needs it and the later ones do not.
             const bcfg = GAME_CONFIG.boss;
             const stage = Math.max(1, this.game.currentStage);
-            this.maxHealth *= 1 + bcfg.firstStageBonus * Math.pow(bcfg.decay, stage - 1);
+            const cycleLength = (typeof BOSS_TYPES !== 'undefined') ? BOSS_TYPES.length : 3;
+            this.bossCycle = Math.floor((stage - 1) / cycleLength);
+
+            // The front-load keys off POSITION IN THE CYCLE, not absolute
+            // stage. Keyed to the stage number it decayed to nothing by stage
+            // 4, which made the Warden rematch WEAKER than the original it was
+            // meant to escalate: 299 health a phase against 630. The reason it
+            // exists — the first boss of a run meets a player whose power
+            // curve is steepest — applies again to the first boss of a cycle.
+            const stageInCycle = ((stage - 1) % cycleLength) + 1;
+            this.maxHealth *= 1 + bcfg.firstStageBonus * Math.pow(bcfg.decay, stageInCycle - 1);
 
             // maxHealth now means ONE PHASE, which keeps every existing health
             // bar and percentage calculation correct without touching them.
@@ -6779,6 +6796,23 @@ class Enemy {
                 this.damage *= archetype.damageMultiplier;
             } else {
                 this.bossPattern = 'warden';
+            }
+
+            // Second time around. getBossForStage cycles every 3 stages, so
+            // stages 4-6 are these same three archetypes again. This has to
+            // run AFTER the archetype block, which assigns bossName — placing
+            // it before meant the suffix was silently overwritten and every
+            // Ascendant still introduced itself as the boss you already beat.
+            this.ascended = this.bossCycle > 0;
+            if (this.ascended) {
+                const asc = bcfg.ascended;
+                // Per completed cycle, so Endless keeps escalating on the same
+                // rule rather than plateauing at one tier.
+                this.maxHealth *= Math.pow(asc.healthScale, this.bossCycle);
+                this.damage *= Math.pow(asc.damageScale, this.bossCycle);
+                this.bossName = `${this.bossName} Ascendant`;
+                this.bossEpithet = asc.epithet;
+                this.ascendTimer = asc.burstCooldown;
             }
 
             // Phase escalation multiplies these, so they have to be captured
@@ -7020,6 +7054,18 @@ class Enemy {
         // derived from, so there is deliberately no extra multiplier here —
         // applying one as well would compound to 2x by the final phase.
         const speed = currentSpeed;
+
+        // An Ascendant's own attack, layered over whatever its archetype does.
+        // Not gated on phase: being a rematch is the reason it has this.
+        if (this.ascended) {
+            const asc = GAME_CONFIG.boss.ascended;
+            this.ascendTimer -= deltaTime;
+            if (this.ascendTimer <= 0) {
+                this.ascendTimer = this.game.performanceMode
+                    ? asc.burstCooldown * 2 : asc.burstCooldown;
+                this.radialBurst(asc.burstCount, asc.burstSpeed);
+            }
+        }
 
         switch (this.bossPattern) {
             case 'summoner': this.updateSummonerBoss(deltaTime, player, speed); break;
@@ -7343,6 +7389,36 @@ class Enemy {
         // Sprite is drawn larger than the collision circle on purpose.
         const size = this.radius * 2.5 * (this.drawScale || 1);
         const imageName = this.spriteKey || `enemy_${this.type}`;
+
+        // An Ascendant carries its own aura in a colour no ordinary boss uses,
+        // so the rematch is identifiable on the battlefield and not only from
+        // the name on a card that has already scrolled away.
+        if (this.type === 'boss' && this.ascended) {
+            const asc = GAME_CONFIG.boss.ascended;
+            const t = this.game.gameTime;
+            const r = size * (0.72 + 0.05 * Math.sin(t * 2.4));
+            const g3 = ctx.createRadialGradient(this.x, this.y, r * 0.45, this.x, this.y, r);
+            g3.addColorStop(0, `rgba(${asc.auraColor}, 0)`);
+            g3.addColorStop(0.7, `rgba(${asc.auraColor}, 0.20)`);
+            g3.addColorStop(1, `rgba(${asc.auraColor}, 0)`);
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = g3;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
+            ctx.fill();
+            // Three slow counter-rotating arcs, so it reads as something bound
+            // rather than as another explosion effect.
+            ctx.strokeStyle = `rgba(${asc.auraColor}, ${(0.35 + 0.25 * Math.sin(t * 2.4)).toFixed(2)})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let i = 0; i < 3; i++) {
+                const a0 = -t * 0.6 + i * (Math.PI * 2 / 3);
+                ctx.arc(this.x, this.y, size * 0.56, a0, a0 + 1.1);
+            }
+            ctx.stroke();
+            ctx.restore();
+        }
 
         // Phase has to be readable on the battlefield, not only on the HUD —
         // the player is watching the boss, not the top of the screen. An aura
