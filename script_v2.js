@@ -1949,11 +1949,34 @@ this.currentBoss = null;
         // Run the entrance down in REAL time, not scaled time — the beat is
         // two seconds on a wall clock regardless of how slow the world is.
         if (this.bossEntrance > 0) {
+            const j = GAME_CONFIG.juice;
             this.bossEntrance -= deltaTime / Math.max(0.0001, this.timeScale);
+
             if (this.currentBoss) {
                 // Ease the push so the camera arrives with the card, rather
                 // than snapping and then waiting.
                 this.cameraOverride = { x: this.currentBoss.x, y: this.currentBoss.y };
+                this.zoomFocus = { x: this.currentBoss.x, y: this.currentBoss.y };
+
+                // In, hold, out. The hold is the whole point: it is the beat
+                // where the player is looking at the thing rather than at a
+                // camera move.
+                const total = j.bossEntranceSeconds;
+                const t = Math.max(0, Math.min(1, 1 - this.bossEntrance / total));
+                const inT = j.bossEntranceZoomIn, outT = j.bossEntranceZoomOut;
+                let k;
+                if (t < inT) {
+                    // Ease-out cubic: fast push that settles, rather than a
+                    // linear ramp that arrives without weight.
+                    const u = t / inT;
+                    k = 1 - Math.pow(1 - u, 3);
+                } else if (t > 1 - outT) {
+                    const u = (t - (1 - outT)) / outT;
+                    k = 1 - u * u;
+                } else {
+                    k = 1;
+                }
+                this.zoom = 1 + (j.bossEntranceZoom - 1) * k;
             }
             if (this.bossEntrance <= 0) this.endBossEntrance();
         }
@@ -2134,6 +2157,8 @@ this.currentBoss = null;
         this.bossEntrance = 0;
         this.timeScale = 1;
         this.cameraOverride = null;
+        this.zoom = 1;
+        this.zoomFocus = null;
         document.getElementById('bossEntrance')?.classList.remove('active');
         // The drop back to full speed is the cue that the fight has started.
         this.screenShake = Math.max(this.screenShake, 14);

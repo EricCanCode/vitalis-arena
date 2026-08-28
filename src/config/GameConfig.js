@@ -333,8 +333,19 @@ const GAME_CONFIG = {
         maxHitStop: 0.12,
         // Silence held between the warning ending and the boss arriving.
         bossLullSeconds: 3.0,
-        // Length of the entrance card, in real seconds.
-        bossEntranceSeconds: 2.0,
+        // Length of the entrance card, in real seconds. Long enough to land as
+        // a reveal rather than a transition — the player should have time to
+        // read the name and look at the thing before it starts moving.
+        bossEntranceSeconds: 3.2,
+
+        // How far the camera pushes in on the boss during the entrance. It
+        // eases in over the first third, HOLDS at full while the card is up,
+        // then releases — a hold is what makes it read as a reveal, where a
+        // symmetric in-and-out (which is right for the ultimate) reads as a
+        // flourish and passes before it registers.
+        bossEntranceZoom: 1.38,
+        bossEntranceZoomIn: 0.34,
+        bossEntranceZoomOut: 0.22,
         // How slowly the world runs during it. Low enough to read as
         // deliberate, high enough that the boss visibly moves.
         bossEntranceTimeScale: 0.35,
