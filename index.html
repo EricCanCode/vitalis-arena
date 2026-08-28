@@ -34,6 +34,8 @@
     <div id="characterSelect" class="screen">
         <h1>Vitalis Arena</h1>
         <p class="game-subtitle">Select Your Hero</p>
+        <p class="progress-note">Coins, gear and upgrades carry over between runs.
+           <button id="resetProgressBtn" class="link-btn">Start fresh</button></p>
         
         <!-- Co-op Toggle -->
         <div class="coop-toggle-container">
@@ -49,11 +51,28 @@
             <span class="p2-hint">(P2: IJKL Move, U = Ultimate)</span>
         </div>
         
+        <!-- Both modes always visible. Endless was hidden until unlocked,
+             which meant a first-time player had no idea there was anything to
+             earn — a hidden reward motivates nobody. -->
+        <div class="mode-picker">
+            <button id="modeCampaignBtn" class="mode-btn active">
+                <span class="mode-name">⚔️ Campaign</span>
+                <span class="mode-desc">Six stages. Beat the last boss to win.</span>
+            </button>
+            <button id="modeEndlessBtn" class="mode-btn locked">
+                <span class="mode-name">♾️ Endless</span>
+                <span class="mode-desc" id="modeEndlessDesc">Clear the Campaign to unlock.</span>
+            </button>
+        </div>
+
         <button id="achievementsBtn" class="achievements-button">🏆 Achievements</button>
         <button id="menuShopBtn" class="menu-shop-button">🛒 Shop</button>
         <button id="inventoryBtn" class="inventory-button">🎒 Inventory</button>
         <button id="metaShopBtn" class="meta-shop-button">⭐ Upgrades</button>
-        <button id="endlessToggleBtn" class="endless-toggle-btn" style="display:none;">♾️ Endless: Off</button>
+        <!-- Superseded by the mode picker above. Kept in the DOM because
+             refreshEndlessToggle still updates it and other code reads it;
+             permanently hidden rather than deleted mid-release-prep. -->
+        <button id="endlessToggleBtn" class="endless-toggle-btn" hidden style="display:none;">♾️ Endless: Off</button>
         <div class="character-grid">
             <div class="character-card" data-character="warrior">
                 <div class="character-icon">

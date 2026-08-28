@@ -1037,7 +1037,20 @@ this.currentBoss = null;
         });
         
         // Co-op toggle button
-        const coopBtn = document.getElementById('coopToggleBtn');
+        // Co-op is held back for release. Hide its entry point rather than
+        // leaving a button that toggles a mode nobody should be in yet — with
+        // the toggle gone, coopMode can never become true, so every co-op
+        // branch downstream is unreachable without gating each one.
+        if (!GAME_CONFIG.coopEnabled) {
+            const container = document.querySelector('.coop-toggle-container');
+            if (container) container.style.display = 'none';
+            const p2Banner = document.getElementById('p2SelectBanner');
+            if (p2Banner) p2Banner.style.display = 'none';
+            this.coopMode = false;
+            this.selectedCharacter2 = null;
+        }
+
+        const coopBtn = GAME_CONFIG.coopEnabled ? document.getElementById('coopToggleBtn') : null;
         if (coopBtn) {
             coopBtn.addEventListener('click', () => {
                 this.audioManager.playSound('button-click');
@@ -1195,7 +1208,33 @@ this.currentBoss = null;
         document.getElementById('endlessToggleBtn')?.addEventListener('click', () => {
             this.audioManager.playSound('button-click');
             this.endlessMode = !this.endlessMode;
-            this.refreshEndlessToggle();
+            this.refreshModePicker();
+        });
+
+        // Explicit mode choice. These were one small toggle among five buttons,
+        // so which mode you were about to play was neither obvious nor a
+        // decision you consciously made.
+        document.getElementById('modeCampaignBtn')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
+            this.endlessMode = false;
+            this.refreshModePicker();
+        });
+        document.getElementById('modeEndlessBtn')?.addEventListener('click', () => {
+            if (!this.isEndlessUnlocked()) {
+                this.showNotification('Clear the Campaign first.');
+                return;
+            }
+            this.audioManager.playSound('button-click');
+            this.endlessMode = true;
+            this.refreshModePicker();
+        });
+
+        // "Start fresh" — resetSaveData already existed but was filed under
+        // Upgrades, where nobody looking for a new game would ever find it.
+        document.getElementById('resetProgressBtn')?.addEventListener('click', () => {
+            if (confirm('Start fresh? This erases coins, scrap, equipment, permanent upgrades and achievements. This cannot be undone.')) {
+                this.resetSaveData();
+            }
         });
 
         // Permanent upgrade shop
@@ -1214,12 +1253,32 @@ this.currentBoss = null;
         });
     }
     
+    refreshModePicker() {
+        const unlocked = this.isEndlessUnlocked();
+        if (!unlocked) this.endlessMode = false;
+
+        const camp = document.getElementById('modeCampaignBtn');
+        const endl = document.getElementById('modeEndlessBtn');
+        const desc = document.getElementById('modeEndlessDesc');
+        if (camp) camp.classList.toggle('active', !this.endlessMode);
+        if (endl) {
+            endl.classList.toggle('active', this.endlessMode && unlocked);
+            endl.classList.toggle('locked', !unlocked);
+        }
+        if (desc) desc.textContent = unlocked
+            ? 'No end. How long can you last?'
+            : 'Clear the Campaign to unlock.';
+        this.refreshEndlessToggle();
+    }
+
     // The toggle stays hidden until there is something to toggle.
     refreshEndlessToggle() {
         const btn = document.getElementById('endlessToggleBtn');
         if (!btn) return;
-        if (!this.isEndlessUnlocked()) { btn.style.display = 'none'; return; }
-        btn.style.display = '';
+        // The mode picker is the visible control now; this stays hidden and
+        // exists only so the older code paths that read it keep working.
+        btn.style.display = 'none';
+        if (!this.isEndlessUnlocked()) return;
         btn.textContent = this.endlessMode ? '\u267e\ufe0f Endless: On' : '\u267e\ufe0f Endless: Off';
         btn.classList.toggle('active', !!this.endlessMode);
     }
@@ -1229,7 +1288,7 @@ this.currentBoss = null;
         if (this.titleBackground) this.titleBackground.stop();
         document.getElementById('titleScreen').classList.remove('active');
         document.getElementById('characterSelect').classList.add('active');
-        this.refreshEndlessToggle();
+        this.refreshModePicker();
         
         // Start menu music
         this.audioManager.playMusic('menu-theme');

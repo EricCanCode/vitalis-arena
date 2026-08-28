@@ -604,6 +604,71 @@ body {
     .stage-optimize-result, .sell-btn { transition: none; }
 }
 
+/* Mode picker. Two explicit choices rather than one toggle buried among five
+   other buttons, and Endless is shown locked rather than hidden — a reward
+   nobody can see is a reward nobody plays toward. */
+.mode-picker {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 6px auto 14px;
+    max-width: 620px;
+}
+
+.mode-btn {
+    flex: 1 1 240px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 11px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid rgba(255, 255, 255, 0.14);
+    border-radius: 10px;
+    color: #e8e4f0;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.mode-btn:hover { background: rgba(255, 255, 255, 0.09); }
+.mode-btn:focus-visible { outline: 2px solid #ffd43b; outline-offset: 2px; }
+
+.mode-btn.active {
+    border-color: #ffd43b;
+    background: rgba(255, 212, 59, 0.12);
+}
+
+.mode-btn.locked { opacity: 0.5; cursor: not-allowed; }
+.mode-btn.locked:hover { background: rgba(255, 255, 255, 0.05); }
+
+.mode-name { font-weight: 700; font-size: 1.02em; }
+.mode-desc { font-size: 0.8em; color: rgba(255, 255, 255, 0.6); }
+
+/* Says plainly that progress persists, so it reads as design rather than as
+   the game failing to reset. */
+.progress-note {
+    margin: 0 0 8px;
+    font-size: 0.82em;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.link-btn {
+    background: none;
+    border: none;
+    padding: 0 0 0 4px;
+    color: #9fb3c8;
+    font-size: 1em;
+    text-decoration: underline;
+    cursor: pointer;
+}
+.link-btn:hover { color: #cbd8e4; }
+.link-btn:focus-visible { outline: 2px solid #9fb3c8; outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+    .mode-btn { transition: none; }
+}
+
 /* Minimap */
 .minimap-wrap {
     position: absolute;

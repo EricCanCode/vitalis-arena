@@ -14,6 +14,12 @@ const GAME_CONFIG = {
     // Source size of character/monster sprite art
     SPRITE_SOURCE_SIZE: 182,
 
+    // Local co-op is built and playable but held back from release: the
+    // semantics still need work (shared level-ups, one camera for two players,
+    // revive timing, the second player's HUD). Hidden rather than deleted, so
+    // turning it back on is one flag and not an archaeology exercise.
+    coopEnabled: false,
+
     progression: {
         // A run that never ends has no victory to chase and nothing to tell a
         // friend about. Clearing this many stages wins the campaign; Endless is
