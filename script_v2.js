@@ -2288,7 +2288,6 @@ this.currentBoss = null;
         }
         
         this.audioManager.playSound('equip-item');
-        this.audioManager.playSound('equip-item');
         this.showNotification(`${equipment.name} upgraded to ⭐${'⭐'.repeat(equipment.level - 1)}!`);
         this.updateInventoryEquippedSlots();
         this.renderInventoryItems();
@@ -2568,14 +2567,46 @@ this.currentBoss = null;
             if (equippedItem) {
                 // Ensure equipment has level property
                 if (!equippedItem.level) equippedItem.level = 1;
-                
+
+                // Upgrading meant scrolling to the full list and finding the
+                // item you were already looking at. The slot can do it itself.
+                // Matched by name and slot, the way every other equipment
+                // comparison in this file works.
+                const invIndex = this.playerInventory.findIndex(
+                    i => i && i.type === slot && i.name === equippedItem.name);
+                const maxed = equippedItem.level >= 5;
+                const cost = maxed ? null : this.getLevelUpCost(equippedItem);
+                const affordable = cost !== null && this.scrap >= cost;
+
+                let action = '';
+                if (invIndex === -1) {
+                    // Worn but not owned — nothing to level up against.
+                    action = '';
+                } else if (maxed) {
+                    action = '<div class="slot-maxed">MAX</div>';
+                } else {
+                    action = `<button class="slot-upgrade-btn${affordable ? '' : ' unaffordable'}"
+                        title="${affordable ? 'Upgrade this item' : `Need ${cost - this.scrap} more scrap`}">⬆️ ${cost} ⚙️</button>`;
+                }
+
                 slotElement.innerHTML = `
                     <div style="font-size: 0.8em; margin-bottom: 4px;">${this.getStarsDisplay(equippedItem.level)}</div>
                     <div style="color: ${this.getRarityColor(equippedItem.rarity)}; font-weight: bold;">${equippedItem.name}</div>
                     <div style="font-size: 0.85em; color: rgba(255,255,255,0.6);">${this.formatEquipmentStats(equippedItem)}</div>
+                    ${action}
                 `;
                 slotElement.style.cursor = 'pointer';
                 slotElement.onclick = () => this.unequipFromInventory(slot);
+
+                // The slot itself unequips on click, so the button has to stop
+                // the event or upgrading would strip the slot at the same time.
+                const upBtn = slotElement.querySelector('.slot-upgrade-btn');
+                if (upBtn) {
+                    upBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        this.levelUpEquipment(invIndex);
+                    };
+                }
             } else {
                 slotElement.innerHTML = 'Empty';
                 slotElement.style.cursor = 'default';

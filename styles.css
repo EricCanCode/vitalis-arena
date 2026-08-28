@@ -503,6 +503,38 @@ body {
     50% { transform: translateX(-50%) scale(1.15); }
 }
 
+/* Upgrade straight from an equipped slot, so the common case — improving what
+   you are already wearing — does not require finding it in the full list. */
+.slot-upgrade-btn {
+    display: block;
+    width: 100%;
+    margin-top: 8px;
+    padding: 5px 4px;
+    background: rgba(255, 212, 59, 0.16);
+    border: 1px solid rgba(255, 212, 59, 0.5);
+    border-radius: 5px;
+    color: #ffe08a;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.slot-upgrade-btn:hover { background: rgba(255, 212, 59, 0.3); }
+.slot-upgrade-btn:focus-visible { outline: 2px solid #ffd43b; outline-offset: 2px; }
+.slot-upgrade-btn.unaffordable { opacity: 0.4; }
+
+.slot-maxed {
+    margin-top: 8px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .slot-upgrade-btn { transition: none; }
+}
+
 /* Scrap: the upgrade currency, sat beside coins so the two read as a pair. */
 .scrap-display {
     display: flex;
