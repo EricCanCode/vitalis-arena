@@ -1552,6 +1552,10 @@ this.currentBoss = null;
         
         // Update
         this.update(deltaTime);
+
+        // Ending the run is checked here, once, after every source of
+        // damage for this frame has resolved.
+        if (this.checkRunEnded()) return;
         
         // Check achievements only once per second (not every frame)
         if (!this.performanceMode || this.lastAchievementCheck >= 1.0) {
@@ -4327,6 +4331,28 @@ this.currentBoss = null;
 
     isEndlessUnlocked() {
         return localStorage.getItem(GAME_CONFIG.progression.endlessUnlockKey) === 'true';
+    }
+
+    // A run ends the moment every player is dead.
+    //
+    // This has to live in the loop. The old check sat inside the enemy
+    // contact-collision branch, so it only ever ran on the frame an enemy
+    // was touching the player -- and a boss that kills you at range never
+    // touches you. Dying to the Warden's burst or Gate Charge, an Emberlord
+    // bloom, the Colossus wave or a bomber left the player on zero health,
+    // invisible (drawPlayer bails at <= 0), and still fully playable.
+    checkRunEnded() {
+        if (!this.isRunning) return false;
+
+        // Downed is not dead: co-op players have a revive window, and
+        // updateReviveSystem ends the run itself when that expires.
+        const dead = (p) => !!p && p.health <= 0 && !p.downed;
+
+        if (!dead(this.player)) return false;
+        if (this.player2 && !dead(this.player2)) return false;
+
+        this.gameOver();
+        return true;
     }
 
     gameOver() {
