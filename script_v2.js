@@ -1653,10 +1653,21 @@ this.currentBoss = null;
                     for (let j = 0; j < this.enemies.length; j++) {
                         const enemy = this.enemies[j];
                         if (this.checkCollision(projectile, enemy)) {
+                            // One hit per enemy per shot. A boss is 125px wide
+                            // and a projectile crosses it over a dozen frames,
+                            // so without this a single piercing shot landed its
+                            // full three hits on the boss alone — measured at up
+                            // to half a phase bar from one projectile.
+                            if (projectile.piercing) {
+                                if (!projectile.hitEnemies) projectile.hitEnemies = new Set();
+                                if (projectile.hitEnemies.has(enemy)) continue;
+                                projectile.hitEnemies.add(enemy);
+                            }
                             enemy.takeDamage(projectile.damage);
                             enemy.applyKnockback(projectile.x, projectile.y, GAME_CONFIG.enemy.knockbackOnHit * 0.1);
                             projectile.hit();
                             if (!projectile.piercing) break;
+                            if (!projectile.active) break;
                         }
                     }
                 }
@@ -7895,6 +7906,11 @@ class Projectile {
         this.lifetime = 3; // 3 seconds
         this.hitCount = 0;
         this.maxHits = piercing ? 3 : 1;
+        // Which enemies this shot has already damaged. Piercing means passing
+        // THROUGH several enemies, not hitting one of them several times —
+        // without this, a shot that stays overlapping a large target spends
+        // every one of its hits on that single target, frame after frame.
+        this.hitEnemies = null;
     }
     
     update(deltaTime) {
