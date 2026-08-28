@@ -2242,8 +2242,11 @@ this.currentBoss = null;
         };
         
         const baseCost = baseCosts[equipment.rarity] || 100;
-        // Cost increases exponentially per level
-        return Math.floor(baseCost * Math.pow(1.5, equipment.level - 1));
+        // Growth was 1.5 per level, which made maxing one Legendary cost
+        // 12,187 scrap against 750 for selling one — sixteen Legendaries fed
+        // to a single item, when a whole run yields about six drops. 1.3 keeps
+        // later levels a real commitment without making them theoretical.
+        return Math.floor(baseCost * Math.pow(1.3, equipment.level - 1));
     }
     
     levelUpEquipment(inventoryIndex) {
@@ -2304,6 +2307,12 @@ this.currentBoss = null;
         
         stageNum.textContent = this.currentStage;
         coinsText.textContent = `+${coinsEarned} Coins`;
+
+        // Scrap only appeared inside the inventory panel, so the currency that
+        // pays for upgrades was invisible at the exact moment the player is
+        // handed new gear and is deciding what to do with the old.
+        const scrapEl = document.getElementById('stageScrapTotal');
+        if (scrapEl) scrapEl.textContent = `${this.scrap} \u2699\ufe0f  \u2014 sell gear to earn more`;
         
         // Show equipment reward
         const rarityColor = equipment.rarityData.color;
@@ -2680,10 +2689,14 @@ this.currentBoss = null;
             return;
         }
 
-        // Strictly worse copy — pay it out instead of discarding it.
-        const value = Math.max(10, Math.round(this.calculateEquipmentPrice(equipment) * 0.15));
-        this.addCoins(value);
-        this.showNotification(`Duplicate ${equipment.name} \u2192 ${value} 🪙`);
+        // Strictly worse copy — auto-sell it. This used to pay COINS, which
+        // upgrade nothing: the one path in the game that converts unwanted
+        // gear was handing out the wrong currency. It pays the same scrap
+        // selling it by hand would, so ignoring a duplicate costs you nothing.
+        const value = this.getSellValue(equipment);
+        this.scrap += value;
+        this.saveScrap();
+        this.showNotification(`Duplicate ${equipment.name} \u2192 ${value} scrap`);
     }
 
     // ---- Equipment optimiser ------------------------------------------
@@ -4314,7 +4327,9 @@ this.currentBoss = null;
         const keys = [
             'vitalisArenaAchievements', 'vitalisArenaInventory', 'vitalisArenaCoins',
             'vitalisArenaSavedEquipment', 'vitalisArenaTotalBosses',
-            'vitalisArenaCharacterWins', 'vitalisArenaMetaUpgrades'
+            'vitalisArenaCharacterWins', 'vitalisArenaMetaUpgrades',
+            'vitalisArenaScrap', 'vitalisArenaMinimap',
+            'vitalisArenaEndlessUnlocked'
         ];
         keys.forEach(k => localStorage.removeItem(k));
         window.location.reload();
