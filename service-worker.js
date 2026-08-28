@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vitalis-arena-v19';
+const CACHE_NAME = 'vitalis-arena-v20';
 const urlsToCache = [
   '.',
   'index.html',
@@ -54,9 +54,26 @@ const urlsToCache = [
   'sounds/equip-item.mp3',
   'sounds/ultimate.mp3',
   'sounds/button-click.mp3',
-  'sounds/menu-theme.m4a',
-  'sounds/game-theme.m4a',
-  'sounds/boss-theme.m4a'
+  'sounds/boss-phase.mp3',
+  'sounds/player-death.mp3',
+  'sounds/bomber-fuse.mp3',
+  'sounds/charger-windup.mp3',
+  'sounds/event-pack.mp3',
+  'sounds/event-surge.mp3',
+  'sounds/event-cache.mp3',
+  'sounds/chest-open.mp3',
+  'sounds/bomb.mp3',
+  'sounds/evolution.mp3',
+  'sounds/stage-complete.mp3',
+  'sounds/boss-slam.mp3',
+  'sounds/coin.mp3',
+
+  // The three music loops are deliberately NOT precached. They are 7.3MB
+  // between them — more than every other asset combined — and precaching runs
+  // cache.addAll() on install, so they would gate first load on a download the
+  // player does not need before the menu appears. The cache-first fetch handler
+  // below stores them on first play anyway, so they are offline-capable from
+  // the second run onward at no cost to the first.
 ];
 
 // App code (HTML/JS/CSS) is served network-first: always try the network, fall

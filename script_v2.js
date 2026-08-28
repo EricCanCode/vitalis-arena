@@ -145,6 +145,22 @@ class AudioManager {
             'bomber-fuse':  300,  // several bombers can light up at once
             'charger-windup': 300,
         };
+
+        // Per-sound level trim, applied on top of the master effects volume.
+        //
+        // The set is deliberately NOT auto-normalised: a button click SHOULD be
+        // quieter than a bomb, and flattening every clip to the same peak would
+        // destroy the dynamics the sounds were designed with. This is only for
+        // outliers that came back at the wrong level. Measured peaks: most
+        // clips sit between 0.23 and 1.0, but event-cache arrived at 0.05 —
+        // 26dB down, inaudible under combat, for a cue whose whole job is to
+        // tell you a timed treasure exists.
+        //
+        // This is the right place to balance levels by ear without
+        // regenerating anything.
+        this.soundGain = {
+            'event-cache': 6.0,
+        };
         this.soundLastPlayed = {};
 
         // Load user settings from localStorage
@@ -195,6 +211,50 @@ class AudioManager {
         }
     }
 
+    // Strip silence from both ends of a decoded effect.
+    //
+    // Silence at the FRONT is the one that matters: the sound starts playing on
+    // the frame of the hit, so any lead-in is heard as the hit landing late,
+    // and it makes the whole game feel mushy without being obvious why.
+    // Generated audio routinely carries some — player-hit.mp3 arrived with
+    // 48ms of it.
+    //
+    // Silence at the END costs nothing in timing but sits in memory for the
+    // life of the page, and generated clips are padded to a requested duration
+    // rather than to their content: shoot.mp3 is 0.24s of sound inside a 0.91s
+    // file. Trimming here rather than re-encoding the files keeps it lossless
+    // and means any file dropped in later gets the same treatment for free.
+    trimSilence(buffer, threshold = 0.01) {
+        const channels = buffer.numberOfChannels;
+        const length = buffer.length;
+        let first = length, last = 0;
+
+        for (let c = 0; c < channels; c++) {
+            const data = buffer.getChannelData(c);
+            let i = 0;
+            while (i < length && Math.abs(data[i]) <= threshold) i++;
+            if (i < first) first = i;
+            let j = length - 1;
+            while (j > i && Math.abs(data[j]) <= threshold) j--;
+            if (j > last) last = j;
+        }
+
+        // Silent or already tight — hand the original back untouched.
+        if (first >= last) return buffer;
+        // A couple of milliseconds of head start avoids clipping the very
+        // first part of a soft attack, which would add a click.
+        const pad = Math.round(buffer.sampleRate * 0.002);
+        first = Math.max(0, first - pad);
+        const newLength = last - first + 1;
+        if (newLength >= length) return buffer;
+
+        const out = this.audioContext.createBuffer(channels, newLength, buffer.sampleRate);
+        for (let c = 0; c < channels; c++) {
+            out.getChannelData(c).set(buffer.getChannelData(c).subarray(first, first + newLength));
+        }
+        return out;
+    }
+
     // Load a sound effect asynchronously (fetch + background-thread decode)
     loadSound(name, path) {
         this._initContext();
@@ -202,7 +262,7 @@ class AudioManager {
         fetch(path)
             .then(r => r.arrayBuffer())
             .then(buf => this.audioContext.decodeAudioData(buf))
-            .then(decoded => { this.soundBuffers[name] = decoded; })
+            .then(decoded => { this.soundBuffers[name] = this.trimSilence(decoded); })
             .catch(err => console.warn(`Audio load failed [${name}]:`, err));
     }
 
@@ -241,7 +301,16 @@ class AudioManager {
             try {
                 const source = this.audioContext.createBufferSource();
                 source.buffer = this.soundBuffers[name];
-                source.connect(this.soundGainNode);
+
+                const trim = this.soundGain[name];
+                if (trim && trim !== 1) {
+                    const gain = this.audioContext.createGain();
+                    gain.gain.value = trim;
+                    source.connect(gain);
+                    gain.connect(this.soundGainNode);
+                } else {
+                    source.connect(this.soundGainNode);
+                }
                 source.start(0);
             } catch (e) {}
         };
@@ -897,9 +966,9 @@ this.currentBoss = null;
         this.audioManager.loadSound('coin', 'sounds/coin.mp3');
         
         // Register music paths (lazy-loaded on demand to save memory)
-        this.audioManager.loadMusic('menu-theme', 'sounds/menu-theme.m4a');
-        this.audioManager.loadMusic('game-theme', 'sounds/game-theme.m4a');
-        this.audioManager.loadMusic('boss-theme', 'sounds/boss-theme.m4a');
+        this.audioManager.loadMusic('menu-theme', 'sounds/menu-theme.mp3');
+        this.audioManager.loadMusic('game-theme', 'sounds/game-theme.mp3');
+        this.audioManager.loadMusic('boss-theme', 'sounds/boss-theme.mp3');
     }
     
     setupUI() {
