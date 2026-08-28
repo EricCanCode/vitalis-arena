@@ -547,6 +547,7 @@ class Game {
         // Boss system
         this.bossActive = false;
         this.bossWarning = false;
+        this.bossWarningFired = false;
         this.bossWarningTime = 0;
 this.currentBoss = null;
 
@@ -1344,6 +1345,7 @@ this.currentBoss = null;
         // Keep coins persistent - don't reset
         this.bossActive = false;
         this.bossWarning = false;
+        this.bossWarningFired = false;
         // A run that ends mid-boss-fight (death, or quit to menu) never reaches
         // defeatBoss(), which is the only place this is cleared. Left set, it
         // keeps the previous run's boss alive as the health-bar and camera
@@ -1915,10 +1917,16 @@ this.currentBoss = null;
     updateBossSystem(deltaTime) {
         const stageTime = this.gameTime - this.stageStartTime;
         
-        // Check for boss warning (10 seconds before boss spawn)
-        if (!this.bossWarning && !this.bossActive && stageTime >= this.stageTimeLimit - 10) {
+        // Boss warning. Fires ONCE per stage: the trigger condition stays true
+        // for the rest of the stage, so without the latch the countdown reset
+        // itself the instant it finished and started again from 10 — the boss
+        // then arrived partway through the second countdown, which is why it
+        // appeared to show up early.
+        if (!this.bossWarning && !this.bossWarningFired && !this.bossActive &&
+            stageTime >= this.stageTimeLimit - GAME_CONFIG.juice.bossWarningSeconds) {
             this.bossWarning = true;
-            this.bossWarningTime = 10;
+            this.bossWarningFired = true;
+            this.bossWarningTime = GAME_CONFIG.juice.bossWarningSeconds;
             document.getElementById('bossWarning').classList.add('active');
         }
         
@@ -1927,17 +1935,25 @@ this.currentBoss = null;
             this.bossWarningTime -= deltaTime;
             const warningText = document.getElementById('bossWarningText');
             const incoming = (typeof getBossForStage === 'function')
-            ? getBossForStage(this.currentStage).name
-            : 'BOSS';
-        warningText.textContent = `${incoming.toUpperCase()} INCOMING IN ${Math.ceil(this.bossWarningTime)}...`;
-            
+                ? getBossForStage(this.currentStage).name
+                : 'BOSS';
+            warningText.textContent =
+                `${incoming.toUpperCase()} INCOMING IN ${Math.max(0, Math.ceil(this.bossWarningTime))}...`;
+
+            // Start the silent lull with exactly its own duration left on the
+            // clock, so the boss lands as the countdown reaches zero. It used
+            // to begin AT zero, which put the arrival three seconds after the
+            // number the player was reading.
+            const lull = GAME_CONFIG.juice.bossLullSeconds ?? 3.0;
+            if (!this.bossActive && this.bossLull <= 0 && this.bossWarningTime <= lull) {
+                this.beginBossLull();
+            }
+
             if (this.bossWarningTime <= 0) {
+                // The latch deliberately stays set — it is cleared when the
+                // stage advances, not when the countdown finishes.
                 this.bossWarning = false;
                 document.getElementById('bossWarning').classList.remove('active');
-                // The boss used to spawn straight into an ongoing horde, so its
-                // arrival never registered as an event. Clear the field and hold
-                // silence instead — the absence is what makes the entrance land.
-                if (!this.bossActive) this.beginBossLull();
             }
         }
         
@@ -2424,6 +2440,7 @@ this.currentBoss = null;
         this.currentStage++;
         this.stageStartTime = this.gameTime;
         this.bossWarning = false;
+        this.bossWarningFired = false;
         
         // Scale difficulty
         this.waveMultiplier = 1.0 + (this.currentStage * 0.2);
@@ -2473,16 +2490,29 @@ this.currentBoss = null;
     }
 
     showNotification(message) {
-        // Create temporary notification element
+        // Into a stack down the left edge, not the middle of the arena. These
+        // fire for pickups, duplicates and upgrades — routinely several at
+        // once — and every one used to be absolutely positioned at dead
+        // centre, so they covered the fight and landed on top of each other.
+        const stack = document.getElementById('notificationStack');
         const notification = document.createElement('div');
         notification.className = 'game-notification';
         notification.textContent = message;
-        document.getElementById('gameScreen').appendChild(notification);
-        
-        setTimeout(() => {
+
+        if (!stack) {   // pre-refresh markup: fall back to the old behaviour
+            document.getElementById('gameScreen').appendChild(notification);
+        } else {
+            stack.appendChild(notification);
+            // A burst of pickups must not fill the column. Oldest goes first.
+            while (stack.children.length > 4) stack.removeChild(stack.firstChild);
+        }
+
+        const t1 = setTimeout(() => {
             notification.classList.add('fade-out');
-            setTimeout(() => notification.remove(), 500);
-        }, 2500);
+            const t2 = setTimeout(() => notification.remove(), 400);
+            this.activeTimers.push(t2);
+        }, 2200);
+        this.activeTimers.push(t1);
     }
     
     openShop() {
@@ -6741,6 +6771,12 @@ class Enemy {
         this.maxHealth = this.health;
         this.stunned = 0;
         this.hitFlash = 0;   // seconds remaining on the white damage flash
+
+        // Draw-time walk state; see noteMovement().
+        this.facing = 1;
+        this.moving = false;
+        this.moveIdle = 0;
+        this.walkPhase = Math.random() * Math.PI * 2;   // desync the crowd
     }
     
     setupType() {
@@ -6863,6 +6899,12 @@ class Enemy {
     
     update(deltaTime, player) {
         if (this.hitFlash > 0) this.hitFlash -= deltaTime;
+
+        // noteMovement sets `moving` on any frame it actually moves; this lets
+        // it lapse otherwise, so a rooted enemy (a Colossus mid-windup, a
+        // stunned grunt) settles instead of marching on the spot.
+        this.moveIdle = (this.moveIdle || 0) + deltaTime;
+        if (this.moveIdle > 0.12) this.moving = false;
         if (this.stunned > 0) {
             this.stunned -= deltaTime;
             return;
@@ -6893,10 +6935,28 @@ class Enemy {
         const dy = target.y - this.y;
         const dist = Math.hypot(dx, dy);
         if (dist > 0) {
-            this.x += (dx / dist) * speed * deltaTime * sign;
-            this.y += (dy / dist) * speed * deltaTime * sign;
+            const stepX = (dx / dist) * speed * deltaTime * sign;
+            const stepY = (dy / dist) * speed * deltaTime * sign;
+            this.x += stepX;
+            this.y += stepY;
+            this.noteMovement(stepX, stepY);
         }
         return dist;
+    }
+
+    // Walk state for the draw, taken from actual displacement rather than
+    // from intent. Every behaviour moves differently — chase, charge, retreat,
+    // orbit — and reading the result means all of them animate without each
+    // one having to remember to report anything.
+    noteMovement(stepX, stepY) {
+        const moved = Math.hypot(stepX, stepY);
+        if (moved < 0.01) return;
+        this.moving = true;
+        this.moveIdle = 0;
+        if (stepX < -0.01) this.facing = -1;
+        else if (stepX > 0.01) this.facing = 1;
+        // Advance with distance, not time, so the bob keeps step at any speed.
+        this.walkPhase = (this.walkPhase || 0) + moved * 0.10;
     }
 
     // Ranged: hold a preferred distance and shoot. Backs away if crowded, so
@@ -6951,8 +7011,14 @@ class Enemy {
                 }
                 break;
             case 'dash':
-                this.x += this.dashX * s.dashSpeed * deltaTime;
-                this.y += this.dashY * s.dashSpeed * deltaTime;
+                const dsx = this.dashX * s.dashSpeed * deltaTime;
+                const dsy = this.dashY * s.dashSpeed * deltaTime;
+                this.x += dsx;
+                this.y += dsy;
+                // The dash bypasses moveToward, so report it directly or the
+                // Charger would freeze mid-animation during its one signature
+                // move.
+                this.noteMovement(dsx, dsy);
                 if (this.chargeTimer <= 0) {
                     this.chargeState = 'recover';
                     this.chargeTimer = s.rechargeTime;
@@ -7483,25 +7549,35 @@ class Enemy {
         
         // Check if sprite is loaded
         if (this.game.imagesLoaded && this.game.images[imageName] && this.game.images[imageName].complete) {
-            // Draw shadow
-            ctx.globalAlpha = 0.3;
-            ctx.drawImage(
-                this.game.images[imageName],
-                this.x - size/2 + 2,
-                this.y - size/2 + 2,
-                size,
-                size
-            );
-            ctx.globalAlpha = 1.0;
-            
-            // Draw sprite
-            ctx.drawImage(
-                this.game.images[imageName],
-                this.x - size/2,
-                this.y - size/2,
-                size,
-                size
-            );
+            const img = this.game.images[imageName];
+
+            // Same procedural walk the player has: bob, squash and a facing
+            // flip, driven by distance travelled. A boss is on screen for a
+            // minute at a time, and a static image sliding across the floor is
+            // most obvious on the thing you are staring at.
+            const bob = this.moving ? Math.sin(this.walkPhase) * size * 0.04 : 0;
+            const squash = this.moving ? 1 + Math.cos(this.walkPhase * 2) * 0.045 : 1;
+            const w = size / squash, h = size * squash;
+            const dx = this.x - w / 2;
+            const dy = this.y - h / 2 + bob;
+
+            // A flat ellipse on the floor, not the sprite drawn again offset.
+            ctx.save();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.32)';
+            ctx.beginPath();
+            ctx.ellipse(this.x, this.y + size * 0.40, size * 0.28, size * 0.10, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+
+            ctx.save();
+            if (this.facing === -1) {
+                ctx.translate(this.x, 0);
+                ctx.scale(-1, 1);
+                ctx.drawImage(img, -(w / 2), dy, w, h);
+            } else {
+                ctx.drawImage(img, dx, dy, w, h);
+            }
+            ctx.restore();
         } else {
             // Fallback to circles
             // Shadow

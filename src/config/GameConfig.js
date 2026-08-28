@@ -331,7 +331,12 @@ const GAME_CONFIG = {
         // not seen — past ~120ms it stops reading as impact and starts
         // reading as a dropped frame.
         maxHitStop: 0.12,
-        // Silence held between the warning ending and the boss arriving.
+        // How long before the boss arrives the warning appears. The countdown
+        // now means what it says: it reaches zero as the boss lands.
+        bossWarningSeconds: 10,
+
+        // Silence before the boss arrives. Runs inside the warning countdown,
+        // not after it.
         bossLullSeconds: 3.0,
         // Length of the entrance card, in real seconds. Long enough to land as
         // a reveal rather than a transition — the player should have time to
