@@ -189,6 +189,16 @@ const GAME_CONFIG = {
         // the boss's entire threat is this number divided by two.
         damageScale: 2.5,
 
+        // The Warden specifically. It is the stage-1 boss — the first one
+        // anybody meets — and it had no attack at all outside its final phase,
+        // which made it a slow object rather than a fight. These scale its
+        // radial burst per phase; index 0 is phase one.
+        warden: {
+            burstCooldownScale: [1.9, 1.35, 1.0],
+            burstCountScale:    [0.7, 0.9, 1.15],
+            burstSpeed: 210
+        },
+
         // Boss phases.
         //
         // One long bar has no shape: it drains at a constant rate and the only

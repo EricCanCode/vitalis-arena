@@ -7030,27 +7030,40 @@ class Enemy {
 
     // Warden: relentless pursuit punctuated by a committed charge; opens up
     // with radial bursts once enraged.
+    // The Warden used to do NOTHING but walk at you until its final phase: no
+    // ranged attack, no area denial, at speed 45-68 against a player who moves
+    // at 230+. It could not catch you and could not reach you, so two thirds of
+    // the first boss fight in the game was a slow object you strolled away from
+    // while shooting it. No amount of health or contact damage fixes that,
+    // because none of it can ever be applied.
+    //
+    // It now threatens in every phase, escalating: the burst is what covers
+    // space and punishes standing in a line, which is the only thing that
+    // reaches a player faster than it is.
     updateWardenBoss(deltaTime, player, speed) {
         const a = this.archetype || {};
         this.attackCooldown -= deltaTime;
         const dist = Math.hypot(player.x - this.x, player.y - this.y);
+        const i = Math.min(this.phase || 1, 3) - 1;
 
-        if (!this.enraged) {
-            if (this.attackCooldown <= 0 && dist > 100) {
-                this.attackCooldown = 4;
-                this.moveToward(player, speed * 3, deltaTime);   // lunge
-            } else {
-                this.moveToward(player, speed, deltaTime);
-            }
-            return;
+        // Closing lunge when it has lost you. Still cannot win a footrace, but
+        // it keeps the pressure on rather than trailing behind forever.
+        if (dist > 320 && this.lungeTimer === undefined) this.lungeTimer = 0;
+        this.lungeTimer = (this.lungeTimer || 0) - deltaTime;
+        const lunging = dist > 260 && this.lungeTimer <= 0;
+        if (lunging) {
+            this.moveToward(player, speed * 2.6, deltaTime);
+            if (dist < 300) this.lungeTimer = 3.5;
+        } else {
+            this.moveToward(player, speed, deltaTime);
         }
 
-        this.moveToward(player, speed, deltaTime);
         if (this.attackCooldown <= 0) {
-            this.attackCooldown = this.game.performanceMode
-                ? (a.burstCooldown || 2) * 2
-                : (a.burstCooldown || 2);
-            this.radialBurst(a.burstCount || 8, 200);
+            const w = GAME_CONFIG.boss.warden;
+            const cd = (a.burstCooldown || 2) * w.burstCooldownScale[i];
+            this.attackCooldown = this.game.performanceMode ? cd * 2 : cd;
+            const count = Math.max(4, Math.round((a.burstCount || 8) * w.burstCountScale[i]));
+            this.radialBurst(count, w.burstSpeed);
         }
     }
 
