@@ -148,6 +148,16 @@
                  the screen. Bottom-left is the only free corner — the ultimate
                  button owns bottom-centre, pause and the equipment panel own
                  the right, and .hud-bottom-right is the co-op P2 panel. -->
+            <!-- Boss Warning. In #gameScreen, NOT #hud: #hud is a 135px
+                 strip, so a percentage top inside it resolves against 135px
+                 and puts this straight through the HUD readouts. -->
+            <div id="bossWarning" class="boss-warning">
+                <div class="boss-warning-content">
+                    <div class="boss-warning-icon">⚠️</div>
+                    <div id="bossWarningText" class="boss-warning-text">BOSS INCOMING IN 10...</div>
+                </div>
+            </div>
+
             <div id="minimapWrap" class="minimap-wrap">
                 <canvas id="minimap" class="minimap" width="336" height="190"></canvas>
                 <div class="minimap-key">M</div>
@@ -184,13 +194,6 @@
         
         <!-- HUD -->
         <div id="hud">
-            <!-- Boss Warning -->
-            <div id="bossWarning" class="boss-warning">
-                <div class="boss-warning-content">
-                    <div class="boss-warning-icon">⚠️</div>
-                    <div id="bossWarningText" class="boss-warning-text">BOSS INCOMING IN 10...</div>
-                </div>
-            </div>
             
             <!-- Boss Health Bar -->
             <div id="bossHealthBar" class="boss-health-container">

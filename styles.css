@@ -275,7 +275,10 @@ body {
 .hud-top {
     display: flex;
     justify-content: space-around;
-    padding: 20px;
+    /* Reserve the top-right corner: .sound-toggle-btn is position:fixed there,
+       so without this the row spreads underneath it and the last readout
+       (Kills, or XP on a narrower window) is covered. */
+    padding: 20px 185px 20px 20px;
     background: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), transparent);
     flex-wrap: wrap;
     gap: 15px;
@@ -429,10 +432,12 @@ body {
 }
 
 /* Boss Warning */
+/* Clears the 135px HUD strip. Shares its band with the boss health bar,
+   which is fine — the warning stops before the bar appears. */
 .boss-warning {
     display: none;
     position: absolute;
-    top: 15%;
+    top: clamp(150px, 21vh, 200px);
     left: 50%;
     transform: translateX(-50%);
     z-index: 200;
@@ -1755,6 +1760,8 @@ body {
     .hud-top {
         flex-direction: column;
         align-items: flex-start;
+        /* Stacked layout still has to clear the fixed sound button. */
+        padding-right: 120px;
     }
     
     .upgrade-grid {
@@ -1893,7 +1900,7 @@ body {
 @media (max-height: 500px) and (orientation: landscape) {
     /* HUD Optimizations */
     .hud-top {
-        padding: 5px 10px;
+        padding: 5px 120px 5px 10px;
         gap: 5px;
         flex-wrap: nowrap;
         overflow-x: auto;

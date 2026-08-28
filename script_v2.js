@@ -136,11 +136,11 @@ class AudioManager {
         // Tighter values for combat sounds — creating AudioBufferSourceNodes at
         // 10+ Hz still causes overhead when surrounded by a large group.
         this.soundCooldownMs = {
-            'enemy-hit':   200,  // max ~5/sec — was 80ms (too spammy in groups)
+            'enemy-hit':   240,  // max ~4/sec — was 80ms (too spammy in groups)
             'player-hit':  200,
             'pickup-xp':   80,
             'shoot':       60,
-            'enemy-death': 150,  // was 50ms
+            'enemy-death': 260,  // ~4/sec; a full horde wipe used to fire 6.6/sec
             'coin':          80,
             'bomber-fuse':  300,  // several bombers can light up at once
             'charger-windup': 300,
@@ -160,6 +160,15 @@ class AudioManager {
         // regenerating anything.
         this.soundGain = {
             'event-cache': 6.0,
+
+            // enemy-death came back at peak 1.0 — the same level as the bomb
+            // and the boss dying — while firing on EVERY kill, several times a
+            // second, for the whole run. A routine kill has no business being
+            // the loudest thing in the mix. Pulled well down and given a longer
+            // gate below; the two together are what stop it grinding.
+            'enemy-death': 0.38,
+            'enemy-hit':   0.6,
+            'shoot':       0.75,
         };
         this.soundLastPlayed = {};
 
@@ -486,6 +495,10 @@ class Game {
         // While set, the camera looks here instead of at the players.
         this.cameraOverride = null;
         this.bossEntrance = 0;
+        this.zoom = 1;
+        this.zoomFocus = null;
+        this.ultimateFocus = 0;
+        this.ultimateFocusPlayer = null;
         this.stageIntro = 0;
         
         // Cache DOM references to avoid getElementById every frame
@@ -1278,7 +1291,14 @@ this.currentBoss = null;
         this.timeScale = 1;
         this.cameraOverride = null;
         this.bossEntrance = 0;
+        this.zoom = 1;
+        this.zoomFocus = null;
+        this.ultimateFocus = 0;
+        this.ultimateFocusPlayer = null;
         this.stageIntro = 0;
+        // A run that ended mid-ultimate left timeScale slowed; without this the
+        // next run starts in slow motion.
+        this.timeScale = 1;
         document.getElementById('bossEntrance')?.classList.remove('active');
         document.getElementById('stageIntro')?.classList.remove('active');
         this.chests = [];
@@ -1938,6 +1958,27 @@ this.currentBoss = null;
             if (this.bossEntrance <= 0) this.endBossEntrance();
         }
 
+        // Ultimate camera punch. Same beat as the boss entrance, pointed at
+        // the player: the world slows, the camera settles on them, and the
+        // screen closes in and releases. Run in REAL time for the same reason
+        // the entrance is — the beat is a fixed length on a wall clock.
+        if (this.ultimateFocus > 0) {
+            const j = GAME_CONFIG.juice;
+            this.ultimateFocus -= deltaTime / Math.max(0.0001, this.timeScale);
+
+            const p = this.ultimateFocusPlayer;
+            if (p) {
+                this.zoomFocus = { x: p.x, y: p.y };
+                this.cameraOverride = { x: p.x, y: p.y };
+            }
+
+            // In and back out on one arc, so it never lands on a hard cut.
+            const t = 1 - Math.max(0, this.ultimateFocus) / j.ultimateFocusSeconds;
+            this.zoom = 1 + (j.ultimateZoom - 1) * Math.sin(Math.max(0, Math.min(1, t)) * Math.PI);
+
+            if (this.ultimateFocus <= 0) this.endUltimateFocus();
+        }
+
         // Hold the quiet, then bring the boss in.
         if (this.bossLull > 0) {
             this.bossLull -= deltaTime;
@@ -2038,6 +2079,26 @@ this.currentBoss = null;
     // Two seconds of ceremony: time stretches, the camera leaves the player
     // and pushes onto the boss, and the name is held on screen. The field was
     // already swept by the lull, so there is nothing competing for attention.
+    // The ultimate is the biggest thing the player does and it looked the same
+    // as everything else. Never starts during a boss entrance — the two both
+    // own timeScale and the camera, and would fight over both.
+    beginUltimateFocus(player) {
+        if (this.bossEntrance > 0 || this.stageIntro > 0) return;
+        const j = GAME_CONFIG.juice;
+        this.ultimateFocus = j.ultimateFocusSeconds;
+        this.ultimateFocusPlayer = player || this.player;
+        this.timeScale = j.ultimateTimeScale;
+    }
+
+    endUltimateFocus() {
+        this.ultimateFocus = 0;
+        this.ultimateFocusPlayer = null;
+        this.zoom = 1;
+        this.zoomFocus = null;
+        this.cameraOverride = null;
+        this.timeScale = 1;
+    }
+
     beginBossEntrance() {
         const cfg = GAME_CONFIG.juice;
         this.bossEntrance = cfg.bossEntranceSeconds ?? 2.0;
@@ -2838,7 +2899,20 @@ this.currentBoss = null;
         }
 
         // Everything drawn from here until restore() is in WORLD space.
-        this.ctx.translate(-Math.round(this.camera.x), -Math.round(this.camera.y));
+        //
+        // Zoom scales about a world-space focus point so that point stays put
+        // on screen while everything else pushes outward. Deliberately applied
+        // to the RENDER only: camera.getBounds() stays unzoomed, so spawning
+        // and culling are unaffected by a camera effect, which is the one way
+        // a flourish like this could quietly change the game.
+        if (this.zoom !== 1 && this.zoomFocus) {
+            const f = this.zoomFocus;
+            this.ctx.translate(f.x - this.camera.x, f.y - this.camera.y);
+            this.ctx.scale(this.zoom, this.zoom);
+            this.ctx.translate(-f.x, -f.y);
+        } else {
+            this.ctx.translate(-Math.round(this.camera.x), -Math.round(this.camera.y));
+        }
         
         // Draw the arena floor (skip on mobile for performance)
         if (!this.performanceMode) {
@@ -5177,7 +5251,8 @@ class Player {
         if (!this.canUseUltimate()) return;
         
         game.audioManager.playSound('ultimate');
-        
+        game.beginUltimateFocus(this);
+
         // Spend the charge and start the cooldown.
         this.ultimateCharge = 0;
         this.ultimateCooldown = this.ultimateCooldownTime;
@@ -5348,8 +5423,11 @@ class Player {
         // Skip damage if invulnerable or already downed
         if (this.invulnerable || this.downed) return;
         
-        // Apply armor damage reduction
-        const reducedDamage = amount * (1 - this.armor);
+        // Apply armor damage reduction, clamped. See GAME_CONFIG.player.maxArmor:
+        // stacked armor can exceed 1.0, at which point this expression turns
+        // negative and a hit would heal the player.
+        const dr = Math.min(GAME_CONFIG.player.maxArmor, Math.max(0, this.armor));
+        const reducedDamage = amount * (1 - dr);
         this.health -= reducedDamage;
 
         // player-hit.mp3 was loaded and rate-limited from the start but nothing
@@ -6542,6 +6620,9 @@ class Enemy {
             // bar and percentage calculation correct without touching them.
             this.maxHealth *= bcfg.phases.healthScale;
 
+            // Contact and projectile damage both read this.damage.
+            this.damage *= bcfg.damageScale;
+
             this.attackCooldown = 2;   // brief entry delay before the first attack
             this.attackPattern = 0;
             // Enrage is no longer a health threshold; it IS the final phase.
@@ -7051,6 +7132,9 @@ class Enemy {
         if (this.type === 'boss') {
             // Untouchable while the bar refills between phases.
             if (this.phaseBreak > 0) return;
+            // Resistance first, then the per-hit ceiling, so the cap is a
+            // ceiling on what actually lands rather than on what was asked for.
+            amount *= GAME_CONFIG.boss.damageTakenScale;
             const cap = this.maxHealth * GAME_CONFIG.boss.maxHitFraction;
             if (amount > cap) amount = cap;
         }

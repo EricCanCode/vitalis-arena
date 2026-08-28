@@ -51,6 +51,19 @@ const GAME_CONFIG = {
         // game reads as fair — the art overhangs the hitbox.
         radius: 20,
         iframeDuration: 2.0,
+
+        // Hard ceiling on damage reduction.
+        //
+        // Armor is applied as `amount * (1 - armor)` and stacked additively
+        // from the class base plus four gear slots with no limit. Measured
+        // ceiling: 231 armor points from gear alone is a fraction of 2.31, and
+        // the tank adds 0.45 on top. At 1.0 the player is untouchable; past it
+        // the subtraction flips sign and being hit HEALS you. Even an ordinary
+        // late-run loadout sat at 0.65, which is why bosses felt harmless.
+        //
+        // Clamped when damage is applied rather than when armor accumulates,
+        // so unequipping still subtracts exactly what equipping added.
+        maxArmor: 0.6,
         ultimateMax: 100,
         baseXPToLevel: 10,
         xpCurveMultiplier: 1.5,
@@ -147,7 +160,18 @@ const GAME_CONFIG = {
         // sustained damage, which is what a boss fight should be made of. The
         // bomb still clears the screen of trash, and still takes a real bite
         // out of a boss; it just cannot end the fight on its own.
-        maxHitFraction: 0.10,
+        maxHitFraction: 0.08,
+
+        // Bosses shrug off a share of everything. This does the same job as
+        // more health but without inflating the number on the bar — a boss
+        // that visibly resists reads better than one with a bigger bar.
+        damageTakenScale: 0.6,
+
+        // Boss contact and projectile damage. The base of 25 was set before
+        // armor stacking was capped and lands as single figures against any
+        // geared player; i-frames then gate it to one hit per 2 seconds, so
+        // the boss's entire threat is this number divided by two.
+        damageScale: 2.5,
 
         // Boss phases.
         //
@@ -266,6 +290,13 @@ const GAME_CONFIG = {
         bossEntranceTimeScale: 0.35,
         // Spawn-free hold between stages.
         stageIntroSeconds: 2.2,
+
+        // Ultimate camera punch. The boss entrance reads as a "zoom" because
+        // it locks the camera and slows time; this is the same idea aimed at
+        // the player, plus an actual scale change so the screen closes in.
+        ultimateZoom: 1.22,
+        ultimateFocusSeconds: 0.7,
+        ultimateTimeScale: 0.45,
         maxParticlesDesktop: 400,
         maxParticlesMobile: 60,
         maxDamageNumbers: 40,
