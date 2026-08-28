@@ -7182,7 +7182,7 @@ class Enemy {
                     if (!pl || pl.health <= 0 || pl.downed) continue;
                     if (d.hitAlready && d.hitAlready.has(pl)) continue;
                     if (Math.hypot(pl.x - p.x, pl.y - p.y) <= d.radius) {
-                        pl.takeDamage(this.damage, { telegraphed: true });
+                        pl.takeDamage(this.damage * GAME_CONFIG.boss.special.damageMultiplier, { telegraphed: true });
                         (d.hitAlready = d.hitAlready || new Set()).add(pl);
                     }
                 }
@@ -7280,7 +7280,7 @@ class Enemy {
                 for (const pl of [this.game.player, this.game.player2]) {
                     if (!pl || pl.health <= 0 || pl.downed) continue;
                     if (Math.hypot(pl.x - this.x, pl.y - this.y) <= this.radius + pl.radius + 6) {
-                        pl.takeDamage(this.damage, { telegraphed: true });
+                        pl.takeDamage(this.damage * GAME_CONFIG.boss.special.damageMultiplier, { telegraphed: true });
                         this.chargeDash.hit = true;
                         this.game.applyHitStop(0.08);
                         break;
@@ -7518,8 +7518,8 @@ class Enemy {
 
     // ---- Boss attack primitives ----------------------------------------
 
-    fireBossShot(angle, speed) {
-        const shot = new BossProjectile(this.x, this.y, angle, speed, this.damage, this.game);
+    fireBossShot(angle, speed, damageScale = 1) {
+        const shot = new BossProjectile(this.x, this.y, angle, speed, this.damage * damageScale, this.game);
         shot.color = this.color;
         this.game.particles.push(shot);
     }
@@ -7544,7 +7544,11 @@ class Enemy {
             // Skip the gap slots, wrapping around the ring.
             const inGap = ((i - gapStart + n) % n) < gap;
             if (inGap) continue;
-            this.fireBossShot((Math.PI * 2 / n) * i, speed);
+            // The shockwave IS the Colossus's special, so its projectiles
+            // carry the special multiplier. radialBurst uses an identical call
+            // and deliberately does not — that is an ordinary attack.
+            this.fireBossShot((Math.PI * 2 / n) * i, speed,
+                              GAME_CONFIG.boss.special.damageMultiplier);
         }
     }
 

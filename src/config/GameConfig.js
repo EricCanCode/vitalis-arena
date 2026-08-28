@@ -181,7 +181,11 @@ const GAME_CONFIG = {
         // Bosses shrug off a share of everything. This does the same job as
         // more health but without inflating the number on the bar — a boss
         // that visibly resists reads better than one with a bigger bar.
-        damageTakenScale: 0.6,
+        // Bosses absorb half of everything. Raised from 0.6 after repeated
+        // play feedback that fights still ended too fast — my harness could
+        // not reproduce a real, well-built Mage, so this follows the play
+        // rather than the measurement.
+        damageTakenScale: 0.5,
 
         // Boss contact and projectile damage. The base of 25 was set before
         // armor stacking was capped and lands as single figures against any
@@ -226,7 +230,13 @@ const GAME_CONFIG = {
             cooldown: [9.5, 7.5, 6.0],
             // How long the tell is up before the attack lands. Long enough to
             // cross the arena, which is what makes it a decision.
-            telegraph: 1.25
+            telegraph: 1.25,
+
+            // A special hits for this multiple of the boss's ordinary damage.
+            // Ignoring a tell you were given more than a second to read should
+            // cost far more than being brushed by the boss walking into you,
+            // otherwise there is no reason to respect it.
+            damageMultiplier: 3.0
         },
 
         // The Warden specifically. It is the stage-1 boss — the first one
@@ -246,16 +256,17 @@ const GAME_CONFIG = {
         // one is a checkpoint the player has visibly earned, and the boss that
         // killed them was demonstrably harder than the one they started on.
         //
-        // healthScale is per phase, not per fight: at 0.42 across 3 phases the
-        // whole fight carries 1.26x the health a single bar did, so it is
+        // healthScale is per phase, not per fight: at 0.60 across 3 phases the
+        // whole fight carries 1.8x the health a single bar did, so it is
         // longer, but nowhere near three times longer.
         phases: {
             count: 3,
-            // 3 x 0.42 = 1.26x the health the old single bar carried. The
-            // phases are not meant to triple the fight — they are meant to
-            // give it shape, and the boss getting faster and hitting harder
-            // each phase raises the difficulty without raising the duration.
-            healthScale: 0.42,
+            // 3 x 0.60 = 1.8x the health the old single bar carried, and with
+            // damageTakenScale 0.5 on top a boss is roughly 3.6x as durable as
+            // the pre-phase version. Deliberately generous: a boss fight is
+            // supposed to be the thing the stage was building toward, and the
+            // escalation between bars only lands if there is time to feel it.
+            healthScale: 0.60,
 
             // Index 0 is phase one. The last phase also flips the boss into
             // its `enraged` behaviour, which every archetype already defines —
