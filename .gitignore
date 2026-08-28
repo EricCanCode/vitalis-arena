@@ -21,3 +21,9 @@ PWA_SETUP.md
 
 # Local dev tooling
 .claude/
+
+# Node
+node_modules/
+
+# Build output
+dist/
