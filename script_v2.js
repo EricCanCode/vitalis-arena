@@ -2927,6 +2927,13 @@ this.currentBoss = null;
         // on it — a telegraph the player can walk across, not a sprite.
         this.effects.draw(this.ctx, 'ground');
 
+        // Where you are, painted on the floor UNDER everything that can stand
+        // on it. The sprite already draws above enemies, but in a dense swarm
+        // it is surrounded by things the same size and colour, so the sprite
+        // being on top is not enough to find it. A marker on the ground cannot
+        // be covered by the crowd.
+        this.drawPlayerMarkers();
+
         // Draw particles (background layer)
         this.particles.forEach(particle => particle.draw(this.ctx));
         
@@ -3244,6 +3251,39 @@ this.currentBoss = null;
         if (this.player2 && this.player2.health > 0) {
             dot(this.player2.x, this.player2.y, 4, '#ffffff');
             dot(this.player2.x, this.player2.y, 2.4, this.player2.color || '#51cf66');
+        }
+    }
+
+    // Floor ring under each living player, in that character's colour.
+    drawPlayerMarkers() {
+        const ctx = this.ctx;
+        for (const p of [this.player, this.player2]) {
+            if (!p || p.health <= 0 || p.downed) continue;
+            const r = p.radius;
+            // Breathes slowly so it reads as a marker rather than as scenery,
+            // and faster when hurt, which puts the low-health warning where
+            // the eye already is instead of only on the HUD.
+            const hurt = p.health / p.maxHealth < GAME_CONFIG.juice.lowHealthThreshold;
+            const pulse = 0.5 + 0.5 * Math.sin(this.gameTime * (hurt ? 7 : 2.2));
+
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+
+            const glow = ctx.createRadialGradient(p.x, p.y, r * 0.5, p.x, p.y, r * 2.6);
+            glow.addColorStop(0, (hurt ? '#ff4444' : p.color) + '3a');
+            glow.addColorStop(1, (hurt ? '#ff4444' : p.color) + '00');
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, r * 2.6, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = (hurt ? '#ff5555' : p.color) + 'cc';
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 0.45 + 0.4 * pulse;
+            ctx.beginPath();
+            ctx.ellipse(p.x, p.y + r * 0.55, r * 1.5, r * 0.55, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
         }
     }
 
@@ -4981,6 +5021,11 @@ class Player {
         this.icon = stat.icon;
         this.armor = stat.armor || 0;
 
+        // Draw-time movement state (see update()).
+        this.facing = 1;
+        this.moving = false;
+        this.walkPhase = 0;
+
         // Contact response, read by Game.resolveContact when an enemy touches
         // this player. Multiple of projectileDamage per second; 0 = no answer.
         this.contactDamage = 0;
@@ -5032,6 +5077,18 @@ class Player {
         const moveSpeed = this.speed * this.getMoveSpeedMultiplier();
         this.x += dx * moveSpeed * deltaTime;
         this.y += dy * moveSpeed * deltaTime;
+
+        // Movement state for the draw. A static sprite sliding across the
+        // floor is what makes a character read as a game piece rather than a
+        // person; these three values are what a walk cycle would otherwise
+        // buy, at no art cost. Facing only latches on real horizontal input,
+        // so walking straight up does not reset which way you were pointed.
+        this.moving = (dx !== 0 || dy !== 0);
+        if (dx < -0.01) this.facing = -1;
+        else if (dx > 0.01) this.facing = 1;
+        // Phase advances with distance travelled, not with time, so the bob
+        // stays in step with the feet at every speed.
+        if (this.moving) this.walkPhase += moveSpeed * deltaTime * 0.045;
         
         // Keep inside the world (not the viewport — the camera scrolls)
         this.x = Math.max(this.radius, Math.min(worldWidth - this.radius, this.x));
@@ -5789,25 +5846,50 @@ class Player {
         
         // Check if sprite is loaded
         if (this.game.imagesLoaded && this.game.images[this.type] && this.game.images[this.type].complete) {
-            // Draw shadow
-            ctx.globalAlpha = 0.3;
-            ctx.drawImage(
-                this.game.images[this.type],
-                this.x - size/2 + 3,
-                this.y - size/2 + 3,
-                size,
-                size
-            );
-            ctx.globalAlpha = 1.0;
-            
-            // Draw sprite
-            ctx.drawImage(
-                this.game.images[this.type],
-                this.x - size/2,
-                this.y - size/2,
-                size,
-                size
-            );
+            const img = this.game.images[this.type];
+
+            // Bob and squash, driven by distance travelled. This is the part a
+            // two-frame walk cycle would normally do, and at 50px on a screen
+            // holding ninety enemies it reads better than one would.
+            const bob = this.moving ? Math.sin(this.walkPhase) * size * 0.045 : 0;
+            const squash = this.moving ? 1 + Math.cos(this.walkPhase * 2) * 0.05 : 1;
+            const w = size / squash, h = size * squash;
+            const dx = this.x - w / 2;
+            const dy = this.y - h / 2 + bob;
+
+            // A flat ellipse on the floor. The old shadow was the sprite drawn
+            // again 3px off at 30% alpha, which reads as a blurry double image
+            // rather than as contact with the ground.
+            ctx.save();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
+            ctx.beginPath();
+            ctx.ellipse(this.x, this.y + size * 0.42, size * 0.30, size * 0.11, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Halo in the character's own colour, behind the sprite. Cheaper
+            // than a real outline and it survives being surrounded, which is
+            // the case that matters.
+            const halo = ctx.createRadialGradient(this.x, this.y, size * 0.28, this.x, this.y, size * 0.72);
+            halo.addColorStop(0, this.color + 'aa');
+            halo.addColorStop(1, this.color + '00');
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = halo;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y + bob, size * 0.72, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+
+            // Face the way you are moving. Flipping costs one transform and is
+            // the single clearest signal that the sprite is a character.
+            ctx.save();
+            if (this.facing === -1) {
+                ctx.translate(this.x, 0);
+                ctx.scale(-1, 1);
+                ctx.drawImage(img, -(w / 2), dy, w, h);
+            } else {
+                ctx.drawImage(img, dx, dy, w, h);
+            }
+            ctx.restore();
         } else {
             // Fallback to circles
             // Shadow
