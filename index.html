@@ -16,6 +16,9 @@
     <link rel="apple-touch-icon" href="icon-192.png">
     <title>Vitalis Arena - Roguelike Survival Game</title>
     <link rel="stylesheet" href="styles.css">
+    <!-- After styles.css: the hero card rules intentionally override the
+         original .character-card styling by cascade order, not weight. -->
+    <link rel="stylesheet" href="src/ui/heroes/heroCard.css">
 </head>
 <body>
     <!-- Title Screen -->
@@ -74,75 +77,10 @@
              permanently hidden rather than deleted mid-release-prep. -->
         <button id="endlessToggleBtn" class="endless-toggle-btn" hidden style="display:none;">♾️ Endless: Off</button>
         <div class="character-grid">
-            <div class="character-card" data-character="warrior">
-                <div class="character-icon">
-                    <img src="images/warrior.png" alt="Warrior" class="character-sprite">
-                </div>
-                <h2>Warrior</h2>
-                <p class="character-ability">Whirlwind Attack + Heavy Armor</p>
-                <p class="character-desc">AOE damage + 25% damage reduction + knockback</p>
-                <div class="character-stats">
-                    <span>❤️ HP: 120</span>
-                    <span>⚡ Speed: Fast</span>
-                    <span>🗡️ Damage: High</span>
-                </div>
-            </div>
-
-            <div class="character-card" data-character="ranger">
-                <div class="character-icon">
-                    <img src="images/ranger.png" alt="Ranger" class="character-sprite">
-                </div>
-                <h2>Ranger</h2>
-                <p class="character-ability">Multi-Shot</p>
-                <p class="character-desc">Fires 3 arrows in a spread pattern</p>
-                <div class="character-stats">
-                    <span>❤️ HP: 80</span>
-                    <span>⚡ Speed: Fast</span>
-                    <span>🗡️ Damage: Medium</span>
-                </div>
-            </div>
-
-            <div class="character-card" data-character="mage">
-                <div class="character-icon">
-                    <img src="images/mage.png" alt="Mage" class="character-sprite">
-                </div>
-                <h2>Mage</h2>
-                <p class="character-ability">Arcane Missiles</p>
-                <p class="character-desc">Launches homing projectiles at enemies</p>
-                <div class="character-stats">
-                    <span>❤️ HP: 70</span>
-                    <span>⚡ Speed: Slow</span>
-                    <span>🗡️ Damage: Very High</span>
-                </div>
-            </div>
-
-            <div class="character-card" data-character="assassin">
-                <div class="character-icon">
-                    <img src="images/assassin.png" alt="Assassin" class="character-sprite">
-                </div>
-                <h2>Assassin</h2>
-                <p class="character-ability">Shadow Strike</p>
-                <p class="character-desc">Teleports behind enemies for critical hits</p>
-                <div class="character-stats">
-                    <span>❤️ HP: 75</span>
-                    <span>⚡ Speed: Very Fast</span>
-                    <span>🗡️ Damage: Critical</span>
-                </div>
-            </div>
-
-            <div class="character-card" data-character="tank">
-                <div class="character-icon">
-                    <img src="images/tank.png" alt="Tank" class="character-sprite">
-                </div>
-                <h2>Tank</h2>
-                <p class="character-ability">Shockwave</p>
-                <p class="character-desc">Ground pound that stuns nearby enemies</p>
-                <div class="character-stats">
-                    <span>❤️ HP: 150</span>
-                    <span>⚡ Speed: Very Slow</span>
-                    <span>🗡️ Damage: Low</span>
-                </div>
-            </div>
+            <!-- Cards are built by src/ui/heroes/HeroSelect.js from
+                 HERO_DATA. Kept out of the markup so the stats can be
+                 derived from the same numbers the game runs on instead
+                 of being retyped here and drifting from them. -->
         </div>
     </div>
 
@@ -558,6 +496,16 @@
     <script src="src/systems/ArenaEvents.js"></script>
     <script src="src/systems/TitleBackground.js"></script>
 
+    <!-- Hero select UI. Order matters twice over: TierSystem and
+         heroData before the components that read them, and the whole
+         group before script_v2.js, which binds its click listener to
+         each card element that exists at DOMContentLoaded. -->
+    <script src="src/ui/heroes/TierSystem.js"></script>
+    <script src="src/ui/heroes/heroData.js"></script>
+    <script src="src/ui/heroes/HeroAbility.js"></script>
+    <script src="src/ui/heroes/HeroStats.js"></script>
+    <script src="src/ui/heroes/HeroCard.js"></script>
+    <script src="src/ui/heroes/HeroSelect.js"></script>
     <script src="script_v2.js"></script>
     <script>
         // Register Service Worker for PWA.

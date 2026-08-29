@@ -1,8 +1,9 @@
-const CACHE_NAME = 'vitalis-arena-v39';
+const CACHE_NAME = 'vitalis-arena-v40';
 const urlsToCache = [
   '.',
   'index.html',
   'styles.css',
+  'src/ui/heroes/heroCard.css',
   'script_v2.js',
   'manifest.json',
   'icon-192.png',
@@ -21,6 +22,12 @@ const urlsToCache = [
   'src/systems/ArenaEvents.js',
   'src/systems/Effects.js',
   'src/systems/TitleBackground.js',
+  'src/ui/heroes/TierSystem.js',
+  'src/ui/heroes/heroData.js',
+  'src/ui/heroes/HeroAbility.js',
+  'src/ui/heroes/HeroStats.js',
+  'src/ui/heroes/HeroCard.js',
+  'src/ui/heroes/HeroSelect.js',
   'images/title-still.jpg',
   'images/warrior.png',
   'images/ranger.png',
