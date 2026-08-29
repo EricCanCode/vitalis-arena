@@ -69,7 +69,7 @@ class HeroStats {
         el.appendChild(HeroStats.row('⚡', 'Speed', speed.label, speed));
         el.appendChild(HeroStats.row('💥', 'Damage', damage.label, damage));
         el.appendChild(HeroStats.row('🛡', 'Defense', Math.round(c.armor * 100) + '%'));
-        el.appendChild(HeroStats.row('🎯', 'Range', this.hero.range));
+        el.appendChild(HeroStats.row('🎯', 'Range', TierSystem.range(c.attackRange)));
         el.appendChild(HeroStats.row('📈', 'Scaling', this.hero.scaling));
         return el;
     }

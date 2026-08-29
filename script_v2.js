@@ -5261,6 +5261,14 @@ class Player {
                 speed: 230,
                 damage: 15,
                 armor: 0.25,
+                // Reach, in world px. The select screen derives its
+                // Short/Medium/Long label from these numbers, so the card
+                // cannot claim a range the character does not have.
+                // Measured: a swarm closes to a median of 226px and never
+                // sat past 318px, so 260 is a real constraint at the short
+                // end while 520 and 820 are unconstrained in a crowd and
+                // tell against bosses and stragglers instead.
+                attackRange: 260,
                 color: '#ff6b6b',
                 icon: '⚔️'
             },
@@ -5268,6 +5276,7 @@ class Player {
                 maxHealth: 80,
                 speed: 250,
                 damage: 10,
+                attackRange: 820,
                 color: '#51cf66',
                 icon: '🏹'
             },
@@ -5275,6 +5284,7 @@ class Player {
                 maxHealth: 70,
                 speed: 150,
                 damage: 20,
+                attackRange: 520,
                 color: '#845ef7',
                 icon: '🔮'
             },
@@ -5282,6 +5292,7 @@ class Player {
                 maxHealth: 75,
                 speed: 300,
                 damage: 18,
+                attackRange: 300,
                 color: '#ffd43b',
                 icon: '🗡️'
             },
@@ -5295,6 +5306,7 @@ class Player {
                 speed: 120,
                 damage: 12,
                 armor: 0.45,
+                attackRange: 240,
                 color: '#74c0fc',
                 icon: '🛡️'
             }
@@ -5311,6 +5323,7 @@ class Player {
         this.color = stat.color;
         this.icon = stat.icon;
         this.armor = stat.armor || 0;
+        this.attackRange = stat.attackRange;
 
         // Draw-time movement state (see update()).
         this.facing = 1;
@@ -5426,9 +5439,16 @@ class Player {
                 }
             }
             
-            if (nearest) {
+            // Out of reach is a miss, not a wasted swing: the cooldown is
+            // only spent below, on a shot that actually goes out, so the
+            // strike lands the instant something steps inside the range.
+            if (nearest && nearestDist <= this.attackRange) {
                 const angle = Math.atan2(nearest.y - this.y, nearest.x - this.x);
-                
+
+                // A little past the reach, so a shot fired at the very edge
+                // still catches a target drifting away from it.
+                const reach = this.attackRange * 1.25;
+
                 // Fire projectiles
                 if (this.projectileCount === 1) {
                     game.audioManager.playSound('shoot');
@@ -5438,7 +5458,8 @@ class Player {
                         this.projectileDamage,
                         this.color,
                         this.piercing,
-                        this.type
+                        this.type,
+                        reach
                     ));
                 } else {
                     // Multi-shot (for Ranger)
@@ -5452,7 +5473,8 @@ class Player {
                             this.projectileDamage,
                             this.color,
                             this.piercing,
-                            this.type
+                            this.type,
+                            reach
                         ));
                     }
                 }
@@ -8076,7 +8098,10 @@ class Enemy {
 
 // Projectile Class
 class Projectile {
-    constructor(x, y, angle, speed, damage, color, piercing = false, type = 'warrior') {
+    // maxDistance defaults to Infinity so only the basic attack is capped.
+    // Weapons and abilities build their own projectiles and keep their own
+    // reach -- capping those too would be a balance change nobody asked for.
+    constructor(x, y, angle, speed, damage, color, piercing = false, type = 'warrior', maxDistance = Infinity) {
         this.x = x;
         this.y = y;
         this.angle = angle;
@@ -8095,11 +8120,19 @@ class Projectile {
         // without this, a shot that stays overlapping a large target spends
         // every one of its hits on that single target, frame after frame.
         this.hitEnemies = null;
+        // A short-ranged strike has to STOP being dangerous at its range.
+        // Without this the reach limit would only decide what you can aim
+        // at, and the shot would sail on across the arena regardless.
+        this.maxDistance = maxDistance;
+        this.travelled = 0;
     }
     
     update(deltaTime) {
-        this.x += Math.cos(this.angle) * this.speed * deltaTime;
-        this.y += Math.sin(this.angle) * this.speed * deltaTime;
+        const step = this.speed * deltaTime;
+        this.x += Math.cos(this.angle) * step;
+        this.y += Math.sin(this.angle) * step;
+        this.travelled += step;
+        if (this.travelled >= this.maxDistance) this.active = false;
         this.lifetime -= deltaTime;
     }
     

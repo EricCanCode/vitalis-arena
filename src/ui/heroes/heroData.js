@@ -7,6 +7,9 @@
  * before its own cards) and fails outright under file://. Every other data
  * file in the project — Bosses, Passives, Waves — uses this same shape.
  *
+ * `combat` mirrors Player.setupCharacter(), attackRange included —
+ * the Range row is derived from it, never written by hand.
+ *
  * `combat` mirrors Player.setupCharacter() in script_v2.js. Those are the
  * numbers the game actually runs on; the tier labels are derived from them
  * rather than written by hand, so a card cannot disagree with the game.
@@ -22,8 +25,7 @@ const HERO_DATA = [
         name: 'Warrior',
         sprite: 'images/warrior.png',
         ability: { icon: '⚔️', name: 'Whirlwind Attack', description: 'Spins for AOE damage and knocks nearby enemies back.' },
-        combat: { health: 120, speed: 230, damage: 15, armor: 0.25 },
-        range: 'Short',
+        combat: { health: 120, speed: 230, damage: 15, armor: 0.25, attackRange: 260 },
         scaling: 'Strength',
         requiresEndless: false
     },
@@ -32,8 +34,7 @@ const HERO_DATA = [
         name: 'Ranger',
         sprite: 'images/ranger.png',
         ability: { icon: '🏹', name: 'Multi-Shot', description: 'Fires three arrows at once in a widening spread.' },
-        combat: { health: 80, speed: 250, damage: 10, armor: 0 },
-        range: 'Long',
+        combat: { health: 80, speed: 250, damage: 10, armor: 0, attackRange: 820 },
         scaling: 'Dexterity',
         requiresEndless: false
     },
@@ -42,8 +43,7 @@ const HERO_DATA = [
         name: 'Mage',
         sprite: 'images/mage.png',
         ability: { icon: '🔮', name: 'Arcane Missiles', description: 'Launches homing bolts that seek the nearest enemy.' },
-        combat: { health: 70, speed: 150, damage: 20, armor: 0 },
-        range: 'Medium',
+        combat: { health: 70, speed: 150, damage: 20, armor: 0, attackRange: 520 },
         scaling: 'Intelligence',
         requiresEndless: false
     },
@@ -52,8 +52,7 @@ const HERO_DATA = [
         name: 'Assassin',
         sprite: 'images/assassin.png',
         ability: { icon: '🗡️', name: 'Shadow Strike', description: 'Blinks behind a target and strikes for a critical hit.' },
-        combat: { health: 75, speed: 300, damage: 18, armor: 0 },
-        range: 'Short',
+        combat: { health: 75, speed: 300, damage: 18, armor: 0, attackRange: 300 },
         scaling: 'Dexterity',
         requiresEndless: false
     },
@@ -62,8 +61,7 @@ const HERO_DATA = [
         name: 'Tank',
         sprite: 'images/tank.png',
         ability: { icon: '🛡️', name: 'Shockwave', description: 'Slams the ground, stunning every enemy in reach.' },
-        combat: { health: 150, speed: 120, damage: 12, armor: 0.45 },
-        range: 'Short',
+        combat: { health: 150, speed: 120, damage: 12, armor: 0.45, attackRange: 240 },
         scaling: 'Vitality',
         requiresEndless: false
     }

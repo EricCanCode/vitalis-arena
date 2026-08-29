@@ -30,6 +30,12 @@ const TierSystem = (() => {
         { tier: 5, label: 'Extreme',   min: 20 }
     ];
 
+    const RANGE_BANDS = [
+        { tier: 1, label: 'Short',  min: 0 },
+        { tier: 2, label: 'Medium', min: 380 },
+        { tier: 3, label: 'Long',   min: 660 }
+    ];
+
     // Walk from the top so the first match is the highest tier the value
     // clears. Falls back to tier 1 for anything below the lowest bound.
     function resolve(scale, value) {
@@ -46,8 +52,16 @@ const TierSystem = (() => {
         speed: (value) => resolve(SPEED_TIERS, value),
         damage: (value) => resolve(DAMAGE_TIERS, value),
 
-        /** Range and Scaling are descriptive, not numeric — no tier meter. */
-        RANGES: ['Short', 'Medium', 'Long'],
+        /**
+         * Range is a real number of world pixels — Player.attackRange, the
+         * distance past which the character genuinely cannot hit anything.
+         * Banded rather than tiered because three names is the whole scale
+         * and a five-pip meter beside it would be inventing precision.
+         */
+        RANGE_BANDS: RANGE_BANDS,
+        range: (px) => resolve(RANGE_BANDS, px).label,
+
+        /** Scaling is pure flavour text — no number behind it. */
         SCALINGS: ['Strength', 'Dexterity', 'Intelligence', 'Vitality']
     };
 })();
