@@ -199,11 +199,22 @@ const GAME_CONFIG = {
         // Bosses shrug off a share of everything. This does the same job as
         // more health but without inflating the number on the bar — a boss
         // that visibly resists reads better than one with a bigger bar.
-        // Bosses absorb half of everything. Raised from 0.6 after repeated
-        // play feedback that fights still ended too fast — my harness could
-        // not reproduce a real, well-built Mage, so this follows the play
-        // rather than the measurement.
-        damageTakenScale: 0.5,
+        // Bosses absorb a share of everything.
+        //
+        // History worth keeping, because this has moved twice. It went 0.6 ->
+        // 0.5 when fights were ending too fast. What was not visible then is
+        // that the boss's telegraphed special was one-shotting four of the
+        // five characters, so nobody was reaching the end of a fight to find
+        // out how long it actually was. With the special capped and the fight
+        // survivable, the length showed up: measured with a 34-damage Mage,
+        // point blank with the boss in range the whole time, phase one took
+        // 39 seconds and the full three-phase boss projected to ~117s, while
+        // the boss needed only ~15s to kill the same player. Two minutes of
+        // kiting for the first boss in the game.
+        //
+        // 0.75 brings that to roughly 78s without going back to the 0.6 that
+        // was called too fast.
+        damageTakenScale: 0.75,
 
         // Boss contact and projectile damage. The base of 25 was set before
         // armor stacking was capped and lands as single figures against any
