@@ -652,11 +652,24 @@ this.currentBoss = null;
             // Request fullscreen once, on the first touch. The previous code
             // re-requested it a second after every exit, which fights both the
             // player and itch.io's own fullscreen control inside its iframe.
-            document.addEventListener('touchstart', () => {
-                if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-                    requestFullscreen();
-                }
-            }, { once: true });
+            //
+            // Skip entirely when the document cannot go fullscreen at all,
+            // rather than spending the one attempt on a call that is certain
+            // to be refused. That covers the two cases that actually happen:
+            // an itch iframe served without allow="fullscreen" (their embed
+            // setting controls this), and iOS Safari on iPhone, where only
+            // <video> can go fullscreen and requestFullscreen does not exist
+            // for any other element. In both, the reliable control is itch's
+            // own fullscreen button, not this.
+            const canFullscreen = document.fullscreenEnabled
+                || document.webkitFullscreenEnabled;
+            if (canFullscreen) {
+                document.addEventListener('touchstart', () => {
+                    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                        requestFullscreen();
+                    }
+                }, { once: true });
+            }
         }
     }
 

@@ -686,6 +686,15 @@ body {
     font-size: 0.85em;
     cursor: pointer;
     z-index: 60;
+    /* #hud is pointer-events: none so the HUD does not eat clicks meant for
+       the canvas, and pointer-events inherits. Every other interactive thing
+       in there opts back in (.ultimate-button.ready, .joystick-container,
+       .fire-button); these two never did, so neither badge has been
+       clickable on ANY device since it was added. Keyboard L and E masked it
+       on desktop -- on a phone there is no keyboard and no way to spend an
+       upgrade or the bomb at all. Both handlers already guard on cooldown
+       and on pendingLevelUps, so always-on is safe. */
+    pointer-events: auto;
     transition: transform 0.12s ease, border-color 0.15s ease;
 }
 
@@ -741,6 +750,30 @@ body {
     .levelup-badge { right: calc(50% + 76px); }
     .bomb-badge    { left:  calc(50% + 76px); }
     .action-badge  { font-size: 0.75em; padding: 7px 11px; }
+}
+
+/* Touch layout. The joystick owns the bottom-left corner and the fire button
+   the bottom-right, and the badges were landing underneath both -- measured
+   at 375x812, elementFromPoint at the upgrades badge returned joystickBase
+   and at the bomb button returned fireButton. Stack them up the right edge
+   above the fire button instead, clear of both thumbs, at a real tap size. */
+@media (hover: none) and (pointer: coarse) {
+    .action-badge {
+        left: auto;
+        right: 14px;
+        min-height: 44px;
+        font-size: 0.8em;
+        padding: 8px 14px;
+    }
+    .bomb-badge    { bottom: 148px; }
+    .levelup-badge { bottom: 204px; }
+}
+
+/* Landscape phone: the fire button drops to 70px, so the stack sits lower
+   and stays out of the HUD along the top. */
+@media (hover: none) and (pointer: coarse) and (max-height: 500px) {
+    .bomb-badge    { bottom: 96px; }
+    .levelup-badge { bottom: 146px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
