@@ -5151,6 +5151,7 @@ class Player {
         this.invulnerable = false;
         this.iframeTimer = 0;
         this.iframeDuration = 2.0; // 2 seconds of invulnerability after being hit
+        this.autoRevivesUsed = 0;  // Phoenix Feather charges spent this run
         
         // Special weapons
         this.weapons = [];
@@ -5255,63 +5256,11 @@ class Player {
     }
     
     setupCharacter() {
-        const stats = {
-            warrior: {
-                maxHealth: 120,
-                speed: 230,
-                damage: 15,
-                armor: 0.25,
-                // Reach, in world px. The select screen derives its
-                // Short/Medium/Long label from these numbers, so the card
-                // cannot claim a range the character does not have.
-                // Measured: a swarm closes to a median of 226px and never
-                // sat past 318px, so 260 is a real constraint at the short
-                // end while 520 and 820 are unconstrained in a crowd and
-                // tell against bosses and stragglers instead.
-                attackRange: 260,
-                color: '#ff6b6b',
-                icon: '⚔️'
-            },
-            ranger: {
-                maxHealth: 80,
-                speed: 250,
-                damage: 10,
-                attackRange: 820,
-                color: '#51cf66',
-                icon: '🏹'
-            },
-            mage: {
-                maxHealth: 70,
-                speed: 150,
-                damage: 20,
-                attackRange: 520,
-                color: '#845ef7',
-                icon: '🔮'
-            },
-            assassin: {
-                maxHealth: 75,
-                speed: 300,
-                damage: 18,
-                attackRange: 300,
-                color: '#ffd43b',
-                icon: '🗡️'
-            },
-            // The tank was strictly dominated by the warrior: 150 flat HP is
-            // LESS effective HP than the warrior's 120 behind 25% armor, and it
-            // paid for that with half the damage and half the speed. Armor is
-            // what the slowness is supposed to buy, so the tank gets the most
-            // of it in the game (150/0.55 = 273 EHP, ~1.7x the warrior).
-            tank: {
-                maxHealth: 150,
-                speed: 120,
-                damage: 12,
-                armor: 0.45,
-                attackRange: 240,
-                color: '#74c0fc',
-                icon: '🛡️'
-            }
-        };
-        
+        // The numbers live in src/data/Heroes.js so that the game and the
+        // select screen read the same ones -- two copies is what had the
+        // old cards advertising stats the characters did not have.
+        const stats = HERO_STATS;
+
         const stat = stats[this.type];
         // Always apply bonus upgrades after base
         this.maxHealth = stat.maxHealth + (this.maxHealthBonus || 0) + (this.metaBonuses ? this.metaBonuses.maxHealth : 0);
@@ -5827,6 +5776,11 @@ class Player {
             }));
         }
         
+        // Phoenix Feather. Deliberately ahead of both the co-op downed
+        // branch below and the loop's end-of-run check (which runs after
+        // update() has finished), so a saved player never reads as dead.
+        if (this.health <= 0) this.tryCheatDeath();
+
         // In co-op, enter downed state instead of dying
         if (this.health <= 0 && this.isP2 !== undefined && this.game.coopMode) {
             this.downed = true;
@@ -5836,11 +5790,70 @@ class Player {
             this.health = 0;
         }
         
-        // Activate invulnerability frames
+        // Activate invulnerability frames. Math.max because tryCheatDeath()
+        // above runs on this same hit and grants a LONGER window than an
+        // ordinary one -- a plain assignment here silently overwrote it, so
+        // the revive handed back only the usual 2s in the middle of whatever
+        // had just killed the player.
         this.invulnerable = true;
-        this.iframeTimer = this.iframeDuration;
+        this.iframeTimer = Math.max(this.iframeTimer || 0, this.iframeDuration);
     }
-    
+
+    /**
+     * Spend an 'auto_revive' charge to survive a lethal hit.
+     *
+     * The Phoenix Feather carried this effect from the start and nothing
+     * ever read it, so the item was a plain +40 health accessory wearing a
+     * name that promised more. effectValue is the number of charges.
+     *
+     * Coming back on 1hp in the middle of whatever just killed you is not a
+     * save, so the revive buys room: half health, i-frames longer than an
+     * ordinary hit grants, and a shove that clears the immediate crowd.
+     */
+    tryCheatDeath() {
+        if (!this.equipment) return false;
+        const item = Object.keys(this.equipment)
+            .map(slot => this.equipment[slot])
+            .find(e => e && e.effect === 'auto_revive');
+        if (!item) return false;
+
+        const charges = item.effectValue || 1;
+        if ((this.autoRevivesUsed || 0) >= charges) return false;
+        this.autoRevivesUsed = (this.autoRevivesUsed || 0) + 1;
+
+        this.health = Math.max(1, Math.round(this.maxHealth * 0.5));
+        this.invulnerable = true;
+        this.iframeTimer = Math.max(this.iframeDuration, 3.0);
+
+        const g = this.game;
+        if (!g) return true;
+
+        // Clear the crowd that just did this.
+        const PUSH_RADIUS = 260;
+        g.enemies.forEach(e => {
+            const dx = e.x - this.x, dy = e.y - this.y;
+            const d = Math.hypot(dx, dy);
+            if (d > 0 && d < PUSH_RADIUS) {
+                const shove = (PUSH_RADIUS - d) * 0.9;
+                e.x += (dx / d) * shove;
+                e.y += (dy / d) * shove;
+            }
+        });
+
+        g.audioManager.playSound('evolution');
+        g.screenShake = 22;
+        g.effects.add(new FlashEffect(this.x, this.y, { radius: 240, color: '#ff9f43', life: 0.45 }));
+        g.effects.add(new RingEffect(this.x, this.y, {
+            fromRadius: 20, toRadius: PUSH_RADIUS,
+            color: '#ffd166', width: 12, endWidth: 2, life: 0.55, ease: false
+        }));
+        const left = charges - this.autoRevivesUsed;
+        g.showNotification(left > 0
+            ? `\u{1F525} Phoenix Feather! ${left} left`
+            : '\u{1F525} Phoenix Feather burns out');
+        return true;
+    }
+
     addXP(amount) {
         this.xp += amount * this.getXPMultiplier();
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vitalis-arena-v41';
+const CACHE_NAME = 'vitalis-arena-v42';
 const urlsToCache = [
   '.',
   'index.html',
@@ -14,6 +14,7 @@ const urlsToCache = [
   'src/data/Evolutions.js',
   'src/data/Waves.js',
   'src/data/Bosses.js',
+  'src/data/Heroes.js',
   'src/data/MetaUpgrades.js',
   'src/entities/Chest.js',
   'src/entities/CoinPickup.js',
