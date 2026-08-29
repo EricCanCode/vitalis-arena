@@ -2459,6 +2459,12 @@ body {
     body::before {
         content: "↻ Please rotate your device to landscape mode for the best experience";
         position: fixed;
+        /* Advisory only. Without this the pseudo-element sits at z-index 9999
+           across the whole viewport and swallows every touch -- the joystick
+           renders in the right place and cannot be pressed, so the game reads
+           as "I can't move". Measured: elementFromPoint at the joystick's own
+           centre returned BODY, not the joystick. */
+        pointer-events: none;
         top: 0;
         left: 0;
         width: 100vw;

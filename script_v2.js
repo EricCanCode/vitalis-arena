@@ -877,8 +877,13 @@ this.currentBoss = null;
         let deltaX = touch.clientX - centerX;
         let deltaY = touch.clientY - centerY;
         
-        // Limit movement to joystick radius
-        const maxDistance = rect.width / 2 - 30; // 30px for stick size
+        // Limit movement to joystick radius. The 30 here was the stick's
+        // radius at the default 150px joystick (60px stick), but the
+        // landscape layout -- the orientation the game asks players to use --
+        // shrinks the pad to 100px and the stick to 40px, where a fixed 30
+        // leaves only 20px of throw and a 4px dead zone. Read the stick.
+        const stickRadius = (stick.offsetWidth || 60) / 2;
+        const maxDistance = Math.max(20, rect.width / 2 - stickRadius);
         const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
         
         if (distance > maxDistance) {
