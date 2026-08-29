@@ -5767,6 +5767,15 @@ class Player {
         // because something else had already started the 2s window.
         const pierces = options && options.telegraphed;
         if (this.invulnerable && !pierces) return;
+
+        // A telegraphed special is capped at a share of this player's maximum
+        // health. See GAME_CONFIG.boss.special.maxHealthFraction: the flat
+        // multiplier alone one-shot four of the five characters on a fresh
+        // profile while reading as a fair hit on a geared one.
+        if (pierces) {
+            const cap = this.maxHealth * GAME_CONFIG.boss.special.maxHealthFraction;
+            amount = Math.min(amount, cap);
+        }
         
         // Apply armor damage reduction, clamped. See GAME_CONFIG.player.maxArmor:
         // stacked armor can exceed 1.0, at which point this expression turns

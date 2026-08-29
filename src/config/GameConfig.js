@@ -254,7 +254,26 @@ const GAME_CONFIG = {
             // Ignoring a tell you were given more than a second to read should
             // cost far more than being brushed by the boss walking into you,
             // otherwise there is no reason to respect it.
-            damageMultiplier: 3.0
+            damageMultiplier: 3.0,
+
+            // ...but never more than this share of the player's maximum
+            // health, applied before armour.
+            //
+            // Without the cap the multiplier is a flat number measured
+            // against whatever health the player happens to have, and meta
+            // progression moves that enormously -- a fresh Mage has 70 health
+            // and no armour, a well-upgraded Warrior 232 and 50%, about six
+            // times the effective health. Tuned on the geared profile a
+            // stage-1 Warden special read as a fair 40% hit; on a fresh one
+            // the same attack dealt 117% of a Warrior's health and 268% of a
+            // Mage's, one-shotting four of the five characters before they
+            // had any way to be tougher.
+            //
+            // A share of max health is the same decision for everyone: a
+            // special always takes about a third of the bar, so it always
+            // hurts and never ends the run outright. Capping before armour
+            // keeps armour meaningful on top of it.
+            maxHealthFraction: 0.35
         },
 
         // The Warden specifically. It is the stage-1 boss — the first one

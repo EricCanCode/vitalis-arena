@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vitalis-arena-v44';
+const CACHE_NAME = 'vitalis-arena-v45';
 const urlsToCache = [
   '.',
   'index.html',

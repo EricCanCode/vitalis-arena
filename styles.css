@@ -756,7 +756,12 @@ body {
    the bottom-right, and the badges were landing underneath both -- measured
    at 375x812, elementFromPoint at the upgrades badge returned joystickBase
    and at the bomb button returned fireButton. Stack them up the right edge
-   above the fire button instead, clear of both thumbs, at a real tap size. */
+   above the fire button instead, clear of both thumbs, at a real tap size.
+
+   The minimap shares that bottom-left corner: at bottom 14 / left 14 it ran
+   y 728-798 against the joystick's 632-782, so it painted over the pad the
+   player is trying to steer with. It is pointer-events: none, so it never
+   stole the touch -- it just hid the control. Lifted clear above the pad. */
 @media (hover: none) and (pointer: coarse) {
     .action-badge {
         left: auto;
@@ -796,6 +801,23 @@ body {
 }
 
 .minimap-wrap.hidden { opacity: 0; }
+
+/* Touch devices: the minimap's bottom-left corner is the joystick's corner.
+   Measured at 375x812 it ran y 728-798 straight through the pad's 632-782,
+   hiding the control the player steers with. It is pointer-events: none so
+   it never stole the touch, only covered it. Lifted above the pad.
+
+   These have to sit AFTER the base rule above, not in the touch block
+   further up the file: same specificity, so the later one wins, and the
+   first attempt at this changed nothing at all. */
+@media (hover: none) and (pointer: coarse) {
+    .minimap-wrap { bottom: 190px; }
+}
+
+@media (hover: none) and (pointer: coarse) and (max-height: 500px) {
+    /* Landscape shrinks the pad to 100px at bottom 15, so 125 clears it. */
+    .minimap-wrap { bottom: 125px; }
+}
 
 /* Backing store is 2x the CSS size so the dots stay crisp on Retina. */
 .minimap {
