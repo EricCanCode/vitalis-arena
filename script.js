@@ -503,7 +503,15 @@ class Game {
         let deltaY = touch.clientY - centerY;
         
         // Limit movement to joystick radius
-        const maxDistance = rect.width / 2 - 30; // 30px for stick size
+        // Throw derived from the stick, not a constant. The 30 was the
+        // stick's radius at the default 150px pad with its 60px stick, but
+        // the landscape layout -- the orientation the game asks players to
+        // use -- shrinks the pad to 100px and the stick to 40px, where a
+        // fixed 30 leaves 20px of travel and a 4px dead zone: twitchy enough
+        // to read as broken. Unchanged at 45px on the default pad, 20 -> 30
+        // in landscape.
+        const stickRadius = (stick.offsetWidth || 60) / 2;
+        const maxDistance = Math.max(20, rect.width / 2 - stickRadius);
         const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
         
         if (distance > maxDistance) {
