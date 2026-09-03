@@ -37,6 +37,16 @@ const ACHIEVEMENTS = [
 ];
 
 // Equipment Definitions
+// Hard ceiling on damage reduction from armour.
+//
+// Equipment armour accumulates unclamped (this.armor += value / 100), and
+// only the level-up upgrade caps itself, at 0.75. Stack enough armour gear
+// and this.armor passes 1.0, at which point amount * (1 - armor) is
+// NEGATIVE and every hit heals the player instead of hurting them. Clamping
+// at the point of use rather than at the point of accumulation means it
+// holds no matter how the total is arrived at.
+const MAX_ARMOR_REDUCTION = 0.6;
+
 const EQUIPMENT_TYPES = {
     WEAPON: 'weapon',
     ARMOR: 'armor',
@@ -2779,8 +2789,9 @@ class Player {
             amount *= Math.max(0, 1 - fireResistance / 100);
         }
 
-        // Apply armor damage reduction
-        const reducedDamage = amount * (1 - this.armor);
+        // Apply armor damage reduction, clamped. See MAX_ARMOR_REDUCTION.
+        const dr = Math.min(MAX_ARMOR_REDUCTION, Math.max(0, this.armor));
+        const reducedDamage = amount * (1 - dr);
         this.health -= reducedDamage;
         if (this.health < 0) this.health = 0;
 
