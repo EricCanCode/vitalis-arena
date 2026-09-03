@@ -946,7 +946,32 @@ class Game {
                     this.gameOver();
                 }
             }
-            
+
+            // Keep enemies inside the arena.
+            //
+            // Nothing else did. Movement, the boss's 3x-speed charge and the
+            // contact knockback just above all write x/y directly with nothing
+            // bounding them, and this build has no despawn at all -- so an
+            // enemy shoved past an edge stays out there permanently AND stays
+            // in the array. On a boss that is a fight-ruiner: the player is
+            // clamped, the boss is not, so a few seconds of knockback walks it
+            // out of the arena and leaves the player pressed against the wall
+            // with the boss sitting somewhere unreachable.
+            //
+            // The gate matters. Everything spawns outside deliberately and
+            // walks in; clamping from birth would snap each one to the edge on
+            // its first frame and delete the boss's entrance.
+            if (!enemy.hasEnteredArena) {
+                if (enemy.x >= enemy.radius && enemy.x <= this.canvas.width - enemy.radius &&
+                    enemy.y >= enemy.radius && enemy.y <= this.canvas.height - enemy.radius) {
+                    enemy.hasEnteredArena = true;
+                }
+            } else {
+                const m = enemy.radius;
+                enemy.x = Math.max(m, Math.min(this.canvas.width - m, enemy.x));
+                enemy.y = Math.max(m, Math.min(this.canvas.height - m, enemy.y));
+            }
+
             // Remove dead enemies
             if (enemy.health <= 0) {
                 this.audioManager.playSound('enemy-death');
@@ -3750,6 +3775,10 @@ class Enemy {
     constructor(x, y, type, multiplier, game) {
         this.x = x;
         this.y = y;
+        // Enemies spawn outside the arena and walk in -- grunts 50px past an
+        // edge, the boss 100px above the top -- so containment cannot start
+        // until they have actually got inside. See the clamp in Game.update.
+        this.hasEnteredArena = false;
         this.type = type;
         this.multiplier = multiplier;
         this.game = game;
