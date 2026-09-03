@@ -242,6 +242,7 @@ class Game {
         this.healthPickups = [];
         this.equipmentDrops = [];
         this.particles = [];
+        this.chainLightningEffects = [];
         this.screenShake = 0;
         
         // Input
@@ -753,6 +754,7 @@ class Game {
         this.healthPickups = [];
         this.equipmentDrops = [];
         this.particles = [];
+        this.chainLightningEffects = [];
         this.gameTime = 0;
         this.waveMultiplier = 1.0;
         
@@ -828,10 +830,31 @@ class Game {
             this.screenShake -= deltaTime * 30;
             if (this.screenShake < 0) this.screenShake = 0;
         }
+
+        this.chainLightningEffects = this.chainLightningEffects.filter(effect => {
+            effect.lifetime -= deltaTime;
+            return effect.lifetime > 0;
+        });
         
         // Update
         this.update(deltaTime);
-        
+
+        // End the run here, once, after every source of damage for this frame
+        // has resolved.
+        //
+        // The only other gameOver() call sits inside the enemy contact block,
+        // so death was noticed only on a frame where an enemy was physically
+        // touching the player. A boss that kills you at range never touches
+        // you: dying to the Warden's burst or gate charge, an Emberlord bloom,
+        // the Colossus wave or a bomber left the player on zero health and
+        // still playing. Checking per frame catches every source, including
+        // any added later, and it runs after takeDamage so a Phoenix Feather
+        // revive is already applied and never reads as a death.
+        if (this.isRunning && this.player && this.player.health <= 0) {
+            this.gameOver();
+            return;
+        }
+
         // Check achievements only once per second (not every frame)
         if (!this.performanceMode || this.lastAchievementCheck >= 1.0) {
             this.lastAchievementCheck = 0;
@@ -883,6 +906,11 @@ class Game {
                 if (dist > 0) {
                     enemy.x += (dx / dist) * knockbackPower * deltaTime;
                     enemy.y += (dy / dist) * knockbackPower * deltaTime;
+
+                    if (this.player.getEffectValue('knockback_immunity') <= 0) {
+                        this.player.x -= (dx / dist) * knockbackPower * deltaTime;
+                        this.player.y -= (dy / dist) * knockbackPower * deltaTime;
+                    }
                 }
                 
                 if (this.player.health <= 0) {
@@ -929,7 +957,7 @@ class Game {
             for (let j = 0; j < this.enemies.length; j++) {
                 const enemy = this.enemies[j];
                 if (projectile.active && this.checkCollision(projectile, enemy)) {
-                    enemy.takeDamage(projectile.damage);
+                    this.player.dealDamage(this, enemy, projectile.damage);
                     projectile.hit();
                     hit = true;
                     if (!projectile.piercing) break;
@@ -1267,6 +1295,7 @@ class Game {
                     <div class="equipment-name" style="color: ${rarityColor}">${equipment.name}</div>
                     <div class="equipment-rarity">${equipment.rarityData.name}</div>
                     <div class="equipment-stats">${this.formatEquipmentStats(equipment.stats)}</div>
+                    <div class="equipment-effect">${this.formatEquipmentEffect(equipment)}</div>
                 </div>
             </div>
         `;
@@ -1283,6 +1312,42 @@ class Game {
             statStrings.push(`+${value} ${formatted}`);
         }
         return statStrings.join(' • ');
+    }
+
+    formatEquipmentEffect(equipment) {
+        if (!equipment || !equipment.effect) return '';
+        const labels = {
+            crit_chance: 'Critical hit chance',
+            lifesteal: 'Lifesteal',
+            chain_lightning: 'Chain lightning',
+            slow_enemies: 'Enemy slow',
+            fire_resistance: 'Fire resistance',
+            dodge_chance: 'Dodge chance',
+            knockback_immunity: 'Knockback immunity',
+            damage_boost_low_hp: 'Low-health damage',
+            auto_revive: 'Auto revive',
+            xp_boost: 'XP gain',
+            time_slow: 'Time slow',
+            health_regen: 'Health regeneration',
+            ultimate_charge: 'Ultimate charge'
+        };
+        const value = Number(equipment.effectValue) || 0;
+        const descriptions = {
+            crit_chance: value + '% chance to deal 2x damage',
+            lifesteal: 'Heal ' + value + '% of damage dealt',
+            chain_lightning: 'Hit ' + value + ' nearby enemies for 50% damage',
+            slow_enemies: 'Enemies move ' + value + '% slower',
+            fire_resistance: 'Reduce fire damage by ' + value + '%',
+            dodge_chance: value + '% chance to dodge damage',
+            knockback_immunity: 'Ignore enemy contact knockback',
+            damage_boost_low_hp: 'Deal ' + value + '% more damage below 50% HP',
+            auto_revive: 'Revive once at 35% HP',
+            health_regen: 'Regenerate ' + value + ' HP per second',
+            time_slow: 'Enemies move ' + value + '% slower',
+            ultimate_charge: 'Gain ultimate charge ' + value + '% faster',
+            xp_boost: 'Gain ' + value + '% more XP'
+        };
+        return 'Effect: ' + (descriptions[equipment.effect] || (labels[equipment.effect] || equipment.effect) + ' +' + value);
     }
     
     getStarsDisplay(level) {
@@ -1397,6 +1462,7 @@ class Game {
                 <div class="shop-item-name" style="color: ${equipment.rarityData.color}">${equipment.name}</div>
                 <div class="shop-item-rarity">${equipment.rarityData.name}</div>
                 <div class="shop-item-stats">${this.formatEquipmentStats(equipment.stats)}</div>
+                <div class="shop-item-effect">${this.formatEquipmentEffect(equipment)}</div>
                 <button class="shop-buy-btn ${!canAfford ? 'disabled' : ''}" data-index="${index}">
                     Buy (${equipment.price} 🪙)
                 </button>
@@ -1474,6 +1540,7 @@ class Game {
                     <div style="font-size: 0.8em; margin-bottom: 4px;">${this.getStarsDisplay(equippedItem.level)}</div>
                     <div style="color: ${this.getRarityColor(equippedItem.rarity)}; font-weight: bold;">${equippedItem.name}</div>
                     <div style="font-size: 0.85em; color: rgba(255,255,255,0.6);">${this.formatEquipmentStats(equippedItem)}</div>
+                    <div class="equipment-effect">${this.formatEquipmentEffect(equippedItem)}</div>
                 `;
                 slotElement.style.cursor = 'pointer';
                 slotElement.onclick = () => this.unequipFromInventory(slot);
@@ -1515,6 +1582,7 @@ class Game {
                 <div class="inventory-item-name" style="color: ${this.getRarityColor(equipment.rarity)};">${equipment.name}</div>
                 <div class="inventory-item-type">${equipment.type}</div>
                 <div class="inventory-item-stats">${this.formatEquipmentStats(equipment)}</div>
+                <div class="inventory-item-effect">${this.formatEquipmentEffect(equipment)}</div>
                 ${canLevelUp ? `
                     <button class="level-up-btn" data-index="${index}">
                         ⬆️ Level Up (${levelUpCost} 🪙)
@@ -1642,6 +1710,15 @@ class Game {
         
         // Draw particles (background layer)
         this.particles.forEach(particle => particle.draw(this.ctx));
+
+        this.chainLightningEffects.forEach(effect => {
+            this.ctx.strokeStyle = 'rgba(255, 230, 80, ' + Math.min(1, effect.lifetime * 8) + ')';
+            this.ctx.lineWidth = 3;
+            this.ctx.beginPath();
+            this.ctx.moveTo(effect.from.x, effect.from.y);
+            this.ctx.lineTo(effect.to.x, effect.to.y);
+            this.ctx.stroke();
+        });
         
         // Draw XP orbs
         this.xpOrbs.forEach(orb => orb.draw(this.ctx));
@@ -2191,6 +2268,7 @@ class Player {
         this.ultimateCharge = 0;
         this.ultimateMax = 100; // Requires 100 charge (about 10-15 kills depending on enemy type)
         this.ultimateReady = false;
+        this.autoReviveUsed = false;
         
         // Invulnerability frames (i-frames)
         this.invulnerable = false;
@@ -2214,7 +2292,11 @@ class Player {
             attackSpeed: 0,
             armor: 0,
             xpGain: 0,
-            lifesteal: 0
+            lifesteal: 0,
+            dodgeChance: 0,
+            damageBoostLowHp: 0,
+            healthRegen: 0,
+            ultimateCharge: 0
         };
     }
     
@@ -2311,6 +2393,11 @@ class Player {
         if (this.abilityCooldown > 0) {
             this.abilityCooldown -= deltaTime;
         }
+
+        const regen = this.getEffectValue('health_regen');
+        if (regen > 0 && this.health > 0) {
+            this.health = Math.min(this.maxHealth, this.health + regen * deltaTime);
+        }
         
         // Update invulnerability frames
         if (this.iframeTimer > 0) {
@@ -2375,6 +2462,51 @@ class Player {
         
         // Special abilities
         this.useAbility(game, deltaTime);
+    }
+
+    getEffectValue(effectName) {
+        return Object.values(this.equipment)
+            .filter(item => item && item.effect === effectName)
+            .reduce((total, item) => total + (Number(item.effectValue) || 0), 0);
+    }
+
+    dealDamage(game, enemy, amount, triggerChain = true) {
+        let damage = amount;
+        const isCritical = Math.random() * 100 < this.getEffectValue('crit_chance');
+        if (isCritical) damage *= 2;
+        if (this.health / this.maxHealth < 0.5) {
+            damage *= 1 + this.getEffectValue('damage_boost_low_hp') / 100;
+        }
+        enemy.takeDamage(damage);
+        if (isCritical && (!enemy.lastCritEffectTime || game.gameTime - enemy.lastCritEffectTime > 0.15)) {
+            enemy.lastCritEffectTime = game.gameTime;
+            game.createParticles(enemy.x, enemy.y, '#ffd166', 'fast');
+        }
+        const lifesteal = this.getEffectValue('lifesteal');
+        if (lifesteal > 0 && damage > 0) {
+            this.health = Math.min(this.maxHealth, this.health + damage * lifesteal / 100);
+        }
+
+        const chainCount = Math.floor(this.getEffectValue('chain_lightning'));
+        if (triggerChain && chainCount > 0) {
+            const nearby = game.enemies
+                .filter(other => other !== enemy && other.health > 0)
+                .map(other => ({
+                    enemy: other,
+                    distance: Math.hypot(other.x - enemy.x, other.y - enemy.y)
+                }))
+                .filter(item => item.distance <= 260)
+                .sort((a, b) => a.distance - b.distance)
+                .slice(0, chainCount);
+            nearby.forEach(({ enemy: chained }) => {
+                game.chainLightningEffects.push({
+                    from: { x: enemy.x, y: enemy.y },
+                    to: { x: chained.x, y: chained.y },
+                    lifetime: 0.35
+                });
+                this.dealDamage(game, chained, damage * 0.5, false);
+            });
+        }
     }
     
     useAbility(game, deltaTime) {
@@ -2480,7 +2612,7 @@ class Player {
                 const dy = enemy.y - this.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist < 100) {
-                    enemy.takeDamage(this.projectileDamage * 3);
+                    this.dealDamage(game, enemy, this.projectileDamage * 3);
                 }
             });
         }
@@ -2493,7 +2625,7 @@ class Player {
             const dy = enemy.y - this.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist < 150) {
-                enemy.takeDamage(this.projectileDamage * 2);
+                this.dealDamage(game, enemy, this.projectileDamage * 2);
                 enemy.stunned = 2; // Stun for 2 seconds
             }
         });
@@ -2541,7 +2673,7 @@ class Player {
                     if (dist < 400 && dist > 0) {
                         enemy.x += (dx / dist) * 400;
                         enemy.y += (dy / dist) * 400;
-                        enemy.takeDamage(this.projectileDamage * 5);
+                        this.dealDamage(game, enemy, this.projectileDamage * 5);
                     }
                 });
                 break;
@@ -2578,7 +2710,7 @@ class Player {
                                         enemy.x, enemy.y, angle, 200, '#ff4500', 1.5
                                     ));
                                 }
-                                enemy.takeDamage(this.projectileDamage * 10);
+                                this.dealDamage(game, enemy, this.projectileDamage * 10);
                             }
                         }, i * 50);
                     }
@@ -2588,7 +2720,7 @@ class Player {
             case 'assassin':
                 // Time Stop: Freeze and damage all enemies
                 game.enemies.forEach(enemy => {
-                    enemy.takeDamage(this.projectileDamage * 8);
+                    this.dealDamage(game, enemy, this.projectileDamage * 8);
                     // Slash effect
                     for (let i = 0; i < 12; i++) {
                         const angle = (Math.PI * 2 * i) / 12;
@@ -2611,7 +2743,7 @@ class Player {
                     const dy = enemy.y - this.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
                     if (dist < 300) {
-                        enemy.takeDamage(this.projectileDamage * 6);
+                        this.dealDamage(game, enemy, this.projectileDamage * 6);
                         // Knockback
                         if (dist > 0) {
                             enemy.x += (dx / dist) * 200;
@@ -2634,14 +2766,32 @@ class Player {
         }
     }
     
-    takeDamage(amount) {
+    takeDamage(amount, damageType = 'contact') {
         // Skip damage if invulnerable
         if (this.invulnerable) return;
+
+        if (Math.random() * 100 < this.getEffectValue('dodge_chance')) {
+            return;
+        }
         
+        if (damageType === 'fire') {
+            const fireResistance = this.getEffectValue('fire_resistance');
+            amount *= Math.max(0, 1 - fireResistance / 100);
+        }
+
         // Apply armor damage reduction
         const reducedDamage = amount * (1 - this.armor);
         this.health -= reducedDamage;
         if (this.health < 0) this.health = 0;
+
+        if (this.health <= 0 && !this.autoReviveUsed && this.getEffectValue('auto_revive') > 0) {
+            this.autoReviveUsed = true;
+            this.health = Math.max(1, this.maxHealth * 0.35);
+            this.invulnerable = true;
+            this.iframeTimer = 3;
+            this.game.showNotification('Phoenix Feather revived you!', '#ff8c42');
+            return;
+        }
         
         // Activate invulnerability frames
         this.invulnerable = true;
@@ -2649,7 +2799,7 @@ class Player {
     }
     
     addXP(amount) {
-        this.xp += amount;
+        this.xp += amount * (1 + this.getEffectValue('xp_boost') / 100);
         if (this.xp >= this.xpToLevel) {
             this.levelUp();
         }
@@ -2670,7 +2820,8 @@ class Player {
         if (enemy && enemy.type === 'fast') chargeGain = 8;
         if (enemy && enemy.type === 'tank') chargeGain = 15;
         
-        this.ultimateCharge = Math.min(this.ultimateMax, this.ultimateCharge + chargeGain);
+        const ultimateMultiplier = 1 + this.getEffectValue('ultimate_charge') / 100;
+        this.ultimateCharge = Math.min(this.ultimateMax, this.ultimateCharge + chargeGain * ultimateMultiplier);
         
         if (this.ultimateCharge >= this.ultimateMax && !this.ultimateReady) {
             this.ultimateReady = true;
@@ -3125,7 +3276,7 @@ class SpecialWeapon {
                 const dy = enemy.y - y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist < 20) {
-                    enemy.takeDamage(this.damage * deltaTime * 2);
+                    this.player.dealDamage(game, enemy, this.damage * deltaTime * 2);
                 }
             });
         }
@@ -3139,7 +3290,7 @@ class SpecialWeapon {
             const dy = enemy.y - this.player.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist < range) {
-                enemy.takeDamage(this.damage * deltaTime);
+                this.player.dealDamage(game, enemy, this.damage * deltaTime);
             }
         });
     }
@@ -3196,7 +3347,7 @@ class SpecialWeapon {
                 const dy = enemy.y - y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist < 25) {
-                    enemy.takeDamage(this.damage * deltaTime * 3);
+                    this.player.dealDamage(game, enemy, this.damage * deltaTime * 3);
                 }
             });
         }
@@ -3217,7 +3368,7 @@ class SpecialWeapon {
                 const dy = enemy.y - y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist < 25) {
-                    enemy.takeDamage(this.damage * deltaTime * 3);
+                    this.player.dealDamage(game, enemy, this.damage * deltaTime * 3);
                 }
             });
         }
@@ -3237,7 +3388,7 @@ class SpecialWeapon {
                 const dy = enemy.y - y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist < 25) {
-                    enemy.takeDamage(this.damage * deltaTime * 2);
+                    this.player.dealDamage(game, enemy, this.damage * deltaTime * 2);
                 }
             });
         }
@@ -3277,7 +3428,7 @@ class SpecialWeapon {
             game.enemies.forEach(enemy => {
                 // Create explosion particles at each enemy position
                 game.createParticles(enemy.x, enemy.y, enemy.color, 'tank');
-                enemy.takeDamage(this.damage);
+                this.player.dealDamage(game, enemy, this.damage);
             });
             
             // Screen shake
@@ -3613,7 +3764,10 @@ class Enemy {
         // Apply level-based speed scaling
         // Speed increases by 5% per level (starts at 100% at level 1)
         const levelSpeedMultiplier = 1 + ((this.game.player.level - 1) * 0.05);
-        const currentSpeed = this.baseSpeed * levelSpeedMultiplier;
+        const slowPercent = player.getEffectValue ? player.getEffectValue('slow_enemies') : 0;
+        const timeSlowPercent = player.getEffectValue ? player.getEffectValue('time_slow') : 0;
+        const currentSpeed = this.baseSpeed * levelSpeedMultiplier *
+            Math.max(0, 1 - (slowPercent + timeSlowPercent) / 100);
         
         // Boss special behavior
         if (this.type === 'boss') {
@@ -4132,7 +4286,7 @@ class BossProjectile {
         const dist = Math.sqrt(dx * dx + dy * dy);
         
         if (dist < this.radius + this.game.player.radius) {
-            this.game.player.takeDamage(this.damage);
+            this.game.player.takeDamage(this.damage, 'fire');
             this.lifetime = 0;
         }
         

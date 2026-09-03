@@ -1,3 +1,30 @@
+# Vitalis Arena — Local Development
+
+Quick notes for running the lightweight checks and build included in this repository.
+
+Prerequisites
+- Node.js (v16+ recommended)
+
+Useful commands
+- Run unit-style smoke tests:
+  ```bash
+  npm test
+  ```
+- Build a lightweight `dist/` copy (no bundling/minification yet):
+  ```bash
+  npm run build
+  ```
+- Run the ID checker to find DOM id mismatches:
+  ```bash
+  node scripts/check-ids.js
+  ```
+
+Notes
+- The project is primarily a browser app. `tests/run-tests.js` contains small Node-level checks for deterministic functions in `modules/gameLogic.js`.
+- `modules/*.js` files expose UMD-style globals for gradual modularization while keeping in-browser compatibility.
+
+Next steps
+- Expand tests (Jest) for gameplay logic, add a bundler (esbuild/rollup), and add real E2E checks on multiple browsers.
 # Vitalis Arena - Roguelike Survival Game
 
 A fast-paced roguelike survival game with 5 unique characters, equipment progression, and epic boss battles. Built with HTML5 Canvas and vanilla JavaScript.

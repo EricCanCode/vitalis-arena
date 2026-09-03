@@ -18,3 +18,17 @@ desktop.ini
 
 # PWA Setup docs (optional)
 PWA_SETUP.md
+
+# Local dev tooling
+.claude/
+
+# Node
+node_modules/
+
+# Build output
+dist/
+
+# Release artifacts and backups — build output, not source
+vitalis-arena-patch-*.zip
+vitalis-arena-*.zip
+*.tgz

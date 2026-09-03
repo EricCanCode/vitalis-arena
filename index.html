@@ -20,8 +20,256 @@
 <body>
     <!-- Title Screen -->
     <div id="titleScreen" class="screen active">
+        <div class="title-overlay"></div>
         <div class="title-content">
-            <div class="press-start">Press Start or Any Key</div>
+            <div class="game-logo">
+                <div class="logo-text">VITALIS</div>
+                <div class="logo-subtitle">ARENA</div>
+            </div>
+            <div class="tagline">⚔️ Roguelike Survival Battle ⚔️</div>
+            
+            <div class="main-menu">
+                <button id="startGameBtn" class="menu-button menu-button-primary">
+                    <span class="button-icon">▶️</span>
+                    <span>START GAME</span>
+                </button>
+                <button id="howToPlayBtn" class="menu-button">
+                    <span class="button-icon">📖</span>
+                    <span>HOW TO PLAY</span>
+                </button>
+                <button id="settingsBtn" class="menu-button">
+                    <span class="button-icon">⚙️</span>
+                    <span>SETTINGS</span>
+                </button>
+                <button id="creditsBtn" class="menu-button">
+                    <span class="button-icon">🎬</span>
+                    <span>CREDITS</span>
+                </button>
+            </div>
+            
+            <div class="game-info">
+                <span class="version">v1.0</span>
+                <span class="separator">•</span>
+                <span class="info-text">Press Any Key or Click START to Begin</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- How to Play Panel -->
+    <div id="howToPlayPanel" class="overlay" role="dialog" aria-modal="true" aria-labelledby="howToPlayTitle">
+        <div class="modal-panel how-to-play-panel">
+            <div class="modal-header">
+                <h2 id="howToPlayTitle">📖 How to Play</h2>
+                <button id="closeHowToPlay" class="close-btn" aria-label="Close How To Play">✕</button>
+            </div>
+            <div class="modal-content">
+                <div class="instructions-section">
+                    <h3>🎮 Controls</h3>
+                    <ul class="instructions-list">
+                        <li><strong>Arrow Keys / WASD:</strong> Move your character</li>
+                        <li><strong>Mouse / Touch:</strong> Aim and attack</li>
+                        <li><strong>Q / Special Button:</strong> Use Ultimate ability</li>
+                        <li><strong>ESC:</strong> Pause game</li>
+                    </ul>
+                </div>
+                
+                <div class="instructions-section">
+                    <h3>🎯 Game Objectives</h3>
+                    <ul class="instructions-list">
+                        <li>Defeat waves of enemies to advance through stages</li>
+                        <li>Collect coins and equipment to become stronger</li>
+                        <li>Survive longer and defeat bosses</li>
+                        <li>Unlock achievements and climb the leaderboard</li>
+                    </ul>
+                </div>
+                
+                <div class="instructions-section">
+                    <h3>⚡ Special Mechanics</h3>
+                    <ul class="instructions-list">
+                        <li><strong>Level Up:</strong> Defeat enemies to gain experience. Every level-up grants a new ability!</li>
+                        <li><strong>Equipment:</strong> Find and equip weapons, armor, and accessories to boost stats</li>
+                        <li><strong>Ultimate Ability:</strong> Fill your ultimate meter and unleash devastating attacks</li>
+                        <li><strong>Bosses:</strong> Every 5th stage features a powerful boss enemy</li>
+                    </ul>
+                </div>
+                
+                <div class="instructions-section">
+                    <h3>💡 Tips & Tricks</h3>
+                    <ul class="instructions-list">
+                        <li>Keep moving to avoid enemy attacks</li>
+                        <li>Prioritize health upgrades early on</li>
+                        <li>Use your ultimate when surrounded by enemies</li>
+                        <li>Save coins to buy better equipment in the shop</li>
+                    </ul>
+                </div>
+            </div>
+            <button id="closeHowToPlayBtn" class="btn-primary">Close</button>
+        </div>
+    </div>
+    
+    <!-- Settings Panel -->
+    <div id="settingsPanel" class="overlay" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <div class="modal-panel settings-panel">
+            <div class="modal-header">
+                <h2 id="settingsTitle">⚙️ Settings</h2>
+                <button id="closeSettings" class="close-btn" aria-label="Close Settings">✕</button>
+            </div>
+            <div class="modal-content">
+                <div class="settings-section">
+                    <label class="settings-label">
+                        <span>🔊 Sound Effects</span>
+                        <input type="checkbox" id="soundCheckbox" checked>
+                        <span class="toggle"></span>
+                    </label>
+                    <div class="settings-subsection">
+                        <label class="range-label">SFX Volume <span id="soundVolumeLabel">50%</span></label>
+                        <input id="soundVolume" type="range" min="0" max="100" value="50" aria-label="Sound Effects Volume">
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <label class="settings-label">
+                        <span>🎵 Background Music</span>
+                        <input type="checkbox" id="musicCheckbox" checked>
+                        <span class="toggle"></span>
+                    </label>
+                    <div class="settings-subsection">
+                        <label class="range-label">Music Volume <span id="musicVolumeLabel">30%</span></label>
+                        <input id="musicVolume" type="range" min="0" max="100" value="30" aria-label="Music Volume">
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <label class="settings-label">
+                        <span>✨ Visual Effects</span>
+                        <input type="checkbox" id="effectsCheckbox" checked>
+                        <span class="toggle"></span>
+                    </label>
+                </div>
+                
+                <div class="settings-section">
+                    <label class="settings-label">
+                        <span>🎯 Show Tutorial</span>
+                        <input type="checkbox" id="tutorialCheckbox" checked>
+                        <span class="toggle"></span>
+                    </label>
+                </div>
+
+                <div class="settings-section">
+                    <label class="settings-label">
+                        <span>♿ Reduced Motion</span>
+                        <input type="checkbox" id="reducedMotionCheckbox">
+                        <span class="toggle"></span>
+                    </label>
+                </div>
+
+                <div class="settings-section">
+                    <label class="settings-label">
+                        <span>🔆 High Contrast</span>
+                        <input type="checkbox" id="highContrastCheckbox">
+                        <span class="toggle"></span>
+                    </label>
+                </div>
+
+                <div class="settings-section">
+                    <button id="openKeybindsBtn" class="btn-secondary">🔁 Rebind Keys</button>
+                </div>
+                
+                <div class="settings-section difficulty-section">
+                    <h3>⚔️ Difficulty</h3>
+                    <div class="difficulty-options">
+                        <label class="radio-label">
+                            <input type="radio" name="difficulty" value="easy">
+                            <span>Easy</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="difficulty" value="normal" checked>
+                            <span>Normal</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="difficulty" value="hard">
+                            <span>Hard</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="difficulty" value="insane">
+                            <span>Insane</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <button id="closeSettingsBtn" class="btn-primary">Close</button>
+        </div>
+    </div>
+
+        <!-- Keybinds Panel (inlined fallback for environments where fetch may fail) -->
+        <div id="keybindPanel" class="overlay" role="dialog" aria-modal="true" aria-labelledby="keybindTitle" style="display:none;">
+            <div class="modal-panel keybind-panel">
+                <div class="modal-header">
+                    <h2 id="keybindTitle">🔁 Rebind Keys</h2>
+                    <button id="closeKeybinds" class="close-btn" aria-label="Close Keybinds">✕</button>
+                </div>
+                <div class="modal-content">
+                    <p>Click an action, then press the desired key.</p>
+                    <div class="keybind-list">
+                        <div class="keybind-row" data-action="moveUp">
+                            <span class="action-label">Move Up</span>
+                            <button class="keybind-btn"> <span class="key-display">W</span> </button>
+                        </div>
+                        <div class="keybind-row" data-action="moveLeft">
+                            <span class="action-label">Move Left</span>
+                            <button class="keybind-btn"> <span class="key-display">A</span> </button>
+                        </div>
+                        <div class="keybind-row" data-action="moveDown">
+                            <span class="action-label">Move Down</span>
+                            <button class="keybind-btn"> <span class="key-display">S</span> </button>
+                        </div>
+                        <div class="keybind-row" data-action="moveRight">
+                            <span class="action-label">Move Right</span>
+                            <button class="keybind-btn"> <span class="key-display">D</span> </button>
+                        </div>
+                        <div class="keybind-row" data-action="ultimate">
+                            <span class="action-label">Ultimate</span>
+                            <button class="keybind-btn"> <span class="key-display">Q</span> </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="resetKeybinds" class="btn-secondary">Reset Defaults</button>
+                    <button id="closeKeybindsBtn" class="btn-primary">Done</button>
+                </div>
+            </div>
+        </div>
+
+    
+    <!-- Credits Panel -->
+    <div id="creditsPanel" class="overlay" role="dialog" aria-modal="true" aria-labelledby="creditsTitle">
+        <div class="modal-panel credits-panel">
+            <div class="modal-header">
+                <h2 id="creditsTitle">🎬 Credits</h2>
+                <button id="closeCredits" class="close-btn" aria-label="Close Credits">✕</button>
+            </div>
+            <div class="modal-content credits-content">
+                <div class="credits-section">
+                    <h3>Game Design & Development</h3>
+                    <p>Created with ❤️ for roguelike enthusiasts</p>
+                </div>
+                
+                <div class="credits-section">
+                    <h3>Special Thanks</h3>
+                    <p>To everyone who plays and provides feedback</p>
+                </div>
+                
+                <div class="credits-section">
+                    <h3>Technology</h3>
+                    <p>Built with HTML5, Canvas, and Web APIs</p>
+                </div>
+                
+                <div class="credits-section">
+                    <h3>© 2024 Vitalis Arena</h3>
+                    <p>All rights reserved</p>
+                </div>
+            </div>
+            <button id="closeCreditsBtn" class="btn-primary">Close</button>
         </div>
     </div>
     
@@ -46,8 +294,10 @@
         
         <button id="achievementsBtn" class="achievements-button">🏆 Achievements</button>
         <button id="menuShopBtn" class="menu-shop-button">🛒 Shop</button>
+        <!-- Legacy/optional shop button kept for compatibility -->
+        <button id="shopButton" style="display:none;">Shop</button>
         <button id="inventoryBtn" class="inventory-button">🎒 Inventory</button>
-        <div class="character-grid">
+        <div class="character-grid">>
             <div class="character-card" data-character="warrior">
                 <div class="character-icon">
                     <img src="images/warrior.png" alt="Warrior" class="character-sprite">
@@ -121,10 +371,10 @@
     </div>
 
     <!-- Achievements Panel -->
-    <div id="achievementsPanel" class="overlay">
+    <div id="achievementsPanel" class="overlay" role="dialog" aria-modal="true" aria-labelledby="achievementsTitle">
         <div class="achievements-panel">
             <div class="achievements-header">
-                <h2>🏆 Achievements</h2>
+                <h2 id="achievementsTitle">🏆 Achievements</h2>
                 <span id="achievementProgress" class="achievement-progress">0/0 Unlocked</span>
             </div>
             <div id="achievementsGrid" class="achievements-grid"></div>
@@ -202,6 +452,7 @@
             <!-- Player 2 HUD (co-op mode) -->
             <div id="p2Hud" class="hud-bottom-right" style="display: none;">
                 <div class="p2-hud-label">🎮 P2</div>
+                <div id="p2ReviveStatus" class="p2-revive-status" aria-hidden="true"></div>
                 <div class="hud-item">
                     <span class="hud-label">❤️ P2 HP</span>
                     <div class="health-bar p2-health">
@@ -259,11 +510,26 @@
         </div>
 
         <!-- Level Up Screen -->
-        <div id="levelUpScreen" class="overlay">
+        <div id="levelUpScreen" class="overlay" role="dialog" aria-modal="true" aria-labelledby="levelUpTitle">
             <div class="level-up-panel">
-                <h2>🎉 Level Up!</h2>
+                <h2 id="levelUpTitle">🎉 Level Up!</h2>
                 <p>Choose an upgrade:</p>
                 <div id="upgradeOptions" class="upgrade-grid"></div>
+            </div>
+        </div>
+
+        <!-- Tutorial Panel -->
+        <div id="tutorialPanel" class="tutorial-overlay" role="dialog" aria-modal="true" aria-labelledby="tutorialTitle">
+            <div class="tutorial-panel">
+                <h2 id="tutorialTitle">🎓 Quick Tutorial</h2>
+                <div class="tutorial-steps">
+                    <div id="tutorialStepText">Loading...</div>
+                </div>
+                <div class="tutorial-controls">
+                    <button id="tutorialPrev" class="btn-secondary">◀ Prev</button>
+                    <button id="tutorialNext" class="btn-secondary">Next ▶</button>
+                    <button id="tutorialDone" class="btn-primary">Done</button>
+                </div>
             </div>
         </div>
 
@@ -286,9 +552,9 @@
         </div>
 
         <!-- Pause Screen -->
-        <div id="pauseScreen" class="overlay">
+        <div id="pauseScreen" class="overlay" role="dialog" aria-modal="true" aria-labelledby="pauseTitle">
             <div class="pause-panel">
-                <h2>⏸️ Game Paused</h2>
+                <h2 id="pauseTitle">⏸️ Game Paused</h2>
                 <p class="pause-hint">Click Resume or press ESC to continue</p>
                 
                 <!-- Quick Inventory Access -->
@@ -321,9 +587,9 @@
         </div>
         
         <!-- Game Over Screen -->
-        <div id="gameOverScreen" class="overlay">
+        <div id="gameOverScreen" class="overlay" role="dialog" aria-modal="true" aria-labelledby="gameOverTitle">
             <div class="game-over-panel">
-                <h2>💀 Game Over</h2>
+                <h2 id="gameOverTitle">💀 Game Over</h2>
                 <div id="finalStats"></div>
                 <button id="restartBtn" class="btn-primary">Play Again</button>
                 <button id="backToSelectBtn" class="btn-secondary">Change Character</button>
@@ -332,10 +598,10 @@
     </div>
 
     <!-- Shop Panel -->
-    <div id="shopPanel" class="overlay">
+    <div id="shopPanel" class="overlay" role="dialog" aria-modal="true" aria-labelledby="shopTitle">
         <div class="shop-panel">
             <div class="shop-header">
-                <h2>🛒 Equipment Shop</h2>
+                <h2 id="shopTitle">🛒 Equipment Shop</h2>
                 <div class="shop-coins">
                     <span>Your Coins:</span>
                     <span id="playerCoins" class="coins-amount">0</span> 🪙
@@ -350,9 +616,9 @@
     </div>
 
     <!-- Inventory Panel -->
-    <div id="inventoryPanel" class="overlay">
+    <div id="inventoryPanel" class="overlay" role="dialog" aria-modal="true" aria-labelledby="inventoryTitle">
         <div class="inventory-panel">
-            <h2>🎒 Inventory</h2>
+            <h2 id="inventoryTitle">🎒 Inventory</h2>
             <div class="inventory-header">
                 <div class="coins-display">🪙 <span id="inventoryCoins">0</span></div>
             </div>
@@ -391,7 +657,7 @@
         <span id="soundToggleLabel">Sound On</span>
     </button>
 
-    <script src="script_v2.js"></script>
+    <script src="script.js?v=1.1.0"></script>
     <script>
         // Register Service Worker for PWA
         if ('serviceWorker' in navigator) {
