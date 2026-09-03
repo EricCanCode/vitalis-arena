@@ -428,6 +428,12 @@ class Game {
         window.addEventListener('keydown', (e) => {
             this.keys[e.key.toLowerCase()] = true;
             
+            // L cashes in a queued upgrade. Queued rather than automatic, so
+            // the player chooses when to stop and read three cards.
+            if (e.key.toLowerCase() === 'l' && this.isRunning && !this.isPaused) {
+                this.openQueuedLevelUp();
+            }
+
             // ESC key toggles pause
             if (e.key === 'Escape' && this.isRunning) {
                 this.togglePause();
@@ -436,6 +442,11 @@ class Game {
         
         window.addEventListener('keyup', (e) => {
             this.keys[e.key.toLowerCase()] = false;
+        });
+
+        // Same job as the L key, for anyone on a touchscreen with no keyboard.
+        document.getElementById('levelUpBadge')?.addEventListener('click', () => {
+            this.openQueuedLevelUp();
         });
     }
     
@@ -1432,6 +1443,23 @@ class Game {
         }, 2500);
     }
     
+    // The badge is the only thing telling the player they have upgrades
+    // waiting, so it has to track the count exactly.
+    refreshLevelUpBadge() {
+        const badge = document.getElementById('levelUpBadge');
+        if (!badge) return;
+        const n = (this.player && this.player.pendingLevelUps) || 0;
+        badge.style.display = n > 0 ? '' : 'none';
+        const count = document.getElementById('levelUpCount');
+        if (count) count.textContent = n;
+    }
+
+    openQueuedLevelUp() {
+        if (!this.isRunning || this.isPaused) return;
+        if (!this.player || this.player.pendingLevelUps <= 0) return;
+        this.player.showLevelUpScreen();
+    }
+
     openShop() {
         this.isPaused = true;
         this.refreshShopInventory();
@@ -2268,6 +2296,8 @@ class Player {
         this.xp = 0;
         this.level = 1;
         this.xpToLevel = 10;
+        // Level-ups earned but not yet spent. See levelUp().
+        this.pendingLevelUps = 0;
         this.kills = 0;
         
         // Attack
@@ -2819,7 +2849,10 @@ class Player {
     
     addXP(amount) {
         this.xp += amount * (1 + this.getEffectValue('xp_boost') / 100);
-        if (this.xp >= this.xpToLevel) {
+        // Every threshold this pickup crossed, not just the first. A large gem
+        // -- or a boss payout -- can cross several at once, and a single check
+        // silently discarded the rest.
+        while (this.xp >= this.xpToLevel) {
             this.levelUp();
         }
     }
@@ -2951,9 +2984,12 @@ class Player {
         this.level++;
         this.xp -= this.xpToLevel;
         this.xpToLevel = Math.floor(this.xpToLevel * 1.5);
-        
-        // Show level up screen
-        this.showLevelUpScreen();
+
+        // Queued, not shown. Early levels land seconds apart, and stopping the
+        // game to read three cards each time IS the interruption. The player
+        // spends them in a lull, by pressing L or the badge.
+        this.pendingLevelUps++;
+        game.refreshLevelUpBadge();
     }
     
     showLevelUpScreen() {
@@ -3085,6 +3121,10 @@ class Player {
                 upgrade.apply.call(this);
                 levelUpScreen.classList.remove('active');
                 game.isPaused = false;
+                // Deliberately does not chain into the next queued level-up:
+                // the player decides when to stop again.
+                this.pendingLevelUps = Math.max(0, this.pendingLevelUps - 1);
+                game.refreshLevelUpBadge();
             });
             upgradeOptions.appendChild(option);
         });
