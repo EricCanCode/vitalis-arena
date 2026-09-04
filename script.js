@@ -300,6 +300,8 @@ class Game {
         // Image loading
         this.images = {};
         this.imagesLoaded = false;
+        // img -> (bucketSize -> pre-scaled canvas). See getScaledSprite.
+        this._spriteCache = new Map();
         this.loadImages();
         
         // Audio Manager
@@ -955,6 +957,36 @@ class Game {
         requestAnimationFrame((time) => this.gameLoop(time));
     }
 
+    // Sprites pre-scaled to the size they are actually drawn at.
+    //
+    // drawImage filters the WHOLE source every call. A 512x512 sprite drawn
+    // at 50px reads 262,144 source pixels each time, and each entity is drawn
+    // twice -- shadow, then sprite -- so a 60-enemy horde was 120 calls x
+    // 262k = 31 million pixel reads per frame, 1.9 billion a second at 60fps.
+    // Scaling once into an offscreen canvas makes each draw read about 2,500
+    // instead: the same picture for roughly a hundredth of the work.
+    //
+    // Sizes are bucketed to 8px so a radius that varies slightly does not
+    // spawn a cache entry per pixel. The bucket is always >= the draw size,
+    // so the final step is a slight downscale rather than an upscale, and
+    // nothing turns blurry.
+    getScaledSprite(img, size) {
+        if (!img || !img.complete || !img.naturalWidth) return img;
+        const bucket = Math.max(8, Math.ceil(size / 8) * 8);
+        if (bucket >= img.naturalWidth) return img;   // no saving to be had
+
+        let byBucket = this._spriteCache.get(img);
+        if (!byBucket) { byBucket = new Map(); this._spriteCache.set(img, byBucket); }
+        let scaled = byBucket.get(bucket);
+        if (!scaled) {
+            scaled = document.createElement('canvas');
+            scaled.width = scaled.height = bucket;
+            scaled.getContext('2d').drawImage(img, 0, 0, bucket, bucket);
+            byBucket.set(bucket, scaled);
+        }
+        return scaled;
+    }
+
     // Diagnostic readout: fps, the worst frame in the last window, and the
     // entity counts that actually grow. Off by default and costing three adds
     // per frame when off, so it can live in the shipping build -- the
@@ -1542,17 +1574,52 @@ class Game {
         this.showNotification(`Stage ${this.currentStage} - Difficulty Increased!`);
     }
     
-    showNotification(message) {
-        // Create temporary notification element
+    showNotification(message, color) {
+        // Capped and stacked, because these were reported as a visible frame
+        // drop when several arrive together -- health pickups fire one each.
+        //
+        // Every notification is a DOM element that lives for three seconds
+        // carrying a 30px box-shadow and a running animation, and they were
+        // all absolutely positioned at the SAME point, so a burst left a pile
+        // of them overlapping dead centre, every one still being composited.
+        // Nothing removed the excess: the only limit was how fast they expired.
+        if (!this._notifications) this._notifications = [];
+
+        // Retire the oldest beyond the cap immediately rather than waiting out
+        // its timer.
+        const MAX_VISIBLE = 3;
+        while (this._notifications.length >= MAX_VISIBLE) {
+            const old = this._notifications.shift();
+            clearTimeout(old._fadeTimer);
+            clearTimeout(old._killTimer);
+            old.remove();
+        }
+
         const notification = document.createElement('div');
         notification.className = 'game-notification';
         notification.textContent = message;
+        if (color) notification.style.color = color;
         document.getElementById('gameScreen').appendChild(notification);
-        
-        setTimeout(() => {
+        this._notifications.push(notification);
+        this._restackNotifications();
+
+        notification._fadeTimer = setTimeout(() => {
             notification.classList.add('fade-out');
-            setTimeout(() => notification.remove(), 500);
+            notification._killTimer = setTimeout(() => {
+                notification.remove();
+                const i = this._notifications.indexOf(notification);
+                if (i !== -1) this._notifications.splice(i, 1);
+                this._restackNotifications();
+            }, 500);
         }, 2500);
+    }
+
+    // Offset each one so a stack reads as a list rather than a single
+    // smeared blob of overlapping text.
+    _restackNotifications() {
+        this._notifications.forEach((el, i) => {
+            el.style.marginTop = (i * 64) + 'px';
+        });
     }
     
     // The badge is the only thing telling the player they have upgrades
@@ -3255,24 +3322,13 @@ class Player {
         // Check if sprite is loaded
         if (this.game.imagesLoaded && this.game.images[this.type] && this.game.images[this.type].complete) {
             // Draw shadow
+            const sprite = this.game.getScaledSprite(this.game.images[this.type], size);
             ctx.globalAlpha = 0.3;
-            ctx.drawImage(
-                this.game.images[this.type],
-                this.x - size/2 + 3,
-                this.y - size/2 + 3,
-                size,
-                size
-            );
+            ctx.drawImage(sprite, this.x - size/2 + 3, this.y - size/2 + 3, size, size);
             ctx.globalAlpha = 1.0;
-            
+
             // Draw sprite
-            ctx.drawImage(
-                this.game.images[this.type],
-                this.x - size/2,
-                this.y - size/2,
-                size,
-                size
-            );
+            ctx.drawImage(sprite, this.x - size/2, this.y - size/2, size, size);
         } else {
             // Fallback to circles
             // Shadow
@@ -4033,24 +4089,13 @@ class Enemy {
         // Check if sprite is loaded
         if (this.game.imagesLoaded && this.game.images[imageName] && this.game.images[imageName].complete) {
             // Draw shadow
+            const sprite = this.game.getScaledSprite(this.game.images[imageName], size);
             ctx.globalAlpha = 0.3;
-            ctx.drawImage(
-                this.game.images[imageName],
-                this.x - size/2 + 2,
-                this.y - size/2 + 2,
-                size,
-                size
-            );
+            ctx.drawImage(sprite, this.x - size/2 + 2, this.y - size/2 + 2, size, size);
             ctx.globalAlpha = 1.0;
             
             // Draw sprite
-            ctx.drawImage(
-                this.game.images[imageName],
-                this.x - size/2,
-                this.y - size/2,
-                size,
-                size
-            );
+            ctx.drawImage(sprite, this.x - size/2, this.y - size/2, size, size);
         } else {
             // Fallback to circles
             // Shadow
