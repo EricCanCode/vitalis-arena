@@ -434,11 +434,30 @@ class Game {
                 this.openQueuedLevelUp();
             }
 
+            // F3 shows the performance readout.
+            if (e.key === 'F3') {
+                e.preventDefault();
+                this.togglePerfOverlay();
+            }
+
             // ESC key toggles pause
             if (e.key === 'Escape' && this.isRunning) {
                 this.togglePause();
             }
         });
+
+        // Three taps in the top-left corner, for a phone with no keyboard.
+        // A corner nothing else uses, and the count resets after a second so
+        // ordinary play cannot trip it.
+        let cornerTaps = 0, cornerTimer = null;
+        window.addEventListener('touchstart', (e) => {
+            const t = e.touches[0];
+            if (!t || t.clientX > 80 || t.clientY > 80) return;
+            cornerTaps++;
+            clearTimeout(cornerTimer);
+            cornerTimer = setTimeout(() => { cornerTaps = 0; }, 1000);
+            if (cornerTaps >= 3) { cornerTaps = 0; this.togglePerfOverlay(); }
+        }, { passive: true });
         
         window.addEventListener('keyup', (e) => {
             this.keys[e.key.toLowerCase()] = false;
@@ -895,11 +914,45 @@ class Game {
         
         // Render
         this.render();
-        
+
+        this.samplePerf(rawDelta);
+
         // Continue loop
         requestAnimationFrame((time) => this.gameLoop(time));
     }
-    
+
+    // Diagnostic readout: fps, the worst frame in the last window, and the
+    // entity counts that actually grow. Off by default and costing three adds
+    // per frame when off, so it can live in the shipping build -- the
+    // alternative is asking someone on a phone, where there is no console, to
+    // describe lag in words.
+    //
+    // Toggle: F3, or three taps in the top-left corner on a touchscreen.
+    samplePerf(rawDelta) {
+        this._perfFrames = (this._perfFrames || 0) + 1;
+        this._perfWorst = Math.max(this._perfWorst || 0, rawDelta);
+        this._perfClock = (this._perfClock || 0) + rawDelta;
+        if (!this.showPerf || this._perfClock < 0.5) return;
+
+        const el = document.getElementById('perfOverlay');
+        if (el) {
+            const fps = Math.round(this._perfFrames / this._perfClock);
+            const worst = Math.round(this._perfWorst * 1000);
+            el.textContent =
+                `${fps} fps   worst ${worst}ms\n` +
+                `enemies ${this.enemies.length}   proj ${this.projectiles.length}\n` +
+                `particles ${this.particles.length}   orbs ${this.xpOrbs.length}\n` +
+                `cap ${Math.floor(15 + (this.gameTime / 30) * 5)}   t ${Math.round(this.gameTime)}s`;
+        }
+        this._perfFrames = 0; this._perfClock = 0; this._perfWorst = 0;
+    }
+
+    togglePerfOverlay() {
+        this.showPerf = !this.showPerf;
+        const el = document.getElementById('perfOverlay');
+        if (el) el.hidden = !this.showPerf;
+    }
+
     update(deltaTime) {
         if (this.isPaused) return;
         

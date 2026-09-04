@@ -796,6 +796,23 @@ body {
     font-size: 2em;
 }
 
+/* Diagnostic readout. pointer-events: none so it can never intercept a tap
+   meant for the game -- including the corner taps that toggle it. */
+.perf-overlay {
+    position: fixed;
+    top: calc(6px + env(safe-area-inset-top, 0px));
+    left: calc(6px + env(safe-area-inset-left, 0px));
+    margin: 0;
+    padding: 6px 9px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.72);
+    color: #7ed957;
+    font: 700 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: pre;
+    pointer-events: none;
+    z-index: 2000;
+}
+
 /* Queued level-up badge.
    ---------------------------------------------------------------------------
    pointer-events: auto is load-bearing. #hud is pointer-events: none so the
