@@ -18,7 +18,7 @@
     <!-- Versioned like script.js. Without a query the browser keeps the old
      stylesheet on a return visit, so CSS-only fixes -- which is most of
      the mobile ones -- never reach players who have been here before. -->
-    <link rel="stylesheet" href="styles.css?v=1.1.8">
+    <link rel="stylesheet" href="styles.css?v=1.1.9">
 </head>
 <body>
     <!-- Title Screen -->
@@ -670,18 +670,47 @@
         <span id="soundToggleLabel">Sound On</span>
     </button>
 
-    <script src="script.js?v=1.1.8"></script>
+    <script src="script.js?v=1.1.9"></script>
     <script>
-        // Register Service Worker for PWA
+        // Register Service Worker for PWA -- but not on third-party hosts.
+        //
+        // itch.io serves HTML5 games from a sandboxed iframe on a CDN
+        // subdomain. The worker caches same-origin assets cache-first, so a
+        // player who caches a bad build keeps being served it and has no way
+        // to clear it: no console, no devtools, and a reload does not help.
+        // Offline play is a nicety; a permanently broken build for someone
+        // who cannot debug it is not. Keep it where it is useful and
+        // reversible -- local development and GitHub Pages -- and off
+        // everywhere else.
+        //
+        // This bit us during development: the worker served a stale script.js
+        // for an hour while the server was serving the fix correctly.
+        const SW_HOSTS = ['localhost', '127.0.0.1', 'ericcancode.github.io'];
+        const swAllowed = SW_HOSTS.includes(location.hostname);
+
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('service-worker.js')
-                    .then((registration) => {
-                        console.log('ServiceWorker registered:', registration.scope);
-                    })
-                    .catch((error) => {
-                        console.log('ServiceWorker registration failed:', error);
-                    });
+                if (swAllowed) {
+                    navigator.serviceWorker.register('service-worker.js')
+                        .then((registration) => {
+                            console.log('ServiceWorker registered:', registration.scope);
+                        })
+                        .catch((error) => {
+                            console.log('ServiceWorker registration failed:', error);
+                        });
+                    return;
+                }
+
+                // Not just "do not register": actively remove one that is
+                // already there. Anyone who loaded an earlier build on a host
+                // like itch still has a worker holding cached assets, and
+                // gating registration alone would leave them stuck on it
+                // forever. This is the only code that can free them.
+                navigator.serviceWorker.getRegistrations()
+                    .then(regs => Promise.all(regs.map(r => r.unregister())))
+                    .then(() => caches.keys())
+                    .then(keys => Promise.all(keys.map(k => caches.delete(k))))
+                    .catch(() => { /* nothing we can do; not worth breaking boot */ });
             });
         }
     </script>
