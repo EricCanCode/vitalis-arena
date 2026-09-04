@@ -873,12 +873,12 @@ class Game {
         //
         // The only other gameOver() call sits inside the enemy contact block,
         // so death was noticed only on a frame where an enemy was physically
-        // touching the player. A boss that kills you at range never touches
-        // you: dying to the Warden's burst or gate charge, an Emberlord bloom,
-        // the Colossus wave or a bomber left the player on zero health and
-        // still playing. Checking per frame catches every source, including
-        // any added later, and it runs after takeDamage so a Phoenix Feather
-        // revive is already applied and never reads as a death.
+        // touching the player. Anything that kills at range never touches you
+        // -- in this build that is the boss's radial burst in its enraged
+        // phase -- so the player was left on zero health and still playing.
+        // Checking per frame catches every source, including any added later,
+        // and it runs after takeDamage so a Phoenix Feather revive is already
+        // applied and never reads as a death.
         if (this.isRunning && this.player && this.player.health <= 0) {
             this.gameOver();
             return;
