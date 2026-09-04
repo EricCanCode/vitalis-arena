@@ -7,7 +7,7 @@ const ACHIEVEMENTS = [
     { id: 'killer', name: 'Killer', desc: 'Defeat 100 enemies', icon: '💀', requirement: { type: 'kills', value: 100 } },
     { id: 'assassin', name: 'Assassin', desc: 'Defeat 500 enemies', icon: '🗡️', requirement: { type: 'kills', value: 500 } },
     { id: 'legend', name: 'Legend', desc: 'Defeat 1000 enemies', icon: '👑', requirement: { type: 'kills', value: 1000 } },
-    
+
     // Survival Achievements
     { id: 'survivor', name: 'Survivor', desc: 'Survive for 5 minutes', icon: '⏱️', requirement: { type: 'time', value: 300 } },
     { id: 'veteran', name: 'Veteran', desc: 'Survive for 10 minutes', icon: '🛡️', requirement: { type: 'time', value: 600 } },
@@ -288,6 +288,8 @@ class Game {
         this.particles = [];
         this.chainLightningEffects = [];
         this.screenShake = 0;
+        this._hudUpdateTimer = 1;
+        this._hudElements = null;
         
         // Input
         this.keys = {};
@@ -1235,7 +1237,7 @@ class Game {
         this.player.updateWeapons(deltaTime, this);
         
         // Update HUD
-        this.updateHUD();
+        this.updateHUD(deltaTime);
     }
     
     updateBossSystem(deltaTime) {
@@ -1292,9 +1294,9 @@ class Game {
         for (let i = 0; i < particleCount; i++) {
             const angle = Math.random() * Math.PI * 2;
             const speed = 100 + Math.random() * 200;
-            this.particles.push(new Particle(
+            this.addParticle(
                 this.canvas.width / 2, 100, angle, speed, '#8b0000', 2
-            ));
+            );
         }
     }
     
@@ -1923,8 +1925,11 @@ class Game {
         // Apply screen shake
         this.ctx.save();
         if (this.screenShake > 0) {
-            const shakeX = (Math.random() - 0.5) * this.screenShake;
-            const shakeY = (Math.random() - 0.5) * this.screenShake;
+            // Smooth deterministic shake avoids the harsh frame-to-frame jumps
+            // that make a dropped frame feel worse than it is.
+            const shakePhase = this.gameTime * 42;
+            const shakeX = Math.sin(shakePhase) * this.screenShake * 0.35;
+            const shakeY = Math.cos(shakePhase * 1.31) * this.screenShake * 0.35;
             this.ctx.translate(shakeX, shakeY);
         }
         
@@ -2152,7 +2157,7 @@ class Game {
         for (let i = 0; i < particleCount; i++) {
             const angle = (Math.PI * 2 * i) / particleCount + (Math.random() - 0.5) * 0.5;
             const speed = particleSpeed + Math.random() * 100;
-            this.particles.push(new Particle(x, y, angle, speed, color, particleSize));
+            this.addParticle(x, y, angle, speed, color, particleSize);
         }
         
         // Add screen shake for tank deaths
@@ -2167,42 +2172,72 @@ class Game {
         const distance = Math.sqrt(dx * dx + dy * dy);
         return distance < obj1.radius + obj2.radius;
     }
-    
-    updateHUD() {
-        // Stage
-        document.getElementById('stageText').textContent = this.currentStage;
-        
-        // Coins
-        document.getElementById('coinsText').textContent = this.coins;
+
+    addParticle(x, y, angle, speed, color, sizeMultiplier = 1) {
+        // Burst effects can otherwise allocate hundreds of particles at once.
+        const maxParticles = this.performanceMode ? 40 : 140;
+        if (this.particles.length >= maxParticles) return false;
+        this.particles.push(new Particle(x, y, angle, speed, color, sizeMultiplier));
+        return true;
+    }
+
+    updateHUD(deltaTime = 0) {
+        // HUD text does not need to be rewritten at 60Hz. Avoiding these DOM
+        // mutations keeps canvas gameplay independent from layout/compositing.
+        this._hudUpdateTimer += deltaTime;
+        if (this._hudUpdateTimer < 0.1) return;
+        this._hudUpdateTimer = 0;
+
+        if (!this._hudElements) {
+            this._hudElements = {
+                stage: document.getElementById('stageText'),
+                coins: document.getElementById('coinsText'),
+                healthBar: document.getElementById('healthBar'),
+                healthText: document.getElementById('healthText'),
+                level: document.getElementById('levelText'),
+                xpBar: document.getElementById('xpBar'),
+                time: document.getElementById('timeText'),
+                kills: document.getElementById('killText'),
+                ultimateBar: document.getElementById('ultimateBar'),
+                ultimateText: document.getElementById('ultimateText')
+            };
+        }
+        const hud = this._hudElements;
+
+        if (hud.stage.textContent !== String(this.currentStage)) hud.stage.textContent = this.currentStage;
+        if (hud.coins.textContent !== String(this.coins)) hud.coins.textContent = this.coins;
         
         // Health
         const healthPercent = (this.player.health / this.player.maxHealth) * 100;
-        document.getElementById('healthBar').style.width = healthPercent + '%';
-        document.getElementById('healthText').textContent = 
-            `${Math.ceil(this.player.health)}/${this.player.maxHealth}`;
+        const healthWidth = Math.max(0, Math.min(100, healthPercent)).toFixed(1) + '%';
+        if (hud.healthBar.style.width !== healthWidth) hud.healthBar.style.width = healthWidth;
+        const healthText = `${Math.ceil(this.player.health)}/${this.player.maxHealth}`;
+        if (hud.healthText.textContent !== healthText) hud.healthText.textContent = healthText;
         
         // Level
-        document.getElementById('levelText').textContent = this.player.level;
+        if (hud.level.textContent !== String(this.player.level)) hud.level.textContent = this.player.level;
         
         // XP
         const xpPercent = (this.player.xp / this.player.xpToLevel) * 100;
-        document.getElementById('xpBar').style.width = xpPercent + '%';
+        const xpWidth = Math.max(0, Math.min(100, xpPercent)).toFixed(1) + '%';
+        if (hud.xpBar.style.width !== xpWidth) hud.xpBar.style.width = xpWidth;
         
         // Time
         const stageTime = this.gameTime - this.stageStartTime;
         const minutes = Math.floor(stageTime / 60);
         const seconds = Math.floor(stageTime % 60);
-        document.getElementById('timeText').textContent = 
-            `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        const timeText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        if (hud.time.textContent !== timeText) hud.time.textContent = timeText;
         
         // Kills
-        document.getElementById('killText').textContent = this.player.kills;
+        if (hud.kills.textContent !== String(this.player.kills)) hud.kills.textContent = this.player.kills;
         
         // Ultimate charge
         const ultimatePercent = (this.player.ultimateCharge / this.player.ultimateMax) * 100;
-        document.getElementById('ultimateBar').style.width = ultimatePercent + '%';
-        document.getElementById('ultimateText').textContent = 
-            `${Math.floor(this.player.ultimateCharge)}/${this.player.ultimateMax}`;
+        const ultimateWidth = Math.max(0, Math.min(100, ultimatePercent)).toFixed(1) + '%';
+        if (hud.ultimateBar.style.width !== ultimateWidth) hud.ultimateBar.style.width = ultimateWidth;
+        const ultimateText = `${Math.floor(this.player.ultimateCharge)}/${this.player.ultimateMax}`;
+        if (hud.ultimateText.textContent !== ultimateText) hud.ultimateText.textContent = ultimateText;
     }
     
     gameOver() {
@@ -2512,6 +2547,7 @@ class Player {
             accessory: null,
             ring: null
         };
+        this._effectValues = Object.create(null);
         this.equipmentBonuses = {
             damage: 0,
             health: 0,
@@ -2692,9 +2728,16 @@ class Player {
     }
 
     getEffectValue(effectName) {
-        return Object.values(this.equipment)
-            .filter(item => item && item.effect === effectName)
-            .reduce((total, item) => total + (Number(item.effectValue) || 0), 0);
+        return this._effectValues?.[effectName] || 0;
+    }
+
+    rebuildEffectValues() {
+        this._effectValues = Object.create(null);
+        Object.values(this.equipment).forEach(item => {
+            if (!item || !item.effect) return;
+            this._effectValues[item.effect] =
+                (this._effectValues[item.effect] || 0) + (Number(item.effectValue) || 0);
+        });
     }
 
     dealDamage(game, enemy, amount, triggerChain = true) {
@@ -2860,9 +2903,9 @@ class Player {
         // Visual effect
         for (let i = 0; i < 24; i++) {
             const angle = (Math.PI * 2 * i) / 24;
-            game.particles.push(new Particle(
+            game.addParticle(
                 this.x, this.y, angle, 200, this.color
-            ));
+            );
         }
     }
     
@@ -2933,9 +2976,9 @@ class Player {
                             if (game.isRunning) {
                                 for (let j = 0; j < 8; j++) {
                                     const angle = (Math.PI * 2 * j) / 8;
-                                    game.particles.push(new Particle(
+                                    game.addParticle(
                                         enemy.x, enemy.y, angle, 200, '#ff4500', 1.5
-                                    ));
+                                    );
                                 }
                                 this.dealDamage(game, enemy, this.projectileDamage * 10);
                             }
@@ -2951,9 +2994,9 @@ class Player {
                     // Slash effect
                     for (let i = 0; i < 12; i++) {
                         const angle = (Math.PI * 2 * i) / 12;
-                        game.particles.push(new Particle(
+                        game.addParticle(
                             enemy.x, enemy.y, angle, 250, this.color, 2
-                        ));
+                        );
                     }
                 });
                 game.screenShake = 15;
@@ -2983,11 +3026,11 @@ class Player {
                 for (let i = 0; i < 32; i++) {
                     const angle = (Math.PI * 2 * i) / 32;
                     const radius = 300;
-                    game.particles.push(new Particle(
+                    game.addParticle(
                         this.x + Math.cos(angle) * radius,
                         this.y + Math.sin(angle) * radius,
                         angle, 150, '#74c0fc', 2
-                    ));
+                    );
                 }
                 break;
         }
@@ -3075,6 +3118,7 @@ class Player {
         // Equip new item
         this.equipment[slot] = equipment;
         this.applyEquipmentBonuses(equipment);
+        this.rebuildEffectValues();
         
         // Update equipment display
         this.updateEquipmentDisplay();
@@ -3109,6 +3153,7 @@ class Player {
         }
         
         this.equipment[slot] = null;
+        this.rebuildEffectValues();
     }
     
     applyEquipmentBonuses(equipment) {
@@ -3536,7 +3581,7 @@ class SpecialWeapon {
             this.cooldown = 1 / this.attackSpeed;
         }
     }
-    
+
     updateBoomerang(deltaTime, game) {
         if (this.state === 'ready' && this.cooldown <= 0) {
             // Find nearest enemy
@@ -3665,9 +3710,9 @@ class SpecialWeapon {
             for (let i = 0; i < 50; i++) {
                 const angle = Math.random() * Math.PI * 2;
                 const speed = 50 + Math.random() * 300;
-                game.particles.push(new Particle(
+                game.addParticle(
                     this.player.x, this.player.y, angle, speed, '#ff6b00', 2
-                ));
+                );
             }
             
             // Reset cooldown
