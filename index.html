@@ -18,7 +18,7 @@
     <!-- Versioned like script.js. Without a query the browser keeps the old
      stylesheet on a return visit, so CSS-only fixes -- which is most of
      the mobile ones -- never reach players who have been here before. -->
-    <link rel="stylesheet" href="styles.css?v=1.1.9">
+    <link rel="stylesheet" href="styles.css?v=1.1.10">
 </head>
 <body>
     <!-- Title Screen -->
@@ -670,7 +670,7 @@
         <span id="soundToggleLabel">Sound On</span>
     </button>
 
-    <script src="script.js?v=1.1.9"></script>
+    <script src="script.js?v=1.1.10"></script>
     <script>
         // Register Service Worker for PWA -- but not on third-party hosts.
         //
@@ -685,7 +685,20 @@
         //
         // This bit us during development: the worker served a stale script.js
         // for an hour while the server was serving the fix correctly.
-        const SW_HOSTS = ['localhost', '127.0.0.1', 'ericcancode.github.io'];
+        // Local development is deliberately NOT here.
+        //
+        // A service worker on a dev server you are running yourself buys
+        // nothing -- there is no offline case -- and costs a great deal: it
+        // serves cached script.js while the server serves the fix, so correct
+        // builds look broken. That cost hours twice in one day, on the
+        // level-up queue and again on the frame-rate work.
+        //
+        // Clearing it by hand does not help either, which is the trap:
+        // unregister, reload, and an allowlisted host registers it again on
+        // the very next load. The only durable fix is to not register it here
+        // at all. GitHub Pages keeps it, because that is a real install
+        // target where offline play means something.
+        const SW_HOSTS = ['ericcancode.github.io'];
         const swAllowed = SW_HOSTS.includes(location.hostname);
 
         if ('serviceWorker' in navigator) {
