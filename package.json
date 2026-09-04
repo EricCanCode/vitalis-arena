@@ -1,14 +1,9 @@
 {
   "name": "vitalis-arena",
-  "version": "1.0.0",
+  "version": "1.1.7",
   "description": "Vitalis Arena - Roguelike Survival Game",
   "scripts": {
-    "lint": "echo \"No linter configured. Add ESLint to enable linting.\"",
-    "test": "node tests/run-tests.js",
-    "build": "node build.js",
-    "dev": "node scripts/dev-server.js"
-  },
-  "devDependencies": {
-    "esbuild": "^0.28.2"
+    "check": "node scripts/check-ids.js",
+    "dev": "python3 -m http.server 8000"
   }
 }
