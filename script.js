@@ -107,6 +107,14 @@ class AudioManager {
             'enemy-death': 50,
         };
         this.soundLastPlayed = {}; // name -> timestamp
+
+        // Pooled <audio> elements, name -> [element], plus a round-robin
+        // cursor. See playSound: cloning per play allocated a fresh media
+        // element every time, and the cooldowns above still permit about 75
+        // plays a second between them.
+        this.soundPool = {};
+        this.soundPoolIndex = {};
+        this.SOUND_POOL_SIZE = 5;
         
         // Load settings from localStorage
         this.loadSettings();
@@ -142,9 +150,35 @@ class AudioManager {
             this.soundLastPlayed[name] = now;
         }
         
-        // Clone audio for overlapping sounds (small files, safe on mobile)
-        const sound = this.sounds[name].cloneNode();
+        // Cycle a small pool per sound instead of cloning one per play.
+        //
+        // cloneNode() builds a whole new HTMLAudioElement -- a DOM node with
+        // its own media resource -- and the cooldowns above still allow around
+        // 75 plays a second across shoot, enemy-hit, enemy-death and pickup-xp
+        // together. Every one of those was garbage a moment later, and the
+        // collector catching up is exactly the kind of periodic stall that
+        // reads as jitter while the average frame rate stays at 60.
+        //
+        // Five is enough for any sound to overlap itself; past that the
+        // oldest is reused, which is inaudible at these lengths. Pools are
+        // built on first play, so sounds that never fire cost nothing.
+        let pool = this.soundPool[name];
+        if (!pool) {
+            pool = [];
+            for (let i = 0; i < this.SOUND_POOL_SIZE; i++) {
+                const clone = this.sounds[name].cloneNode();
+                clone.volume = this.soundVolume;
+                pool.push(clone);
+            }
+            this.soundPool[name] = pool;
+            this.soundPoolIndex[name] = 0;
+        }
+
+        const idx = this.soundPoolIndex[name];
+        this.soundPoolIndex[name] = (idx + 1) % pool.length;
+        const sound = pool[idx];
         sound.volume = this.soundVolume;
+        try { sound.currentTime = 0; } catch (e) { /* not seekable yet */ }
         sound.play().catch(err => console.log('Sound play error:', err));
     }
     
