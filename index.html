@@ -516,18 +516,38 @@
         // unreliable and the failure mode is severe: a player who caches a bad
         // build has no way to clear it and never receives an update. Offline
         // play is a nicety; a permanently broken build is not.
-        const SW_HOSTS = ['localhost', '127.0.0.1', 'ericcancode.github.io'];
+        // Local development is deliberately absent from this list. A worker on
+        // a dev server you run yourself has no offline case to serve, and it
+        // costs a great deal: it hands back a cached script while the server
+        // serves the fix, so a correct build looks broken. That cost hours on
+        // the other branch -- twice in one day -- and clearing it by hand does
+        // not help, because reloading an allowlisted host simply registers it
+        // again on the next load.
+        const SW_HOSTS = ['ericcancode.github.io'];
         const swAllowed = SW_HOSTS.includes(location.hostname);
 
-        if ('serviceWorker' in navigator && swAllowed) {
+        if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('service-worker.js')
-                    .then((registration) => {
-                        console.log('ServiceWorker registered:', registration.scope);
-                    })
-                    .catch((error) => {
-                        console.log('ServiceWorker registration failed:', error);
-                    });
+                if (swAllowed) {
+                    navigator.serviceWorker.register('service-worker.js')
+                        .then((registration) => {
+                            console.log('ServiceWorker registered:', registration.scope);
+                        })
+                        .catch((error) => {
+                            console.log('ServiceWorker registration failed:', error);
+                        });
+                    return;
+                }
+
+                // Actively remove one that is already installed. Gating
+                // registration alone would strand anyone who loaded an earlier
+                // build on a host like itch: their worker keeps serving its
+                // cache forever. This is the only code that can free them.
+                navigator.serviceWorker.getRegistrations()
+                    .then(regs => Promise.all(regs.map(r => r.unregister())))
+                    .then(() => caches.keys())
+                    .then(keys => Promise.all(keys.map(k => caches.delete(k))))
+                    .catch(() => { /* not worth breaking boot over */ });
             });
         }
     </script>
