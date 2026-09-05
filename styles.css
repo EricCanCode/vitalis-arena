@@ -1739,6 +1739,16 @@ body {
     color: rgba(255, 255, 255, 0.9);
 }
 
+/* The item's special effect, set apart from its flat stats so the line that
+   changes how the item plays does not read as one more +number. */
+.equipment-effect {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 0.9em;
+    font-style: italic;
+    color: #ffd166;
+}
+
 .btn-large {
     padding: 18px 40px;
     font-size: 1.3em;

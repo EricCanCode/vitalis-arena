@@ -232,6 +232,58 @@ class DebrisEffect extends Effect {
 
 // Owns every live effect and enforces a budget, exactly like the particle cap.
 // Effects are cheap individually but a boss enrage can queue a lot at once.
+// A jagged bolt between two points. Chain lightning was previously drawn — when
+// it was drawn at all — as the same round particles as everything else, so the
+// Lightning Staff's defining behaviour looked identical to a sword hit. A bolt
+// is a line with intent: it says which enemy struck which, and it fades fast
+// enough not to clutter a crowded field.
+class BoltEffect extends Effect {
+    constructor(x, y, opts = {}) {
+        super(x, y, opts.life ?? 0.22, opts.layer ?? 'air');
+        this.toX = opts.toX ?? x;
+        this.toY = opts.toY ?? y;
+        this.color = opts.color ?? '#74c0fc';
+        this.width = opts.width ?? 3;
+
+        // The jag is baked once at birth. Re-rolling it per frame makes the
+        // bolt strobe rather than hang in the air for its brief life.
+        const dx = this.toX - x;
+        const dy = this.toY - y;
+        const len = Math.hypot(dx, dy) || 1;
+        const nx = -dy / len;
+        const ny = dx / len;
+        const segments = 5;
+        this.points = [];
+        for (let i = 0; i <= segments; i++) {
+            const t = i / segments;
+            const spread = (i === 0 || i === segments) ? 0 : (Math.random() - 0.5) * len * 0.14;
+            this.points.push({
+                x: x + dx * t + nx * spread,
+                y: y + dy * t + ny * spread
+            });
+        }
+    }
+
+    draw(ctx) {
+        const alpha = 1 - this.t;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = this.width * (1 - this.t * 0.5);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.moveTo(this.points[0].x, this.points[0].y);
+        for (let i = 1; i < this.points.length; i++) {
+            ctx.lineTo(this.points[i].x, this.points[i].y);
+        }
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
 class EffectLayer {
     constructor(game) {
         this.game = game;

@@ -1818,7 +1818,7 @@ this.currentBoss = null;
                                 if (projectile.hitEnemies.has(enemy)) continue;
                                 projectile.hitEnemies.add(enemy);
                             }
-                            enemy.takeDamage(projectile.damage);
+                            this.player.dealDamage(this, enemy, projectile.damage);
                             enemy.applyKnockback(projectile.x, projectile.y, GAME_CONFIG.enemy.knockbackOnHit * 0.1);
                             projectile.hit();
                             if (!projectile.piercing) break;
@@ -2539,7 +2539,7 @@ this.currentBoss = null;
                 <div class="equipment-details">
                     <div class="equipment-name" style="color: ${rarityColor}">${equipment.name}</div>
                     <div class="equipment-rarity">${equipment.rarityData.name}</div>
-                    <div class="equipment-stats">${this.formatEquipmentStats(equipment.stats)}</div>
+                    <div class="equipment-stats">${this.formatEquipmentStats(equipment)}</div>
                 </div>
             </div>
         `;
@@ -2547,6 +2547,29 @@ this.currentBoss = null;
         panel.classList.add('active');
     }
     
+    // Only effects that are actually wired up appear here. Titan Plate's
+    // knockback immunity and Dragon Scale's fire resistance have nothing to
+    // attach to in this build — no player knockback, no typed damage — so
+    // they are left off rather than promised.
+    describeEquipmentEffect(equipment) {
+        if (!equipment || !equipment.effect) return '';
+        const v = equipment.effectValue;
+        switch (equipment.effect) {
+            case 'crit_chance':         return `${v}% chance to deal double damage`;
+            case 'chain_lightning':     return `Arcs to ${v} nearby enemies for half damage`;
+            case 'slow_enemies':        return `Enemies move ${v}% slower`;
+            case 'time_slow':           return `Enemies move ${v}% slower`;
+            case 'dodge_chance':        return `${v}% chance to avoid a hit entirely`;
+            case 'lifesteal':           return `Heal for ${v}% of damage dealt`;
+            case 'damage_boost_low_hp': return `+${v}% damage below half health`;
+            case 'health_regen':        return `Regenerate ${v} health per second`;
+            case 'ultimate_charge':     return `Ultimate charges ${v}% faster`;
+            case 'auto_revive':         return v > 1 ? `Cheat death ${v} times` : 'Cheat death once per run';
+            case 'xp_boost':            return '';
+            default:                    return '';
+        }
+    }
+
     formatEquipmentStats(statsOrEquipment) {
         // Handle both stats object and equipment object
         const stats = statsOrEquipment.stats || statsOrEquipment;
@@ -2564,7 +2587,13 @@ this.currentBoss = null;
                 statStrings.push(`+${value} ${formatted}`);
             }
         }
-        return statStrings.join(' • ');
+        const line = statStrings.join(' • ');
+        // Only the full equipment object carries the effect; callers that pass
+        // a bare stats block get the stats alone, as before.
+        const effect = statsOrEquipment.stats
+            ? this.describeEquipmentEffect(statsOrEquipment)
+            : '';
+        return effect ? `${line}<br><span class="equipment-effect">${effect}</span>` : line;
     }
     
     getStarsDisplay(level) {
@@ -2728,7 +2757,7 @@ this.currentBoss = null;
                 <div class="shop-item-icon">${equipment.icon}</div>
                 <div class="shop-item-name" style="color: ${equipment.rarityData.color}">${equipment.name}</div>
                 <div class="shop-item-rarity">${equipment.rarityData.name}</div>
-                <div class="shop-item-stats">${this.formatEquipmentStats(equipment.stats)}</div>
+                <div class="shop-item-stats">${this.formatEquipmentStats(equipment)}</div>
                 <button class="shop-buy-btn ${!canAfford ? 'disabled' : ''}" data-index="${index}">
                     Buy (${equipment.price} 🪙)
                 </button>
@@ -5429,6 +5458,12 @@ class Player {
         }
         this.refreshUltimateReady();
 
+        // Ring of Regeneration, in health per second.
+        const regen = this.getEffectValue('health_regen');
+        if (regen > 0 && this.health > 0) {
+            this.health = Math.min(this.maxHealth, this.health + regen * deltaTime);
+        }
+
         // Update invulnerability frames
         if (this.iframeTimer > 0) {
             this.iframeTimer -= deltaTime;
@@ -5839,6 +5874,11 @@ class Player {
         const pierces = options && options.telegraphed;
         if (this.invulnerable && !pierces) return;
 
+        // Shadow Cloak. A dodge is a clean miss, so it also skips the i-frame
+        // window a real hit would grant — otherwise dodging would be strictly
+        // better than tanking twice over.
+        if (Math.random() * 100 < this.getEffectValue('dodge_chance')) return;
+
         // A telegraphed special is capped at a share of this player's maximum
         // health. See GAME_CONFIG.boss.special.maxHealthFraction: the flat
         // multiplier alone one-shot four of the five characters on a fresh
@@ -5996,10 +6036,84 @@ class Player {
         const enemy = arguments[0];
         const chargeGain = (enemy && enemy.ultCharge) ? enemy.ultCharge : 5;
         
-        this.ultimateCharge = Math.min(this.ultimateMax, this.ultimateCharge + chargeGain);
+        // Ring of Power.
+        const chargeMultiplier = 1 + this.getEffectValue('ultimate_charge') / 100;
+        this.ultimateCharge = Math.min(this.ultimateMax, this.ultimateCharge + chargeGain * chargeMultiplier);
         this.refreshUltimateReady();
     }
     
+    // Equipment carries an `effect` string alongside its numeric stats, but
+    // only auto_revive ever read it — so Sword of Fury, Lightning Staff,
+    // Frost Bow and Shadow Cloak were, mechanically, plain stat sticks with
+    // flavour text that lied. This sums each effect across the equipped set
+    // and is rebuilt on every equip change rather than walked per hit.
+    rebuildEffectValues() {
+        this._effectValues = Object.create(null);
+        Object.values(this.equipment || {}).forEach(item => {
+            if (!item || !item.effect) return;
+            this._effectValues[item.effect] =
+                (this._effectValues[item.effect] || 0) + (Number(item.effectValue) || 0);
+        });
+    }
+
+    getEffectValue(effectName) {
+        if (!this._effectValues) this.rebuildEffectValues();
+        return this._effectValues[effectName] || 0;
+    }
+
+    // The one path for damage the player's ordinary attacks deal. Ultimates and
+    // damage-over-time deliberately do not come through here: they already
+    // multiply the base damage several times over, and letting them crit and
+    // chain on top of that is where the numbers stop meaning anything.
+    dealDamage(game, enemy, amount, triggerChain = true) {
+        let damage = amount;
+        const isCritical = Math.random() * 100 < this.getEffectValue('crit_chance');
+        if (isCritical) damage *= 2;
+
+        // Berserker Charm. Deliberately keyed to the half-health mark rather
+        // than a slow ramp, so the player can feel it switch on.
+        if (this.health / this.maxHealth < 0.5) {
+            damage *= 1 + this.getEffectValue('damage_boost_low_hp') / 100;
+        }
+
+        enemy.takeDamage(damage);
+
+        // Vampiric Blade. The item also carried a `lifesteal` stat that was
+        // summed into equipmentBonuses and never read by anything; the effect
+        // is the one that pays out, so the two cannot double up.
+        const lifesteal = this.getEffectValue('lifesteal');
+        if (lifesteal > 0 && damage > 0) {
+            this.health = Math.min(this.maxHealth, this.health + damage * lifesteal / 100);
+        }
+
+        // Rate-limited so a piercing shot through a pack does not repaint the
+        // same enemy every frame it overlaps them.
+        if (isCritical && (!enemy.lastCritEffectTime || game.gameTime - enemy.lastCritEffectTime > 0.15)) {
+            enemy.lastCritEffectTime = game.gameTime;
+            game.createParticles(enemy.x, enemy.y, '#ffd166', 'fast');
+        }
+
+        const chainCount = Math.floor(this.getEffectValue('chain_lightning'));
+        if (!triggerChain || chainCount <= 0) return;
+
+        const nearby = [];
+        for (const other of game.enemies) {
+            if (other === enemy || other.health <= 0) continue;
+            const distance = Math.hypot(other.x - enemy.x, other.y - enemy.y);
+            if (distance <= 260) nearby.push({ enemy: other, distance });
+        }
+        nearby.sort((a, b) => a.distance - b.distance);
+
+        for (const { enemy: chained } of nearby.slice(0, chainCount)) {
+            game.effects.add(new BoltEffect(enemy.x, enemy.y, {
+                toX: chained.x, toY: chained.y, color: '#74c0fc'
+            }));
+            // Half damage, and no further chaining — otherwise a dense pack
+            // chains into itself and clears the screen from one shot.
+            this.dealDamage(game, chained, damage * 0.5, false);
+        }
+    }
+
     equipItem(equipment) {
         const slot = equipment.type;
         
@@ -6011,6 +6125,7 @@ class Player {
         // Equip new item
         this.equipment[slot] = equipment;
         this.applyEquipmentBonuses(equipment);
+        this.rebuildEffectValues();
         
         // Update equipment display
         this.updateEquipmentDisplay();
@@ -7248,7 +7363,16 @@ class Enemy {
         const levelPart = (this.game.player.level - 1) * cfg.speedGrowthPerPlayerLevel;
         const timePart = (this.game.gameTime / 60) * cfg.speedGrowthPerMinute;
         const speedMultiplier = Math.min(cfg.maxSpeedMultiplier, 1 + levelPart + timePart);
-        const currentSpeed = this.baseSpeed * speedMultiplier;
+        // Frost Bow. Applied after the growth cap so the slow stays meaningful
+        // in a late run rather than being swallowed by the multiplier.
+        // Frost Bow, plus Ring of Haste's time_slow — the same mechanic under
+        // two names, so they stack. Applied after the growth cap so the slow
+        // stays meaningful in a late run rather than being swallowed by it,
+        // and floored so enemies never stop moving entirely.
+        const slowPercent = player.getEffectValue
+            ? player.getEffectValue('slow_enemies') + player.getEffectValue('time_slow')
+            : 0;
+        const currentSpeed = this.baseSpeed * speedMultiplier * Math.max(0.25, 1 - slowPercent / 100);
         
         // Behaviour dispatch. Adding an enemy means adding a data entry with a
         // `behavior` key, not another branch here.
