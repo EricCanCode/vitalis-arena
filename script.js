@@ -923,7 +923,9 @@ class Game {
         });
         
         // Update
+        const _tUpdate = performance.now();
         this.update(deltaTime);
+        this._msUpdate = performance.now() - _tUpdate;
 
         // End the run here, once, after every source of damage for this frame
         // has resolved.
@@ -948,10 +950,14 @@ class Game {
         }
         
         // Update achievement notifications
+        const _tAch = performance.now();
         this.updateAchievementNotifications(deltaTime);
+        this._msAch = performance.now() - _tAch;
         
         // Render
+        const _tRender = performance.now();
         this.render();
+        this._msRender = performance.now() - _tRender;
 
         this.samplePerf(rawDelta);
 
@@ -998,6 +1004,12 @@ class Game {
     // Toggle: F3, or three taps in the top-left corner on a touchscreen.
     samplePerf(rawDelta) {
         this._perfFrames = (this._perfFrames || 0) + 1;
+        if (rawDelta > (this._perfWorst || 0)) {
+            // Whatever the loop did not spend is time the browser spent
+            // elsewhere: decoding, collecting garbage, or not scheduling us.
+            const spent = (this._msUpdate || 0) + (this._msRender || 0) + (this._msAch || 0);
+            this._msWorstGap = Math.max(0, rawDelta * 1000 - spent);
+        }
         this._perfWorst = Math.max(this._perfWorst || 0, rawDelta);
         this._perfClock = (this._perfClock || 0) + rawDelta;
         if (!this.showPerf || this._perfClock < 0.5) return;
@@ -1006,8 +1018,17 @@ class Game {
         if (el) {
             const fps = Math.round(this._perfFrames / this._perfClock);
             const worst = Math.round(this._perfWorst * 1000);
+            const ms = (v) => (v || 0).toFixed(1);
+            // Breakdown matters more than the total: a 1700ms frame with 18
+            // enemies is something blocking, and the total alone cannot say
+            // whether that is simulation, drawing, or neither -- "neither"
+            // being the answer that points outside the game loop entirely,
+            // at asset decode, audio, GC or the browser throttling us.
+            const accounted = (this._msUpdate || 0) + (this._msRender || 0) + (this._msAch || 0);
             el.textContent =
                 `${fps} fps   worst ${worst}ms\n` +
+                `update ${ms(this._msUpdate)}  render ${ms(this._msRender)}  ach ${ms(this._msAch)}\n` +
+                `unaccounted ${ms(this._msWorstGap)}ms of worst frame\n` +
                 `enemies ${this.enemies.length}   proj ${this.projectiles.length}\n` +
                 `particles ${this.particles.length}   orbs ${this.xpOrbs.length}\n` +
                 `cap ${Math.floor(15 + (this.gameTime / 30) * 5)}   t ${Math.round(this.gameTime)}s`;
