@@ -2258,9 +2258,9 @@ this.currentBoss = null;
         for (let i = 0; i < particleCount; i++) {
             const angle = Math.random() * Math.PI * 2;
             const speed = 100 + Math.random() * 200;
-            this.particles.push(new Particle(
+            if (!this.addParticle(new Particle(
                 x, view.top + 100, angle, speed, '#8b0000', 2
-            ));
+            ))) break;
         }
     }
     
@@ -3946,6 +3946,20 @@ this.currentBoss = null;
         this.equipmentDrops.push(new EquipmentDrop(p.x, p.y, equipment));
     }
     
+    // Single gate for every cosmetic particle. The big set pieces (boss
+    // death, bombs, ultimates) used to push their full burst regardless of
+    // what was already on screen, so a bomb during a boss fight could add
+    // hundreds of circles in one frame. Returns false once the budget is
+    // spent so callers can stop looping.
+    addParticle(particle) {
+        const cap = this.performanceMode
+            ? GAME_CONFIG.juice.maxParticlesMobile
+            : GAME_CONFIG.juice.maxParticlesDesktop;
+        if (this.particles.length >= cap) return false;
+        this.particles.push(particle);
+        return true;
+    }
+
     createParticles(x, y, color, enemyType = 'basic') {
         // Hard particle budget — a big pack dying at once must not cost frames.
         const cap = this.performanceMode
@@ -4251,10 +4265,10 @@ this.currentBoss = null;
                         // Celebration particles
                         for (let i = 0; i < 12; i++) {
                             const angle = (i / 12) * Math.PI * 2;
-                            this.particles.push(new Particle(
+                            if (!this.addParticle(new Particle(
                                 dp.x, dp.y, angle, 120 + Math.random() * 80,
                                 '#2ecc71', 1.5
-                            ));
+                            ))) break;
                         }
                     }
                 } else {
@@ -5635,9 +5649,9 @@ class Player {
         // Visual effect
         for (let i = 0; i < 24; i++) {
             const angle = (Math.PI * 2 * i) / 24;
-            game.particles.push(new Particle(
+            if (!game.addParticle(new Particle(
                 this.x, this.y, angle, 200, this.color
-            ));
+            ))) break;
         }
     }
     
@@ -5718,9 +5732,9 @@ class Player {
                                 const particleCount = game.performanceMode ? 4 : 8;
                                 for (let j = 0; j < particleCount; j++) {
                                     const angle = (Math.PI * 2 * j) / particleCount;
-                                    game.particles.push(new Particle(
+                                    if (!game.addParticle(new Particle(
                                         enemy.x, enemy.y, angle, 200, '#ff4500', 1.5
-                                    ));
+                                    ))) break;
                                 }
                                 enemy.takeDamage(meteorDamage);
                             }, i * 50);
@@ -5737,9 +5751,9 @@ class Player {
                     // Slash effect
                     for (let i = 0; i < 12; i++) {
                         const angle = (Math.PI * 2 * i) / 12;
-                        game.particles.push(new Particle(
+                        if (!game.addParticle(new Particle(
                             enemy.x, enemy.y, angle, 250, this.color, 2
-                        ));
+                        ))) break;
                     }
                 });
                 game.screenShake = 15;
@@ -5769,11 +5783,11 @@ class Player {
                 for (let i = 0; i < 32; i++) {
                     const angle = (Math.PI * 2 * i) / 32;
                     const radius = 300;
-                    game.particles.push(new Particle(
+                    if (!game.addParticle(new Particle(
                         this.x + Math.cos(angle) * radius,
                         this.y + Math.sin(angle) * radius,
                         angle, 150, '#74c0fc', 2
-                    ));
+                    ))) break;
                 }
                 break;
         }
@@ -6760,9 +6774,9 @@ class SpecialWeapon {
             for (let i = 0; i < 50; i++) {
                 const angle = Math.random() * Math.PI * 2;
                 const speed = 50 + Math.random() * 300;
-                game.particles.push(new Particle(
+                if (!game.addParticle(new Particle(
                     this.player.x, this.player.y, angle, speed, '#ff6b00', 2
-                ));
+                ))) break;
             }
             
             // cooldownTime already accounts for level and modifiers.
