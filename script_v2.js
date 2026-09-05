@@ -594,7 +594,6 @@ this.currentBoss = null;
         this.runStats = this.createRunStats();
 
         // Debug performance overlay (toggle with F3)
-        this.showDebug = false;
         this.fps = 0;
 
         // Achievement System
@@ -802,17 +801,30 @@ this.currentBoss = null;
                 try { localStorage.setItem('vitalisArenaMinimap', this.minimapVisible ? '1' : '0'); } catch (err) {}
             }
 
+            // F3 shows the performance readout.
+            if (e.key === 'F3') {
+                e.preventDefault();
+                this.togglePerfOverlay();
+            }
+
             // ESC key toggles pause
             if (e.key === 'Escape' && this.isRunning) {
                 this.togglePause();
             }
-
-            // F3 toggles the performance overlay
-            if (e.key === 'F3') {
-                e.preventDefault();
-                this.showDebug = !this.showDebug;
-            }
         });
+
+        // Three taps in the top-left corner, for a phone with no keyboard.
+        // A corner nothing else uses, and the count resets after a second so
+        // ordinary play cannot trip it.
+        let cornerTaps = 0, cornerTimer = null;
+        window.addEventListener('touchstart', (e) => {
+            const t = e.touches[0];
+            if (!t || t.clientX > 80 || t.clientY > 80) return;
+            cornerTaps++;
+            clearTimeout(cornerTimer);
+            cornerTimer = setTimeout(() => { cornerTaps = 0; }, 1000);
+            if (cornerTaps >= 3) { cornerTaps = 0; this.togglePerfOverlay(); }
+        }, { passive: true });
         
         window.addEventListener('keyup', (e) => {
             this.keys[e.key.toLowerCase()] = false;
@@ -1569,28 +1581,84 @@ this.currentBoss = null;
         }
         
         // Update
+        const _tUpdate = performance.now();
         this.update(deltaTime);
+        this._msUpdate = performance.now() - _tUpdate;
 
         // Ending the run is checked here, once, after every source of
         // damage for this frame has resolved.
         if (this.checkRunEnded()) return;
         
         // Check achievements only once per second (not every frame)
+        const _tAch = performance.now();
         if (!this.performanceMode || this.lastAchievementCheck >= 1.0) {
             this.lastAchievementCheck = 0;
             this.checkAchievements();
         }
+        this._msAch = performance.now() - _tAch;
         
         // Update achievement notifications
         this.updateAchievementNotifications(deltaTime);
         
         // Render
+        const _tRender = performance.now();
         this.render();
+        this._msRender = performance.now() - _tRender;
+
+        this.samplePerf(rawDelta);
         
         // Continue loop (store id so we can cancel on restart/quit)
         this.animationFrameId = requestAnimationFrame((time) => this.gameLoop(time));
     }
     
+    // Diagnostic readout: fps, the worst frame in the last window, where that
+    // frame went, and the entity counts that actually grow. Off by default and
+    // costing three adds per frame when off, so it can ship — the alternative
+    // is asking someone on a phone, where there is no console, to describe lag
+    // in words.
+    //
+    // Toggle: F3, or three taps in the top-left corner on a touchscreen.
+    samplePerf(rawDelta) {
+        this._perfFrames = (this._perfFrames || 0) + 1;
+        if (rawDelta > (this._perfWorst || 0)) {
+            // Whatever the loop did not spend is time the browser spent
+            // elsewhere: decoding, collecting garbage, or not scheduling us.
+            const spent = (this._msUpdate || 0) + (this._msRender || 0) + (this._msAch || 0);
+            this._msWorstGap = Math.max(0, rawDelta * 1000 - spent);
+        }
+        this._perfWorst = Math.max(this._perfWorst || 0, rawDelta);
+        this._perfClock = (this._perfClock || 0) + rawDelta;
+        if (!this.showPerf || this._perfClock < 0.5) return;
+
+        const el = document.getElementById('perfOverlay');
+        if (el) {
+            const fps = Math.round(this._perfFrames / this._perfClock);
+            const worst = Math.round(this._perfWorst * 1000);
+            const ms = (v) => (v || 0).toFixed(1);
+            // The breakdown matters more than the total: a 1700ms frame with
+            // 18 enemies is something blocking, and the total alone cannot say
+            // whether that is simulation, drawing, or neither — "neither" being
+            // the answer that points outside the game loop entirely, at asset
+            // decode, audio, GC, or the browser throttling us.
+            el.textContent =
+                `${fps} fps   worst ${worst}ms\n` +
+                `update ${ms(this._msUpdate)}  render ${ms(this._msRender)}  ach ${ms(this._msAch)}\n` +
+                `unaccounted ${ms(this._msWorstGap)}ms of worst frame\n` +
+                `enemies ${this.enemies.length}   proj ${this.projectiles.length}\n` +
+                `particles ${this.particles.length}   fx ${this.effects.effects.length}\n` +
+                `pickups ${this.xpOrbs.length + this.healthPickups.length + this.coinPickups.length + this.equipmentDrops.length}   chests ${this.chests.length}\n` +
+                `wave ${this.currentWaveId} \u00b7 ${this.currentWaveName}   x${this.waveMultiplier.toFixed(2)}\n` +
+                `t ${Math.round(this.gameTime)}s`;
+        }
+        this._perfFrames = 0; this._perfClock = 0; this._perfWorst = 0;
+    }
+
+    togglePerfOverlay() {
+        this.showPerf = !this.showPerf;
+        const el = document.getElementById('perfOverlay');
+        if (el) el.hidden = !this.showPerf;
+    }
+
     update(deltaTime) {
         if (this.isPaused) return;
         
@@ -3321,7 +3389,6 @@ this.currentBoss = null;
         this.drawMinimap();
         this.drawAchievementNotifications();
         this.drawLowHealthWarning();
-        if (this.showDebug) this.drawDebugOverlay();
     }
 
     // Red vignette that pulses when the player is nearly dead.
@@ -3347,36 +3414,7 @@ this.currentBoss = null;
         ctx.fillRect(0, 0, w, h);
     }
 
-    // F3 overlay: the counters that actually matter when hunting a slowdown.
-    drawDebugOverlay() {
-        const ctx = this.ctx;
-        const lines = [
-            `FPS ${Math.round(this.fps)}`,
-            `Enemies ${this.enemies.length}`,
-            `Projectiles ${this.projectiles.length}`,
-            `Particles ${this.particles.length}`,
-            `Pickups ${this.xpOrbs.length + this.healthPickups.length + this.coinPickups.length + this.equipmentDrops.length}`,
-            `Chests ${this.chests.length}`,
-            `Wave ${this.currentWaveId} \u00b7 ${this.currentWaveName}`,
-            `Multiplier x${this.waveMultiplier.toFixed(2)}`
-        ];
-
-        // Bottom-left: the top-left corner belongs to the loadout HUD.
-        const boxHeight = lines.length * 18 + 14;
-        const top = this.canvas.height - boxHeight - 10;
-
-        ctx.save();
-        ctx.fillStyle = 'rgba(0,0,0,0.65)';
-        ctx.fillRect(10, top, 230, boxHeight);
-        ctx.font = '13px monospace';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-        ctx.fillStyle = '#8ce99a';
-        lines.forEach((line, i) => ctx.fillText(line, 20, top + 7 + i * 18));
-        ctx.restore();
-    }
-    
-    drawAchievementNotifications() {
+drawAchievementNotifications() {
         if (this.achievementQueue.length === 0) return;
         
         const notification = this.achievementQueue[0];

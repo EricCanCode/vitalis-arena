@@ -3551,3 +3551,20 @@ body {
 @media (prefers-reduced-motion: reduce) {
     .stage-intro { transition: opacity 0.2s ease; }
 }
+
+/* Diagnostic readout (F3, or three taps in the top-left corner).
+   pointer-events: none so it can never eat an input meant for the canvas. */
+.perf-overlay {
+    position: fixed;
+    top: calc(6px + env(safe-area-inset-top, 0px));
+    left: calc(6px + env(safe-area-inset-left, 0px));
+    margin: 0;
+    padding: 6px 9px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.72);
+    color: #7ed957;
+    font: 700 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: pre;
+    pointer-events: none;
+    z-index: 2000;
+}
