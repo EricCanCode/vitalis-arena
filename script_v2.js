@@ -4080,11 +4080,38 @@ this.currentBoss = null;
     }
 
     updateHUD() {
+        // Throttled to 10Hz, and every write guarded by a comparison.
+        //
+        // The elements were already cached here, but the writes were not: text
+        // and inline widths were assigned every frame whether or not the value
+        // had changed, so a canvas game was driving layout and compositing 60
+        // times a second for numbers that change a few times a second at most.
+        // Nothing in this HUD needs more than 10Hz -- a timer showing whole
+        // seconds least of all.
+        //
+        // The guards matter as much as the throttle: assigning an identical
+        // string still dirties the node in some engines, so comparing first is
+        // what actually avoids the work.
+        const now = performance.now();
+        if (this._hudLast && now - this._hudLast < 100) return;
+        this._hudLast = now;
+
         if (!this._hudElements) this._cacheHUDElements();
         const h = this._hudElements;
-        
-        h.stage.textContent = this.currentStage;
-        h.coins.textContent = this.coins;
+
+        const setText = (el, value) => {
+            const v = String(value);
+            if (el && el.textContent !== v) el.textContent = v;
+        };
+        const setWidth = (el, pct) => {
+            // Quantised before comparing, so sub-pixel float noise does not
+            // defeat the guard on every single call.
+            const w = Math.max(0, Math.min(100, pct)).toFixed(1) + '%';
+            if (el && el.style.width !== w) el.style.width = w;
+        };
+
+        setText(h.stage, this.currentStage);
+        setText(h.coins, this.coins);
 
         this.updateBossHealthBar();
         this.refreshLevelUpBadge();
@@ -4092,31 +4119,31 @@ this.currentBoss = null;
         
         // Health
         const healthPercent = (this.player.health / this.player.maxHealth) * 100;
-        h.healthBar.style.width = healthPercent + '%';
-        h.healthText.textContent = `${Math.ceil(this.player.health)}/${this.player.maxHealth}`;
+        setWidth(h.healthBar, healthPercent);
+        setText(h.healthText, `${Math.ceil(this.player.health)}/${this.player.maxHealth}`);
         
         // Level
-        h.level.textContent = this.player.level;
+        setText(h.level, this.player.level);
         
         // XP
         const xpPercent = (this.player.xp / this.player.xpToLevel) * 100;
-        h.xpBar.style.width = xpPercent + '%';
+        setWidth(h.xpBar, xpPercent);
         
         // Time
         const stageTime = this.gameTime - this.stageStartTime;
         const minutes = Math.floor(stageTime / 60);
         const seconds = Math.floor(stageTime % 60);
-        h.time.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        setText(h.time, `${minutes}:${seconds.toString().padStart(2, '0')}`);
         
         // Kills
-        h.kills.textContent = this.player.kills;
+        setText(h.kills, this.player.kills);
         
         // Ultimate charge
         const ultimatePercent = this.player.getUltimateReadiness() * 100;
-        h.ultimateBar.style.width = ultimatePercent + '%';
-        h.ultimateText.textContent = this.player.ultimateReady
+        setWidth(h.ultimateBar, ultimatePercent);
+        setText(h.ultimateText, this.player.ultimateReady
             ? 'READY'
-            : `${Math.floor(ultimatePercent)}%`;
+            : `${Math.floor(ultimatePercent)}%`);
         
         // Player 2 HUD (co-op)
         if (this.player2) {
