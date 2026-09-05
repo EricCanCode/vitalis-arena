@@ -104,7 +104,11 @@ const GAME_CONFIG = {
         // Health drops ONLY when someone is actually hurt. Without that gate,
         // healing income scales with kill rate — which itself scales with
         // difficulty — so the two cancel out and the run never gets harder.
-        healthDropChance: 0.10,
+        healthDropChance: 0.14,
+        // Give longer runs a modest comeback increase without making early
+        // fights flood the arena with healing.
+        healthDropChancePerMinute: 0.02,
+        maxHealthDropChance: 0.26,
 
         // Health drops are throttled hard during a boss fight.
         //
@@ -117,7 +121,7 @@ const GAME_CONFIG = {
         // A boss is meant to be the fight you have to play well. Healing
         // during one should be a rare relief, not an income stream.
         bossFightDropScale: 0.15,
-        healthDropThreshold: 0.75,   // only drops below this fraction of max HP
+        healthDropThreshold: 0.85,   // only drops below this fraction of max HP
         // Healed amount is a fraction of max HP, so it stays meaningful as
         // builds grow instead of becoming rounding error.
         healthDropPercent: 0.12,

@@ -70,6 +70,7 @@
 
         <button id="achievementsBtn" class="achievements-button">🏆 Achievements</button>
         <button id="menuShopBtn" class="menu-shop-button">🛒 Shop</button>
+        <button id="menuOptimizeBtn" class="menu-optimize-button" title="Equip the best item you own in every slot">⚡ Optimize</button>
         <button id="inventoryBtn" class="inventory-button">🎒 Inventory</button>
         <button id="metaShopBtn" class="meta-shop-button">⭐ Upgrades</button>
         <!-- Superseded by the mode picker above. Kept in the DOM because
@@ -230,6 +231,7 @@
             <!-- Player 2 HUD (co-op mode) -->
             <div id="p2Hud" class="hud-bottom-right" style="display: none;">
                 <div class="p2-hud-label">🎮 P2</div>
+                <div id="p2ReviveStatus" class="p2-revive-status" style="display: none;"></div>
                 <div class="hud-item">
                     <span class="hud-label">❤️ P2 HP</span>
                     <div class="health-bar p2-health">
@@ -276,6 +278,10 @@
             <button id="bombButton" class="action-badge bomb-badge" style="display:none;">
                 <span class="badge-icon">💣</span>
                 <span class="badge-label" id="bombLabel">Bomb &middot; E</span>
+            </button>
+            <button id="optimizeBadge" class="action-badge optimize-badge" style="display:none;" title="Equip the best item you own in every slot">
+                <span class="badge-icon">⚡</span>
+                <span class="badge-label">Optimize &middot; O</span>
             </button>
 
             <button id="ultimateButton" class="ultimate-button">

@@ -792,6 +792,11 @@ this.currentBoss = null;
                 this.triggerBomb();
             }
 
+            // O equips the best owned item in every slot without opening a UI.
+            if (e.key.toLowerCase() === 'o' && this.isRunning && !this.isPaused) {
+                this.optimizeEquipment();
+            }
+
             // M toggles the minimap. Some players want the screen clean, and
             // co-op in particular is already busy in that corner.
             if (e.key.toLowerCase() === 'm' && this.isRunning) {
@@ -1178,16 +1183,16 @@ this.currentBoss = null;
             this.advanceStage();
         });
         
-        // Shop button
-        document.getElementById('shopButton')?.addEventListener('click', () => {
-            this.audioManager.playSound('button-click');
-            this.openShop();
-        });
-        
         // Menu shop button
         document.getElementById('menuShopBtn')?.addEventListener('click', () => {
             this.audioManager.playSound('button-click');
             this.openShop();
+        });
+
+        // Menu shortcut for the same loadout optimizer used in the run HUD.
+        document.getElementById('menuOptimizeBtn')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
+            this.optimizeEquipment();
         });
         
         // Close shop button
@@ -1217,6 +1222,9 @@ this.currentBoss = null;
         });
         document.getElementById('bombButton')?.addEventListener('click', () => {
             this.triggerBomb();
+        });
+        document.getElementById('optimizeBadge')?.addEventListener('click', () => {
+            this.optimizeEquipment();
         });
 
         // Optimise equipment button
@@ -1351,6 +1359,20 @@ this.currentBoss = null;
         const ready = bomb.cooldown <= 0;
         btn.classList.toggle('ready', ready);
         if (label) label.textContent = ready ? 'Bomb \u00b7 E' : `${Math.ceil(bomb.cooldown)}s`;
+    }
+
+    refreshOptimizeBadge() {
+        const badge = document.getElementById('optimizeBadge');
+        if (!badge) return;
+
+        const best = this.getOptimalLoadout();
+        const currentLoadout = this.player ? this.player.equipment : this.savedEquipment;
+        const available = Object.entries(best).some(([slot, item]) => {
+            if (!item) return false;
+            const current = currentLoadout?.[slot];
+            return !current || current.name !== item.name || (current.level || 1) !== (item.level || 1);
+        });
+        badge.style.display = available ? '' : 'none';
     }
 
     triggerBomb() {
@@ -1793,9 +1815,13 @@ this.currentBoss = null;
                     const pk = GAME_CONFIG.pickups;
                     // During a boss fight the drop rate is throttled, so the
                     // adds a boss summons cannot fund the player through it.
+                    const scaledHealthDropChance = Math.min(
+                        pk.maxHealthDropChance,
+                        pk.healthDropChance + (this.gameTime / 60) * pk.healthDropChancePerMinute
+                    );
                     const dropChance = this.bossActive
-                        ? pk.healthDropChance * pk.bossFightDropScale
-                        : pk.healthDropChance;
+                        ? scaledHealthDropChance * pk.bossFightDropScale
+                        : scaledHealthDropChance;
                     if (this.lowestPlayerHealthFraction() < pk.healthDropThreshold &&
                         Math.random() < dropChance) {
                         let pct = pk.healthDropPercent;
@@ -4197,6 +4223,7 @@ drawAchievementNotifications() {
         this.updateBossHealthBar();
         this.refreshLevelUpBadge();
         this.refreshBombButton();
+        this.refreshOptimizeBadge();
         
         // Health
         const healthPercent = (this.player.health / this.player.maxHealth) * 100;
@@ -4252,7 +4279,6 @@ drawAchievementNotifications() {
                 }
             }
             if (p2UltBar) p2UltBar.style.width = (this.player2.getUltimateReadiness() * 100) + '%';
-            // Show revive status text
             if (p2StatusEl) {
                 if (this.player2.downed) {
                     const pct = Math.floor(this.player2.reviveProgress * 100);
@@ -8871,4 +8897,3 @@ window.addEventListener('DOMContentLoaded', () => {
         updateSoundBtn();
     }
 });
-
