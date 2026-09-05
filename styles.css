@@ -4,18 +4,6 @@
     box-sizing: border-box;
 }
 
-:root {
-    /* Safe-area insets for devices with notches */
-    --safe-top: env(safe-area-inset-top, 0px);
-    --safe-right: env(safe-area-inset-right, 0px);
-    --safe-bottom: env(safe-area-inset-bottom, 0px);
-    --safe-left: env(safe-area-inset-left, 0px);
-    /* Responsive HUD variables set by JS (fallbacks here) */
-    --hud-scale: 1;
-    --viewport-width: 100vw;
-    --viewport-height: 100vh;
-}
-
 html {
     width: 100%;
     height: 100%;
@@ -38,7 +26,6 @@ body {
     position: fixed;
     left: 0;
     top: 0;
-    padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
 }
 
 /* Screen Management */
@@ -60,8 +47,21 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    background: url('images/Title screen.png') center center / cover no-repeat;
     position: relative;
+    overflow: hidden;
+    /* Painted base. Everything above it is a layer that may or may not load,
+       so this is what guarantees the screen is never blank or washed out. */
+    background-color: #0d1b24;
+    /* The still is the first frame of the title clip, so mobile, reduced-motion
+       and pre-play all show the same image the video settles into. The
+       gradients stay underneath as the paint of last resort. */
+    background-image:
+        url('images/title-still.jpg'),
+        radial-gradient(ellipse 70% 55% at 50% 72%, rgba(52, 232, 158, 0.22), transparent 70%),
+        radial-gradient(ellipse 90% 70% at 50% 40%, rgba(22, 33, 62, 0.9), #0a0f18 75%);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
 }
 
 #titleScreen::before {
@@ -71,499 +71,76 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.4);
+    background: rgba(0, 0, 0, 0.3);
     z-index: 1;
-}
-
-.title-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(180deg, rgba(26, 26, 46, 0.3) 0%, rgba(22, 33, 62, 0.5) 100%);
-    z-index: 0;
 }
 
 .title-content {
     position: relative;
     z-index: 2;
     text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 40px;
-    animation: fadeIn 1s ease-out;
 }
 
-.game-logo {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 5px;
-    margin-bottom: 20px;
-}
-
-.logo-text {
-    font-size: 5em;
-    font-weight: 900;
-    color: #fff;
-    text-shadow: 0 0 40px rgba(52, 232, 158, 0.8),
-                 0 8px 20px rgba(0, 0, 0, 0.8),
-                 0 0 80px rgba(52, 232, 158, 0.4);
-    letter-spacing: 8px;
-    animation: glowPulse 2s ease-in-out infinite;
-}
-
-.logo-subtitle {
+.press-start {
     font-size: 2.5em;
-    font-weight: 700;
-    color: #34e89e;
-    text-shadow: 0 0 20px rgba(52, 232, 158, 0.6),
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.8),
+                 0 0 40px rgba(52, 232, 158, 0.6),
                  0 4px 10px rgba(0, 0, 0, 0.8);
-    letter-spacing: 4px;
+    animation: pressStartBlink 1.5s ease-in-out infinite;
+    cursor: pointer;
+    padding: 20px 40px;
+    border: 3px solid rgba(255, 255, 255, 0.5);
+    border-radius: 15px;
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(5px);
+    transition: all 0.3s ease;
 }
 
-@keyframes glowPulse {
+.press-start:hover {
+    background: rgba(52, 232, 158, 0.2);
+    border-color: #34e89e;
+    transform: scale(1.05);
+}
+
+@keyframes pressStartBlink {
     0%, 100% { 
-        text-shadow: 0 0 40px rgba(52, 232, 158, 0.8),
-                     0 8px 20px rgba(0, 0, 0, 0.8),
-                     0 0 80px rgba(52, 232, 158, 0.4);
+        opacity: 1;
+        text-shadow: 0 0 20px rgba(255, 255, 255, 0.8),
+                     0 0 40px rgba(52, 232, 158, 0.6),
+                     0 4px 10px rgba(0, 0, 0, 0.8);
     }
     50% { 
-        text-shadow: 0 0 60px rgba(52, 232, 158, 1),
-                     0 8px 20px rgba(0, 0, 0, 0.8),
-                     0 0 100px rgba(52, 232, 158, 0.6);
-    }
-}
-
-.tagline {
-    font-size: 1.5em;
-    color: rgba(255, 255, 255, 0.9);
-    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
-    letter-spacing: 2px;
-    animation: fadeInDown 0.8s ease 0.3s both;
-}
-
-.main-menu {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-    min-width: 300px;
-    animation: fadeIn 0.8s ease 0.5s both;
-}
-
-.menu-button {
-    padding: 16px 40px;
-    font-size: 1.1em;
-    font-weight: 600;
-    color: #fff;
-    background: linear-gradient(135deg, rgba(52, 232, 158, 0.2) 0%, rgba(52, 232, 158, 0.1) 100%);
-    border: 2px solid rgba(52, 232, 158, 0.6);
-    border-radius: 12px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    backdrop-filter: blur(10px);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-}
-
-.menu-button:hover {
-    background: linear-gradient(135deg, rgba(52, 232, 158, 0.4) 0%, rgba(52, 232, 158, 0.2) 100%);
-    border-color: #34e89e;
-    transform: translateX(10px);
-    box-shadow: 0 6px 25px rgba(52, 232, 158, 0.4);
-}
-
-.menu-button:active {
-    transform: translateX(8px) scale(0.98);
-}
-
-.menu-button-primary {
-    background: linear-gradient(135deg, rgba(52, 232, 158, 0.4) 0%, rgba(52, 232, 158, 0.2) 100%);
-    border-color: #34e89e;
-    font-size: 1.3em;
-    padding: 18px 50px;
-    box-shadow: 0 6px 25px rgba(52, 232, 158, 0.3);
-}
-
-.menu-button-primary:hover {
-    background: linear-gradient(135deg, rgba(52, 232, 158, 0.6) 0%, rgba(52, 232, 158, 0.3) 100%);
-    box-shadow: 0 8px 35px rgba(52, 232, 158, 0.5);
-    transform: translateX(12px) scale(1.05);
-}
-
-/* Reduced motion accessibility */
-.reduced-motion *, .reduced-motion *::before, .reduced-motion *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-}
-
-/* High contrast mode */
-.high-contrast {
-    background: #000 !important;
-    color: #fff !important;
-}
-.high-contrast .menu-button {
-    background: #000 !important;
-    border-color: #fff !important;
-}
-
-/* Tutorial overlay simple styles */
-.tutorial-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.7);
-    z-index: 1500;
-    align-items: center;
-    justify-content: center;
-}
-.tutorial-panel {
-    background: linear-gradient(135deg,#16213e 0%, #1a1a2e 100%);
-    border: 2px solid rgba(255,255,255,0.06);
-    padding: 20px;
-    border-radius: 12px;
-    max-width: 760px;
-    width: 90%;
-}
-.tutorial-steps { display:flex; flex-direction:column; gap:12px; }
-.tutorial-controls { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
-
-.button-icon {
-    font-size: 1.3em;
-}
-
-.game-info {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 0.95em;
-    margin-top: 20px;
-    animation: fadeInUp 0.8s ease 0.7s both;
-}
-
-.version {
-    font-weight: 600;
-    color: #34e89e;
-}
-
-.separator {
-    opacity: 0.5;
-}
-
-.info-text {
-    animation: textBlink 2s ease-in-out infinite;
-}
-
-@keyframes textBlink {
-    0%, 100% { opacity: 0.7; }
-    50% { opacity: 1; }
-}
-
-/* Modal Panels */
-.overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(5px);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-}
-
-.overlay.active {
-    display: flex;
-}
-
-.modal-panel {
-    background: linear-gradient(135deg, rgba(22, 33, 62, 0.95) 0%, rgba(15, 52, 67, 0.95) 100%);
-    border: 2px solid rgba(52, 232, 158, 0.4);
-    border-radius: 20px;
-    padding: 40px;
-    max-width: 700px;
-    width: 90%;
-    max-height: 80vh;
-    overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5),
-                0 0 40px rgba(52, 232, 158, 0.2);
-    animation: slideUp 0.4s ease-out;
-}
-
-@keyframes slideUp {
-    from {
-        opacity: 0;
-        transform: translateY(50px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 30px;
-    border-bottom: 2px solid rgba(52, 232, 158, 0.3);
-    padding-bottom: 15px;
-}
-
-.modal-header h2 {
-    font-size: 2em;
-    color: #34e89e;
-    text-shadow: 0 2px 8px rgba(52, 232, 158, 0.3);
-}
-
-.close-btn {
-    background: none;
-    border: none;
-    color: #fff;
-    font-size: 1.8em;
-    cursor: pointer;
-    opacity: 0.7;
-    transition: all 0.3s ease;
-}
-
-.close-btn:hover {
-    opacity: 1;
-    color: #34e89e;
-    transform: scale(1.2);
-}
-
-.modal-content {
-    margin-bottom: 25px;
-}
-
-/* How to Play */
-.how-to-play-panel .modal-content {
-    color: rgba(255, 255, 255, 0.9);
-    line-height: 1.8;
-}
-
-.instructions-section {
-    margin-bottom: 25px;
-}
-
-.instructions-section h3 {
-    color: #34e89e;
-    margin-bottom: 12px;
-    font-size: 1.2em;
-}
-
-.instructions-list {
-    list-style: none;
-    padding-left: 20px;
-}
-
-.instructions-list li {
-    margin-bottom: 10px;
-    padding-left: 20px;
-    position: relative;
-}
-
-.instructions-list li:before {
-    content: '▸';
-    position: absolute;
-    left: 0;
-    color: #34e89e;
-}
-
-/* Settings Panel */
-.settings-panel .modal-content {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-}
-
-.settings-section {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-}
-
-.settings-label {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    cursor: pointer;
-    padding: 12px;
-    border-radius: 8px;
-    transition: background 0.3s ease;
-    color: rgba(255, 255, 255, 0.9);
-}
-
-.settings-label:hover {
-    background: rgba(52, 232, 158, 0.1);
-}
-
-.settings-label input[type="checkbox"] {
-    display: none;
-}
-
-.toggle {
-    width: 50px;
-    height: 28px;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 14px;
-    position: relative;
-    transition: all 0.3s ease;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-}
-
-.settings-label input[type="checkbox"]:checked + .toggle {
-    background: #34e89e;
-    border-color: #34e89e;
-}
-
-.toggle::before {
-    content: '';
-    position: absolute;
-    width: 20px;
-    height: 20px;
-    background: #fff;
-    border-radius: 12px;
-    top: 2px;
-    left: 2px;
-    transition: all 0.3s ease;
-}
-
-.settings-label input[type="checkbox"]:checked + .toggle::before {
-    left: 26px;
-}
-
-.difficulty-section {
-    flex-direction: column;
-    align-items: flex-start !important;
-}
-
-.difficulty-section h3 {
-    color: #34e89e;
-    margin-bottom: 12px;
-}
-
-.difficulty-options {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-    width: 100%;
-}
-
-.radio-label {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 15px;
-    border: 2px solid rgba(52, 232, 158, 0.3);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    color: rgba(255, 255, 255, 0.8);
-}
-
-.radio-label:hover {
-    border-color: #34e89e;
-    background: rgba(52, 232, 158, 0.1);
-}
-
-.radio-label input[type="radio"] {
-    appearance: none;
-    width: 18px;
-    height: 18px;
-    border: 2px solid rgba(255, 255, 255, 0.5);
-    border-radius: 50%;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.radio-label input[type="radio"]:checked {
-    background: #34e89e;
-    border-color: #34e89e;
-    box-shadow: 0 0 10px rgba(52, 232, 158, 0.5);
-}
-
-/* Credits Panel */
-.credits-content {
-    text-align: center;
-    color: rgba(255, 255, 255, 0.8);
-    line-height: 2;
-}
-
-.credits-section {
-    margin-bottom: 30px;
-}
-
-.credits-section h3 {
-    color: #34e89e;
-    font-size: 1.3em;
-    margin-bottom: 8px;
-}
-
-.credits-section p {
-    opacity: 0.9;
-}
-
-/* Animations */
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
-
-@keyframes fadeInDown {
-    from {
-        opacity: 0;
-        transform: translateY(-20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
+        opacity: 0.4;
+        text-shadow: 0 0 10px rgba(255, 255, 255, 0.4),
+                     0 0 20px rgba(52, 232, 158, 0.3),
+                     0 4px 10px rgba(0, 0, 0, 0.8);
     }
 }
 
 /* Character Selection Screen */
 #characterSelect {
-    position: relative;
     flex-direction: column;
     align-items: center;
+    /* `justify-content: center` on an overflowing flex column pushes content
+       past BOTH edges and makes the overflow unscrollable — that is what was
+       hiding the title above the top and the last cards below the bottom.
+       `safe center` centres only while the content fits; browsers without it
+       fall back to the flex-start declared above. */
     justify-content: flex-start;
-    box-sizing: border-box;
-    height: 100dvh;
-    min-height: 0;
-    padding: clamp(32px, 4vh, 56px) clamp(20px, 4vw, 64px) 96px;
-    overflow-x: hidden;
+    justify-content: safe center;
     overflow-y: auto;
+    overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
+    /* Top and bottom padding keeps cards clear of the fixed button rows. */
+    padding: 76px 30px 88px;
     background: linear-gradient(135deg, #0f3443 0%, #34e89e 100%);
 }
 
 #characterSelect h1 {
     font-size: 3.5em;
-    margin-bottom: 6px;
+    margin-bottom: 10px;
     text-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
     animation: fadeInDown 0.8s ease;
 }
@@ -571,21 +148,23 @@ body {
 .game-subtitle {
     font-size: 1.5em;
     color: rgba(255, 255, 255, 0.8);
-    margin-bottom: 24px;
+    margin-bottom: 40px;
     text-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
     animation: fadeInDown 0.8s ease 0.2s both;
 }
 
 .character-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-auto-rows: minmax(260px, auto);
-    gap: clamp(16px, 2vw, 30px);
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 22px;
     max-width: 1400px;
-    width: min(100%, 1400px);
-    min-width: 0;
-    align-content: start;
-    padding: 0;
+    width: 100%;
+    margin: 0 auto;
+    /* As a flex item the grid defaults to flex-shrink: 1, so the column
+       container squashed it to less than its content height. Its rows then
+       spilled outside the box WITHOUT contributing to scrollHeight, which is
+       what made the lower cards both cut off and impossible to scroll to. */
+    flex-shrink: 0;
 }
 
 .character-card {
@@ -593,15 +172,14 @@ body {
     backdrop-filter: blur(10px);
     border: 2px solid rgba(255, 255, 255, 0.2);
     border-radius: 20px;
-    min-width: 0;
-    padding: clamp(16px, 2vw, 30px);
+    padding: 30px;
     cursor: pointer;
     transition: all 0.3s ease;
     animation: fadeIn 0.8s ease;
 }
 
 .character-card:hover {
-    transform: translateY(-6px);
+    transform: translateY(-10px) scale(1.05);
     border-color: #34e89e;
     box-shadow: 0 10px 40px rgba(52, 232, 158, 0.4);
 }
@@ -697,7 +275,10 @@ body {
 .hud-top {
     display: flex;
     justify-content: space-around;
-    padding: 20px;
+    /* Reserve the top-right corner: .sound-toggle-btn is position:fixed there,
+       so without this the row spreads underneath it and the last readout
+       (Kills, or XP on a narrower window) is covered. */
+    padding: 20px 185px 20px 20px;
     background: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), transparent);
     flex-wrap: wrap;
     gap: 15px;
@@ -716,24 +297,6 @@ body {
 
 .hud-label {
     font-size: 0.9em;
-}
-
-/* Responsive HUD: allow wrapping on narrow widths and reposition important elements */
-@media (max-width: 900px), (orientation: portrait) {
-    .hud-top {
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 8px;
-    }
-    .hud-item { flex: 1 1 45%; min-width: 120px; }
-    #ultimateButton { bottom: 90px; right: 16px; }
-    .mobile-controls { bottom: 8px; left: 8px; }
-}
-
-/* Very narrow / tall screens (phones held vertically) */
-@media (max-width: 420px) {
-    .hud-item { flex: 1 1 100%; min-width: 0; font-size: 0.85em; }
-    .logo-text { font-size: 3em; }
 }
 
 .health-bar, .xp-bar, .ultimate-bar {
@@ -808,99 +371,6 @@ body {
     font-size: 2em;
 }
 
-/* Diagnostic readout. pointer-events: none so it can never intercept a tap
-   meant for the game -- including the corner taps that toggle it. */
-.perf-overlay {
-    position: fixed;
-    top: calc(6px + env(safe-area-inset-top, 0px));
-    left: calc(6px + env(safe-area-inset-left, 0px));
-    margin: 0;
-    padding: 6px 9px;
-    border-radius: 6px;
-    background: rgba(0, 0, 0, 0.72);
-    color: #7ed957;
-    font: 700 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    white-space: pre;
-    pointer-events: none;
-    z-index: 2000;
-}
-
-/* Queued level-up badge.
-   ---------------------------------------------------------------------------
-   pointer-events: auto is load-bearing. #hud is pointer-events: none so the
-   HUD does not eat clicks meant for the canvas, and pointer-events inherits;
-   everything interactive in there has to opt back in the way
-   .ultimate-button.ready and .joystick-container do. Without it the badge
-   renders perfectly and cannot be clicked on any device -- which went
-   unnoticed on the other branch for exactly as long as the L key existed. */
-.action-badge {
-    position: fixed;
-    bottom: 34px;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 9px 15px;
-    border-radius: 10px;
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    background: rgba(20, 18, 30, 0.85);
-    color: #e8e4f0;
-    font-weight: 700;
-    font-size: 0.85em;
-    cursor: pointer;
-    pointer-events: auto;
-    z-index: 60;
-    transition: transform 0.12s ease, border-color 0.15s ease;
-}
-
-.action-badge:hover { transform: translateY(-2px); }
-.action-badge:focus-visible { outline: 2px solid #ffd43b; outline-offset: 2px; }
-
-/* Anchored to the far edge rather than by a fixed margin: the badge grows
-   with its count, so a margin would drift it into the ultimate button. */
-.levelup-badge {
-    right: calc(50% + 105px);
-    border-color: rgba(126, 217, 87, 0.65);
-    color: #d3f9c6;
-    animation: badgePulse 1.15s ease-in-out infinite;
-}
-
-.badge-count {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 21px;
-    height: 21px;
-    border-radius: 11px;
-    background: #7ed957;
-    color: #10240a;
-    font-size: 0.95em;
-}
-
-.badge-label { letter-spacing: 0.02em; }
-
-@keyframes badgePulse {
-    0%, 100% { box-shadow: 0 0 0 rgba(255, 255, 255, 0); }
-    50%      { box-shadow: 0 0 16px rgba(255, 255, 255, 0.28); }
-}
-
-/* Touch: the joystick owns the bottom-left and the fire button and ultimate
-   the bottom-right, so the badge goes above them on the right at a real tap
-   size rather than under a thumb. */
-@media (hover: none) and (pointer: coarse) {
-    .action-badge {
-        left: auto;
-        right: calc(14px + env(safe-area-inset-right, 0px));
-        bottom: calc(160px + env(safe-area-inset-bottom, 0px));
-        min-height: 44px;
-        font-size: 0.8em;
-        padding: 8px 14px;
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .action-badge, .levelup-badge { animation: none; transition: none; }
-}
-
 .ultimate-button {
     position: fixed;
     bottom: 30px;
@@ -962,10 +432,12 @@ body {
 }
 
 /* Boss Warning */
+/* Clears the 135px HUD strip. Shares its band with the boss health bar,
+   which is fine — the warning stops before the bar appears. */
 .boss-warning {
     display: none;
     position: absolute;
-    top: 15%;
+    top: clamp(150px, 21vh, 200px);
     left: 50%;
     transform: translateX(-50%);
     z-index: 200;
@@ -1031,11 +503,359 @@ body {
     50% { transform: translateX(-50%) scale(1.15); }
 }
 
+/* Upgrade straight from an equipped slot, so the common case — improving what
+   you are already wearing — does not require finding it in the full list. */
+.slot-upgrade-btn {
+    display: block;
+    width: 100%;
+    margin-top: 8px;
+    padding: 5px 4px;
+    background: rgba(255, 212, 59, 0.16);
+    border: 1px solid rgba(255, 212, 59, 0.5);
+    border-radius: 5px;
+    color: #ffe08a;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.slot-upgrade-btn:hover { background: rgba(255, 212, 59, 0.3); }
+.slot-upgrade-btn:focus-visible { outline: 2px solid #ffd43b; outline-offset: 2px; }
+.slot-upgrade-btn.unaffordable { opacity: 0.4; }
+
+.slot-maxed {
+    margin-top: 8px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .slot-upgrade-btn { transition: none; }
+}
+
+/* Scrap: the upgrade currency, sat beside coins so the two read as a pair. */
+.scrap-display {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 700;
+    color: #9fb3c8;
+}
+
+/* Item actions sit on one row so upgrade and sell are weighed against each
+   other, which is the actual decision the player is making. */
+.inventory-item-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.inventory-item-actions > * { flex: 1; }
+
+.sell-btn {
+    background: rgba(159, 179, 200, 0.14);
+    border: 1px solid rgba(159, 179, 200, 0.45);
+    color: #cbd8e4;
+    border-radius: 5px;
+    padding: 6px 4px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.sell-btn:hover { background: rgba(159, 179, 200, 0.28); }
+.sell-btn:focus-visible { outline: 2px solid #9fb3c8; outline-offset: 2px; }
+
+/* Unaffordable is dimmed rather than hidden: the cost is the information. */
+.level-up-btn.unaffordable { opacity: 0.45; }
+
+.sell-locked {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.4);
+    border: 1px dashed rgba(255, 255, 255, 0.2);
+    border-radius: 5px;
+}
+
+.stage-complete-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.stage-optimize-result {
+    min-height: 1.2em;
+    text-align: center;
+    font-size: 13px;
+    color: #ffd43b;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.stage-optimize-result.shown { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+    .stage-optimize-result, .sell-btn { transition: none; }
+}
+
+/* Mode picker. Two explicit choices rather than one toggle buried among five
+   other buttons, and Endless is shown locked rather than hidden — a reward
+   nobody can see is a reward nobody plays toward. */
+.mode-picker {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 6px auto 14px;
+    max-width: 620px;
+}
+
+.mode-btn {
+    flex: 1 1 240px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 11px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid rgba(255, 255, 255, 0.14);
+    border-radius: 10px;
+    color: #e8e4f0;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.mode-btn:hover { background: rgba(255, 255, 255, 0.09); }
+.mode-btn:focus-visible { outline: 2px solid #ffd43b; outline-offset: 2px; }
+
+.mode-btn.active {
+    border-color: #ffd43b;
+    background: rgba(255, 212, 59, 0.12);
+}
+
+.mode-btn.locked { opacity: 0.5; cursor: not-allowed; }
+.mode-btn.locked:hover { background: rgba(255, 255, 255, 0.05); }
+
+.mode-name { font-weight: 700; font-size: 1.02em; }
+.mode-desc { font-size: 0.8em; color: rgba(255, 255, 255, 0.6); }
+
+/* Says plainly that progress persists, so it reads as design rather than as
+   the game failing to reset. */
+.progress-note {
+    margin: 0 0 8px;
+    font-size: 0.82em;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.link-btn {
+    background: none;
+    border: none;
+    padding: 0 0 0 4px;
+    color: #9fb3c8;
+    font-size: 1em;
+    text-decoration: underline;
+    cursor: pointer;
+}
+.link-btn:hover { color: #cbd8e4; }
+.link-btn:focus-visible { outline: 2px solid #9fb3c8; outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+    .mode-btn { transition: none; }
+}
+
+/* Queued upgrades and the held bomb, beside the ultimate. All three say the
+   same thing — you have something ready — so they share one visual language. */
+.action-badge {
+    position: fixed;
+    bottom: 34px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 15px;
+    border-radius: 10px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    background: rgba(20, 18, 30, 0.85);
+    color: #e8e4f0;
+    font-weight: 700;
+    font-size: 0.85em;
+    cursor: pointer;
+    z-index: 60;
+    /* #hud is pointer-events: none so the HUD does not eat clicks meant for
+       the canvas, and pointer-events inherits. Every other interactive thing
+       in there opts back in (.ultimate-button.ready, .joystick-container,
+       .fire-button); these two never did, so neither badge has been
+       clickable on ANY device since it was added. Keyboard L and E masked it
+       on desktop -- on a phone there is no keyboard and no way to spend an
+       upgrade or the bomb at all. Both handlers already guard on cooldown
+       and on pendingLevelUps, so always-on is safe. */
+    pointer-events: auto;
+    transition: transform 0.12s ease, border-color 0.15s ease;
+}
+
+.action-badge:hover { transform: translateY(-2px); }
+.action-badge:focus-visible { outline: 2px solid #ffd43b; outline-offset: 2px; }
+
+.badge-label { letter-spacing: 0.02em; }
+
+/* Anchored to the far edge rather than by a fixed left margin: a margin has
+   to account for the badge's own width, and the badge grows with its count,
+   so it drifted into the ultimate button. */
+.levelup-badge {
+    right: calc(50% + 105px);
+    border-color: rgba(126, 217, 87, 0.65);
+    color: #d3f9c6;
+    animation: badgePulse 1.15s ease-in-out infinite;
+}
+
+.badge-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 21px;
+    height: 21px;
+    border-radius: 11px;
+    background: #7ed957;
+    color: #10240a;
+    font-size: 0.95em;
+}
+
+/* Right of the ultimate button. */
+.bomb-badge {
+    left: calc(50% + 105px);
+    opacity: 0.5;
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+.bomb-badge.ready {
+    opacity: 1;
+    border-color: rgba(255, 140, 0, 0.85);
+    color: #ffd8a8;
+    animation: badgePulse 1.15s ease-in-out infinite;
+}
+
+.badge-icon { font-size: 1.15em; }
+
+@keyframes badgePulse {
+    0%, 100% { box-shadow: 0 0 0 rgba(255, 255, 255, 0); }
+    50%      { box-shadow: 0 0 16px rgba(255, 255, 255, 0.28); }
+}
+
+@media (max-width: 820px) {
+    .levelup-badge { right: calc(50% + 76px); }
+    .bomb-badge    { left:  calc(50% + 76px); }
+    .action-badge  { font-size: 0.75em; padding: 7px 11px; }
+}
+
+/* Touch layout. The joystick owns the bottom-left corner and the fire button
+   the bottom-right, and the badges were landing underneath both -- measured
+   at 375x812, elementFromPoint at the upgrades badge returned joystickBase
+   and at the bomb button returned fireButton. Stack them up the right edge
+   above the fire button instead, clear of both thumbs, at a real tap size.
+
+   The minimap shares that bottom-left corner: at bottom 14 / left 14 it ran
+   y 728-798 against the joystick's 632-782, so it painted over the pad the
+   player is trying to steer with. It is pointer-events: none, so it never
+   stole the touch -- it just hid the control. Lifted clear above the pad. */
+@media (hover: none) and (pointer: coarse) {
+    .action-badge {
+        left: auto;
+        /* Same reason as .mobile-controls: fixed, so it must inset itself. */
+        right: calc(14px + env(safe-area-inset-right, 0px));
+        min-height: 44px;
+        font-size: 0.8em;
+        padding: 8px 14px;
+    }
+    .bomb-badge    { bottom: 148px; }
+    .levelup-badge { bottom: 204px; }
+}
+
+/* Landscape phone: the fire button drops to 70px, so the stack sits lower
+   and stays out of the HUD along the top. */
+@media (hover: none) and (pointer: coarse) and (max-height: 500px) {
+    .bomb-badge    { bottom: 96px; }
+    .levelup-badge { bottom: 146px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .action-badge, .levelup-badge, .bomb-badge.ready { animation: none; transition: none; }
+}
+
+/* Minimap */
+.minimap-wrap {
+    position: absolute;
+    bottom: 14px;
+    left: 14px;
+    z-index: 40;
+    pointer-events: none;
+    line-height: 0;
+    border: 2px solid rgba(150, 115, 255, 0.45);
+    border-radius: 4px;
+    background: rgba(10, 8, 18, 0.72);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55);
+    transition: opacity 0.2s ease;
+}
+
+.minimap-wrap.hidden { opacity: 0; }
+
+/* Touch devices: the minimap's bottom-left corner is the joystick's corner.
+   Measured at 375x812 it ran y 728-798 straight through the pad's 632-782,
+   hiding the control the player steers with. It is pointer-events: none so
+   it never stole the touch, only covered it. Lifted above the pad.
+
+   These have to sit AFTER the base rule above, not in the touch block
+   further up the file: same specificity, so the later one wins, and the
+   first attempt at this changed nothing at all. */
+@media (hover: none) and (pointer: coarse) {
+    .minimap-wrap {
+        bottom: calc(190px + env(safe-area-inset-bottom, 0px));
+        left: calc(14px + env(safe-area-inset-left, 0px));
+    }
+}
+
+@media (hover: none) and (pointer: coarse) and (max-height: 500px) {
+    /* Landscape shrinks the pad to 100px at bottom 15, so 125 clears it. */
+    .minimap-wrap { bottom: 125px; }
+}
+
+/* Backing store is 2x the CSS size so the dots stay crisp on Retina. */
+.minimap {
+    display: block;
+    width: 168px;
+    height: 95px;
+}
+
+.minimap-key {
+    position: absolute;
+    top: 3px;
+    right: 5px;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    color: rgba(255, 255, 255, 0.35);
+    line-height: 1;
+}
+
+@media (max-width: 820px) {
+    .minimap { width: 118px; height: 66px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .minimap-wrap { transition: none; }
+}
+
 /* Boss Health Bar */
+/* Measured, not guessed: .hud-top is a 135px strip, so top:20px put the boss
+   bar straight through the health and level readouts. Clamped rather than
+   fixed so it still clears the strip when the HUD scales on other viewports. */
 .boss-health-container {
     display: none;
     position: absolute;
-    top: 20px;
+    top: clamp(142px, 20vh, 190px);
     left: 50%;
     transform: translateX(-50%);
     z-index: 50;
@@ -1044,6 +864,131 @@ body {
 
 .boss-health-container.active {
     display: block;
+}
+
+/* The bar is the only place the boss fight states its own terms: who it is and
+   how far in you are. Width is viewport-relative so it reads as an arena-wide
+   bar on a phone and on a desktop alike. */
+.boss-hp-name {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.5em;
+    margin-bottom: 5px;
+    font-size: clamp(13px, 1.5vw, 17px);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #ffd6d6;
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+    white-space: nowrap;
+}
+
+.boss-hp-epithet {
+    font-size: 0.72em;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: none;
+    color: rgba(255, 214, 214, 0.62);
+}
+
+.boss-hp-track {
+    position: relative;
+    width: min(56vw, 620px);
+    height: 16px;
+    background: rgba(10, 6, 14, 0.85);
+    border: 2px solid rgba(255, 107, 107, 0.55);
+    border-radius: 3px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
+}
+
+/* Two fills: the chip trails the real one, so a big hit leaves a pale streak
+   that drains a moment later. It is how the player sees the SIZE of a hit
+   rather than just the new total. */
+.boss-hp-chip,
+.boss-hp-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    height: 100%;
+    width: 100%;
+}
+
+.boss-hp-chip {
+    background: rgba(255, 220, 220, 0.5);
+    transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.15s;
+}
+
+.boss-hp-fill {
+    background: linear-gradient(180deg, #ff8a8a 0%, #e03131 55%, #8b0000 100%);
+    transition: width 0.12s linear;
+}
+
+/* Three phases, three colours. Grey is the boss not taking you seriously;
+   red is it out of options. The pips say how many bars are left, which is the
+   information a single draining bar can never carry. */
+.boss-hp-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: center;
+}
+
+.boss-hp-pips {
+    display: flex;
+    gap: 3px;
+    flex: none;
+}
+
+.boss-hp-pips .pip {
+    width: 7px;
+    height: 7px;
+    border-radius: 1px;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.boss-hp-pips .pip.spent { background: rgba(255, 255, 255, 0.5); }
+
+.boss-hp-track.phase-1 { border-color: rgba(190, 190, 205, 0.6); }
+.boss-hp-track.phase-1 .boss-hp-fill {
+    background: linear-gradient(180deg, #e6e6ef 0%, #a8a8bb 55%, #6a6a80 100%);
+}
+
+.boss-hp-track.phase-2 { border-color: rgba(255, 212, 59, 0.8); }
+.boss-hp-track.phase-2 .boss-hp-fill {
+    background: linear-gradient(180deg, #ffe066 0%, #fab005 55%, #b37700 100%);
+}
+
+.boss-hp-track.phase-3 { border-color: rgba(255, 90, 90, 0.9); }
+.boss-hp-track.phase-3 .boss-hp-fill {
+    background: linear-gradient(180deg, #ff8a8a 0%, #e03131 55%, #7a0000 100%);
+}
+
+/* The final bar breathes, so the last phase is legible at a glance. */
+.boss-hp-track.phase-3 { animation: bossFinal 1.1s ease-in-out infinite; }
+
+@keyframes bossFinal {
+    0%, 100% { box-shadow: 0 2px 12px rgba(0, 0, 0, 0.7); }
+    50%      { box-shadow: 0 2px 12px rgba(0, 0, 0, 0.7), 0 0 14px rgba(255, 70, 70, 0.55); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .boss-hp-track.phase-3 { animation: none; }
+}
+
+.boss-hp-value {
+    margin-top: 4px;
+    text-align: center;
+    font-size: clamp(10px, 1.1vw, 13px);
+    font-variant-numeric: tabular-nums;
+    color: rgba(255, 255, 255, 0.72);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .boss-hp-chip,
+    .boss-hp-fill { transition: none; }
 }
 
 /* Overlay Screens */
@@ -1156,7 +1101,18 @@ body {
     border: 3px solid #ffd700;
     border-radius: 20px;
     padding: 40px;
-    max-width: 800px;
+    /* An explicit width is required, not just max-width: as a shrink-to-fit
+       flex item the panel had no definite width, so the auto-fit grid inside
+       collapsed to a single column and stacked the three cards vertically. */
+    width: min(860px, 94vw);
+    max-width: 860px;
+    /* Never taller than the screen. Without this the panel overflowed a short
+       window and, being centred, was clipped at the top as well as the bottom
+       with no way to scroll to either. */
+    max-height: 92vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
     text-align: center;
     box-shadow: 0 0 50px rgba(255, 215, 0, 0.3);
     animation: scaleIn 0.4s ease;
@@ -1170,7 +1126,9 @@ body {
 
 .upgrade-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    /* Always exactly three offers, so ask for three columns rather than
+       letting auto-fit guess from an indefinite width. */
+    grid-template-columns: repeat(3, 1fr);
     gap: 20px;
     margin-top: 30px;
 }
@@ -1274,7 +1232,7 @@ body {
 
 /* Achievements */
 .achievements-button {
-    position: absolute;
+    position: fixed;
     top: 20px;
     right: 20px;
     padding: 12px 24px;
@@ -1290,18 +1248,13 @@ body {
     z-index: 10;
 }
 
-/* Keep the global sound toggle from covering this menu control. */
-#characterSelect .achievements-button {
-    top: 76px;
-}
-
 .achievements-button:hover {
     transform: scale(1.1);
     box-shadow: 0 6px 20px rgba(255, 215, 0, 0.5);
 }
 
 .menu-shop-button {
-    position: absolute;
+    position: fixed;
     top: 20px;
     left: 20px;
     padding: 12px 24px;
@@ -1323,7 +1276,7 @@ body {
 }
 
 .inventory-button {
-    position: absolute;
+    position: fixed;
     bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
@@ -1478,15 +1431,6 @@ body {
     font-size: 0.9em;
     color: rgba(255, 255, 255, 0.8);
     line-height: 1.6;
-    margin-bottom: 10px;
-}
-
-.inventory-item-effect,
-.shop-item-effect,
-.equipment-effect {
-    color: #ffd166;
-    font-size: 0.85em;
-    line-height: 1.4;
     margin-bottom: 10px;
 }
 
@@ -1795,8 +1739,14 @@ body {
     color: rgba(255, 255, 255, 0.9);
 }
 
+/* The item's special effect, set apart from its flat stats so the line that
+   changes how the item plays does not read as one more +number. */
 .equipment-effect {
-    margin-top: 6px;
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 0.9em;
+    font-style: italic;
+    color: #ffd166;
 }
 
 .btn-large {
@@ -1905,10 +1855,6 @@ body {
     line-height: 1.6;
 }
 
-.shop-item-effect {
-    margin-top: -8px;
-}
-
 .shop-buy-btn {
     padding: 10px 25px;
     background: linear-gradient(135deg, #34e89e 0%, #0f3443 100%);
@@ -1945,44 +1891,56 @@ body {
 }
 
 /* Game Notification */
-.game-notification {
+/* Toasts live down the left edge, clear of the arena centre and of every
+   other HUD element: below the 135px top strip and the boss bar, above the
+   minimap, and well left of the ultimate button and the event banner. */
+.notification-stack {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    padding: 20px 40px;
-    background: rgba(0, 0, 0, 0.9);
-    border: 3px solid #FFD700;
-    border-radius: 15px;
-    color: #FFD700;
-    font-size: 1.8em;
-    font-weight: bold;
-    text-align: center;
-    z-index: 1000;
-    animation: notificationPulse 0.5s ease;
-    /* Was a 30px blur. A blurred shadow is recomposited every frame the
-       element is alive, and several of these overlap during a burst. 12px
-       reads the same at this size for a fraction of the fill cost. */
-    box-shadow: 0 0 12px rgba(255, 215, 0, 0.45);
-    /* It is a transient overlay that never needs hit-testing, and it sits at
-       z-index 1000 across the middle of the screen. */
+    left: 14px;
+    top: clamp(230px, 32vh, 330px);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    z-index: 45;
     pointer-events: none;
-    /* Promote once, so the pulse animates without repainting what is behind. */
-    will-change: transform, opacity;
+    max-width: min(300px, 26vw);
+}
+
+.game-notification {
+    padding: 7px 13px;
+    background: rgba(10, 8, 16, 0.86);
+    border: 1px solid rgba(255, 212, 59, 0.5);
+    border-left: 3px solid #FFD700;
+    border-radius: 6px;
+    color: #ffe9a8;
+    font-size: 0.92em;
+    font-weight: 600;
+    line-height: 1.3;
+    text-align: left;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+    animation: notificationIn 0.22s ease;
 }
 
 .game-notification.fade-out {
-    animation: fadeOut 0.5s ease forwards;
+    animation: notificationOut 0.4s ease forwards;
 }
 
-@keyframes notificationPulse {
-    0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0; }
-    50% { transform: translate(-50%, -50%) scale(1.1); }
-    100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+@keyframes notificationIn {
+    from { opacity: 0; transform: translateX(-14px); }
+    to   { opacity: 1; transform: translateX(0); }
 }
 
-@keyframes fadeOut {
-    to { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+@keyframes notificationOut {
+    to { opacity: 0; transform: translateX(-14px); }
+}
+
+@media (max-width: 820px) {
+    .notification-stack { max-width: 44vw; }
+    .game-notification  { font-size: 0.82em; padding: 5px 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .game-notification, .game-notification.fade-out { animation: none; }
 }
 
 /* Animations */
@@ -2020,7 +1978,9 @@ body {
 /* Responsive Design */
 @media (max-width: 768px) {
     #characterSelect {
-        padding: 24px 16px 78px;
+        padding: 20px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
     }
     
     #characterSelect h1 {
@@ -2034,8 +1994,9 @@ body {
     }
     
     .character-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         gap: 15px;
+        padding: 10px;
     }
     
     .character-card {
@@ -2063,6 +2024,8 @@ body {
     .hud-top {
         flex-direction: column;
         align-items: flex-start;
+        /* Stacked layout still has to clear the fixed sound button. */
+        padding-right: 120px;
     }
     
     .upgrade-grid {
@@ -2074,16 +2037,16 @@ body {
 .mobile-controls {
     display: none;
     position: fixed;
-    /* Inset to the safe area, not the raw viewport. The page sets
-       viewport-fit=cover so it deliberately extends under the notch and the
+    /* Inset to the safe area rather than the raw viewport. The page sets
+       viewport-fit=cover, so it deliberately extends under the notch and the
        home indicator, and the safe-area insets are applied as padding on
-       <body> -- which a position: fixed layer does not inherit. That put the
-       joystick and fire button in the home-indicator swipe region on an
-       iPhone, where a downward thumb drag is taken by iOS as the go-home
-       gesture rather than reaching the pad, and in landscape pushed the
-       joystick partly under the notch.
+       <body> -- which a position: fixed layer does not inherit. That left the
+       joystick and fire button at bottom: 30px sitting in the home-indicator
+       swipe region on an iPhone, where a downward thumb drag is taken by iOS
+       as the go-home gesture instead of reaching the pad, and in landscape it
+       put the joystick partly under the notch.
 
-       env(..., 0px) makes this a no-op on any device without insets. */
+       env(..., 0px) means this is a no-op on any device without insets. */
     top: env(safe-area-inset-top, 0px);
     right: env(safe-area-inset-right, 0px);
     bottom: env(safe-area-inset-bottom, 0px);
@@ -2213,7 +2176,7 @@ body {
 @media (max-height: 500px) and (orientation: landscape) {
     /* HUD Optimizations */
     .hud-top {
-        padding: 5px 10px;
+        padding: 5px 120px 5px 10px;
         gap: 5px;
         flex-wrap: nowrap;
         overflow-x: auto;
@@ -2324,7 +2287,10 @@ body {
     }
     
     #characterSelect {
-        padding: 10px 16px 64px;
+        padding: 10px 20px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch;
     }
     
     #characterSelect h1 {
@@ -2340,18 +2306,9 @@ body {
     .achievements-button,
     .menu-shop-button {
         top: 10px;
+        left: 10px;
         padding: 8px 16px;
         font-size: 0.85em;
-    }
-
-    #characterSelect .achievements-button {
-        top: 54px;
-        right: 10px;
-        left: auto;
-    }
-
-    #characterSelect .menu-shop-button {
-        left: 10px;
     }
     
     .inventory-button {
@@ -2361,13 +2318,16 @@ body {
     }
     
     .character-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(5, 1fr);
         gap: 10px;
         max-width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
     }
     
     .character-card {
         padding: 10px;
+        min-width: 140px;
     }
     
     .character-sprite {
@@ -2582,10 +2542,9 @@ body {
         position: fixed;
         /* Advisory only. Without this the pseudo-element sits at z-index 9999
            across the whole viewport and swallows every touch -- the joystick
-           renders in the right place and cannot be pressed, and a player who
-           lands in portrait cannot tap through the menus at all. Measured at
-           375x812: elementFromPoint at the joystick's own centre returned
-           BODY, not the joystick. */
+           renders in the right place and cannot be pressed, so the game reads
+           as "I can't move". Measured: elementFromPoint at the joystick's own
+           centre returned BODY, not the joystick. */
         pointer-events: none;
         top: 0;
         left: 0;
@@ -2723,62 +2682,6 @@ body {
     font-weight: bold;
 }
 
-/* Keep both character rows visible on shorter desktop viewports. */
-@media (min-width: 769px) and (min-height: 501px) and (max-height: 800px) {
-    #characterSelect {
-        padding-top: 24px;
-        padding-bottom: 78px;
-    }
-
-    #characterSelect h1 {
-        font-size: 2.5em;
-    }
-
-    .game-subtitle {
-        font-size: 1.1em;
-        margin-bottom: 12px;
-    }
-
-    .character-grid {
-        gap: 12px;
-        grid-auto-rows: minmax(0, auto);
-    }
-
-    .character-card {
-        padding: 8px;
-    }
-
-    .character-icon {
-        margin-bottom: 4px;
-    }
-
-    .character-sprite {
-        width: 64px;
-        height: 64px;
-        padding: 4px;
-    }
-
-    .character-card h2 {
-        font-size: 1.25em;
-        margin-bottom: 4px;
-    }
-
-    .character-ability,
-    .character-desc {
-        font-size: 0.8em;
-    }
-
-    .character-desc {
-        margin-bottom: 4px;
-        min-height: 24px;
-    }
-
-    .character-stats {
-        font-size: 0.75em;
-        gap: 3px;
-    }
-}
-
 /* Sound toggle button styles */
 .sound-toggle-btn {
   background: rgba(30,30,40,0.92);
@@ -2802,4 +2705,866 @@ body {
     top: 8px;
     right: 8px;
   }
+}
+
+/* ============================================================
+   NEW CONTENT SYSTEMS
+   Loadout HUD, chests, passives, permanent upgrades
+   ============================================================ */
+
+/* ---- Loadout HUD (weapons + passives owned this run) ---- */
+.loadout-display {
+    position: absolute;
+    top: 70px;
+    left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.loadout-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    max-width: 300px;
+}
+
+.loadout-item {
+    position: relative;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 9px;
+}
+
+.loadout-icon {
+    font-size: 1.15em;
+    line-height: 1;
+}
+
+.loadout-level {
+    position: absolute;
+    bottom: -5px;
+    right: -5px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 3px;
+    background: #1a1a2e;
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    border-radius: 8px;
+    font-size: 0.62em;
+    font-weight: bold;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.loadout-item.maxed .loadout-level {
+    background: #ff9800;
+    color: #000;
+}
+
+/* Evolved weapons get a persistent glow so they read as special */
+.loadout-item.evolved {
+    box-shadow: 0 0 12px 2px rgba(255, 215, 0, 0.75);
+    animation: evolvedPulse 1.8s ease-in-out infinite;
+}
+
+.loadout-item.evolved .loadout-level {
+    background: #ffd700;
+    color: #000;
+}
+
+@keyframes evolvedPulse {
+    0%, 100% { box-shadow: 0 0 10px 1px rgba(255, 215, 0, 0.6); }
+    50%      { box-shadow: 0 0 18px 4px rgba(255, 215, 0, 0.95); }
+}
+
+/* ---- Level-up option extras ---- */
+.upgrade-option {
+    position: relative;
+}
+
+.upgrade-key {
+    position: absolute;
+    top: 8px;
+    left: 10px;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    font-size: 0.72em;
+    font-weight: bold;
+    color: rgba(255, 255, 255, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.upgrade-detail {
+    margin-top: 10px;
+    font-size: 0.8em;
+    font-weight: bold;
+    color: #ffd43b;
+    letter-spacing: 0.02em;
+}
+
+/* ---- Treasure chest reward ---- */
+.chest-panel {
+    background: linear-gradient(135deg, #2d2410 0%, #1a1a2e 100%);
+    border: 3px solid #ffd700;
+    border-radius: 20px;
+    padding: 45px 60px;
+    min-width: 380px;
+    max-width: 560px;
+    text-align: center;
+    box-shadow: 0 0 60px rgba(255, 215, 0, 0.35);
+    animation: scaleIn 0.35s ease;
+}
+
+.chest-animation {
+    font-size: 5em;
+    line-height: 1;
+    margin-bottom: 10px;
+}
+
+.chest-animation.shaking {
+    animation: chestShake 0.14s linear infinite;
+}
+
+.chest-animation.burst {
+    animation: chestBurst 0.55s ease-out;
+}
+
+@keyframes chestShake {
+    0%   { transform: translate(0, 0) rotate(0deg); }
+    25%  { transform: translate(-4px, 1px) rotate(-4deg); }
+    50%  { transform: translate(3px, -2px) rotate(3deg); }
+    75%  { transform: translate(-2px, 2px) rotate(-2deg); }
+    100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+@keyframes chestBurst {
+    0%   { transform: scale(1);   filter: brightness(1); }
+    35%  { transform: scale(1.5); filter: brightness(3) drop-shadow(0 0 32px #fff); }
+    100% { transform: scale(1);   filter: brightness(1); }
+}
+
+.chest-result {
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.chest-result.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.chest-evolved {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: #ffd700;
+    letter-spacing: 0.06em;
+    margin-bottom: 14px;
+    text-shadow: 0 0 18px rgba(255, 215, 0, 0.85);
+    animation: evolvedPulse 1.4s ease-in-out infinite;
+}
+
+.chest-reward-icon {
+    font-size: 3em;
+    margin-bottom: 8px;
+}
+
+.chest-reward-name {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 8px;
+}
+
+.chest-reward-desc {
+    font-size: 0.95em;
+    color: rgba(255, 255, 255, 0.8);
+    line-height: 1.45;
+}
+
+.chest-hint {
+    margin-top: 26px;
+    font-size: 0.85em;
+    color: rgba(255, 255, 255, 0.55);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.chest-hint.visible {
+    opacity: 1;
+}
+
+/* ---- Permanent upgrade shop ---- */
+.meta-shop-button {
+    /* Bottom-left: top-centre is taken by the co-op mode toggle. */
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #845ef7 0%, #5f3dc4 100%);
+    color: #fff;
+    border: none;
+    border-radius: 25px;
+    font-size: 1em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(132, 94, 247, 0.35);
+    z-index: 10;
+}
+
+.meta-shop-button:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgba(132, 94, 247, 0.6);
+}
+
+.meta-shop-content {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-radius: 20px;
+    padding: 30px;
+    max-width: 1000px;
+    width: 92%;
+    max-height: 88vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    animation: scaleIn 0.3s ease;
+}
+
+.meta-shop-note {
+    margin: 0 0 20px 0;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.9em;
+}
+
+.meta-upgrade-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.meta-item {
+    background: rgba(255, 255, 255, 0.06);
+    border: 2px solid rgba(132, 94, 247, 0.45);
+    border-radius: 14px;
+    padding: 18px;
+    text-align: center;
+}
+
+.meta-item.maxed {
+    border-color: rgba(255, 215, 0, 0.7);
+    background: rgba(255, 215, 0, 0.08);
+}
+
+.meta-item-icon   { font-size: 2.1em; margin-bottom: 8px; }
+.meta-item-name   { font-size: 1.1em; font-weight: bold; color: #fff; margin-bottom: 6px; }
+.meta-item-desc   { font-size: 0.82em; color: rgba(255, 255, 255, 0.65); margin-bottom: 10px; min-height: 2.4em; }
+.meta-item-level  { font-size: 0.85em; color: #b197fc; font-weight: bold; }
+.meta-item-current{ font-size: 0.85em; color: #8ce99a; margin-bottom: 12px; min-height: 1.2em; }
+
+.meta-buy-btn {
+    width: 100%;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #845ef7 0%, #5f3dc4 100%);
+    color: #fff;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    pointer-events: all;
+}
+
+.meta-buy-btn:hover:not(.disabled) {
+    transform: scale(1.04);
+    box-shadow: 0 4px 14px rgba(132, 94, 247, 0.5);
+}
+
+.meta-buy-btn.disabled {
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.4);
+    cursor: not-allowed;
+}
+
+.btn-danger {
+    padding: 15px 40px;
+    margin: 10px;
+    border: none;
+    border-radius: 10px;
+    font-size: 1.1em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    pointer-events: all;
+    background: linear-gradient(135deg, #c92a2a 0%, #6b1414 100%);
+    color: #fff;
+}
+
+.btn-danger:hover {
+    transform: scale(1.05);
+    box-shadow: 0 5px 20px rgba(201, 42, 42, 0.5);
+}
+
+/* ---- Run summary extras ---- */
+.final-stat-wide {
+    font-size: 0.85em;
+    text-align: left;
+    line-height: 1.45;
+}
+
+.final-stat-total {
+    background: rgba(255, 215, 0, 0.15);
+    border: 1px solid rgba(255, 215, 0, 0.45);
+    font-weight: bold;
+    color: #ffd700;
+}
+
+/* Keep the HUD loadout out of the way on small screens */
+@media (max-width: 900px), (max-height: 500px) {
+    .loadout-display { top: 60px; left: 10px; gap: 4px; }
+    .loadout-item    { width: 30px; height: 30px; }
+    .loadout-icon    { font-size: 0.95em; }
+    .loadout-row     { max-width: 200px; }
+}
+
+/* ---- Equipment optimiser button ---- */
+.inventory-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.optimize-button {
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #34e89e 0%, #0f3443 100%);
+    color: #fff;
+    border: none;
+    border-radius: 20px;
+    font-size: 0.95em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    pointer-events: all;
+    box-shadow: 0 4px 14px rgba(52, 232, 158, 0.28);
+}
+
+.optimize-button:hover {
+    transform: scale(1.06);
+    box-shadow: 0 6px 20px rgba(52, 232, 158, 0.5);
+}
+
+/* ------------------------------------------------------------------
+   Character select on short windows
+   Five tall cards do not fit a laptop-height window. Compact the
+   chrome and the cards so the grid fits without relying on scrolling,
+   while the scrolling above guarantees nothing is ever unreachable.
+   ------------------------------------------------------------------ */
+@media (max-height: 900px) {
+    #characterSelect            { padding: 68px 24px 80px; }
+    #characterSelect h1         { font-size: 2.4em; margin-bottom: 2px; }
+    .game-subtitle              { font-size: 1.15em; margin-bottom: 14px; }
+    .coop-toggle-container      { margin-bottom: 12px; }
+    .character-grid             { gap: 16px; }
+    .character-card             { padding: 18px 16px; }
+    .character-icon             { margin-bottom: 10px; }
+    .character-sprite           { width: 82px; height: 82px; padding: 6px; border-width: 3px; }
+    .character-card h2          { font-size: 1.25em; margin-bottom: 6px; }
+    .character-ability          { font-size: 0.9em; }
+    .character-desc             { font-size: 0.82em; margin-bottom: 10px; min-height: 0; }
+    .character-stats            { font-size: 0.78em; gap: 3px; }
+}
+
+@media (max-height: 680px) {
+    #characterSelect            { padding: 60px 18px 74px; }
+    #characterSelect h1         { font-size: 1.9em; }
+    .game-subtitle              { font-size: 1em; margin-bottom: 10px; }
+    .character-grid             { gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    .character-card             { padding: 14px 12px; }
+    .character-sprite           { width: 64px; height: 64px; padding: 4px; }
+    .character-card h2          { font-size: 1.1em; }
+    .character-ability          { font-size: 0.84em; }
+    .character-desc             { font-size: 0.76em; margin-bottom: 8px; }
+    .character-stats            { font-size: 0.72em; }
+}
+
+/* Hovering must not lift a card into the fixed button rows. */
+@media (max-height: 900px) {
+    .character-card:hover { transform: translateY(-4px) scale(1.02); }
+}
+
+/* There are exactly five heroes. On a short but reasonably wide window, force
+   them onto one row so the whole roster is visible without scrolling — the
+   scrolling above still covers windows too narrow for that to fit. */
+@media (max-height: 760px) and (min-width: 860px) {
+    .character-grid { grid-template-columns: repeat(5, 1fr); gap: 12px; }
+    .character-card { padding: 14px 10px; }
+    .character-desc { font-size: 0.74em; }
+}
+
+/* ------------------------------------------------------------------
+   Short-landscape corrections
+   ------------------------------------------------------------------ */
+
+/* The shared `.achievements-button, .menu-shop-button { left: 10px }` rule in
+   the short-landscape block also lands on Achievements, which already carries
+   `right: 20px`. An element with BOTH left and right set stretches to span the
+   gap — that is why the Achievements pill filled the whole top bar. Each
+   button gets only the edge it belongs to. */
+@media (max-height: 500px) and (orientation: landscape) {
+    .achievements-button {
+        left: auto;
+        right: 10px;
+    }
+}
+
+/* At this height the fixed button rows sit over the cards. Reclaim the space
+   by dropping the subtitle and tightening the header, so the roster ends above
+   them instead of underneath. */
+@media (max-height: 560px) {
+    #characterSelect        { padding: 52px 18px 64px; }
+    #characterSelect h1     { font-size: 1.6em; margin-bottom: 2px; }
+    .game-subtitle          { display: none; }
+    .coop-toggle-container  { margin-bottom: 8px; }
+    .character-grid         { gap: 10px; }
+    .character-card         { padding: 12px 9px; }
+    .character-sprite       { width: 56px; height: 56px; padding: 4px; border-width: 2px; }
+    .character-icon         { margin-bottom: 7px; }
+    .character-card h2      { font-size: 1em; margin-bottom: 4px; }
+    .character-ability      { font-size: 0.78em; margin-bottom: 3px; }
+    .character-desc         { font-size: 0.7em; margin-bottom: 6px; }
+    .character-stats        { font-size: 0.68em; gap: 2px; }
+}
+
+/* The global sound toggle is pinned top-right at z-index 1000, so Achievements
+   sat underneath it and could not be clicked. Stack it below rather than
+   offsetting sideways — the toggle's label changes width ("Sound On" /
+   "Sound Off"), so a horizontal offset would be a guess. */
+.achievements-button {
+    top: 68px;
+    right: 16px;
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+    .achievements-button {
+        left: auto;
+        right: 10px;
+        /* Must clear the sound toggle, which is ~45px tall from top: 16px. */
+        top: 70px;
+    }
+}
+
+/* ------------------------------------------------------------------
+   Centred panels must never exceed the screen
+   A panel taller than the viewport inside a centred flex overlay is
+   clipped at BOTH ends with no way to scroll to either. The shop,
+   inventory, achievements and upgrade panels already guard against
+   this; these four did not.
+   ------------------------------------------------------------------ */
+.chest-panel,
+.game-over-panel,
+.pause-panel,
+.stage-complete-panel {
+    max-height: 92vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+.reward-hint {
+    display: block;
+    margin-top: 3px;
+    font-size: 0.8em;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+/* Stage complete on short windows.
+   The panel gained a Scrap row, an Optimize button and a result line, and at
+   560px tall that pushed its content to 832px inside a 515px box — it still
+   scrolled, but "Continue to Next Stage" sat 239px below the fold, so the
+   primary action was invisible and the panel looked broken.
+   Shrink the chrome, and put the two currency lines side by side, which
+   removes a whole row rather than just trimming padding off one. */
+/* Threshold measured, not guessed: the roomy layout renders at 850px of
+   content, so anything under ~950px of window overflows once the panel's own
+   padding and the overlay margin are counted. */
+@media (max-height: 950px) {
+    .stage-complete-panel      { padding: 20px 24px; }
+    .stage-complete-panel h2   { font-size: 1.7em; margin-bottom: 12px; }
+    .stage-rewards             { gap: 10px; margin-bottom: 14px; }
+    .reward-item               { padding: 10px 14px; }
+    .reward-label              { font-size: 0.85em; }
+    .reward-hint               { font-size: 0.72em; }
+    .reward-value              { font-size: 1.15em; }
+
+    /* Coins and Scrap are both one short line; side by side they cost one
+       row instead of two. The equipment card keeps the full width. */
+    .stage-rewards {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        align-items: stretch;
+    }
+    .stage-rewards > .reward-item:nth-child(3) { grid-column: 1 / -1; }
+
+    .equipment-reward          { padding: 10px 12px; gap: 10px; }
+    .equipment-name            { font-size: 1.05em; }
+    .equipment-stats           { font-size: 0.82em; }
+    .equipment-level-display   { font-size: 0.8em; }
+
+    .stage-complete-actions    { gap: 6px; }
+    .btn-secondary             { padding: 9px 18px; font-size: 0.95em; }
+    .stage-complete-panel .btn-large { padding: 12px 26px; font-size: 1.05em; }
+    .stage-optimize-result     { font-size: 12px; min-height: 1em; }
+}
+
+/* Level-up on short windows: shrink the chrome before the cards, so the
+   three offers stay side by side and readable. */
+@media (max-height: 760px) {
+    .level-up-panel      { padding: 24px 22px; }
+    .level-up-panel h2   { font-size: 1.8em; margin-bottom: 10px; }
+    .level-up-panel p    { font-size: 0.95em; margin: 0; }
+    .upgrade-grid        { gap: 14px; margin-top: 16px; }
+    .upgrade-option      { padding: 16px 12px; }
+    .upgrade-icon        { font-size: 1.9em; margin-bottom: 6px; }
+    .upgrade-name        { font-size: 1em; margin-bottom: 6px; }
+    .upgrade-desc        { font-size: 0.8em; }
+    .upgrade-detail      { margin-top: 7px; font-size: 0.74em; }
+    .upgrade-key         { top: 6px; left: 7px; width: 18px; height: 18px; font-size: 0.66em; }
+}
+
+@media (max-height: 560px) {
+    .level-up-panel      { padding: 16px 16px; }
+    .level-up-panel h2   { font-size: 1.4em; margin-bottom: 6px; }
+    .level-up-panel p    { font-size: 0.85em; }
+    .upgrade-grid        { gap: 10px; margin-top: 10px; }
+    .upgrade-option      { padding: 12px 9px; }
+    .upgrade-icon        { font-size: 1.5em; margin-bottom: 4px; }
+    .upgrade-name        { font-size: 0.9em; margin-bottom: 4px; }
+    .upgrade-desc        { font-size: 0.72em; }
+    .upgrade-detail      { margin-top: 5px; font-size: 0.68em; }
+}
+
+/* Only collapse to a single column when three genuinely cannot fit. */
+@media (max-width: 640px) {
+    .upgrade-grid { grid-template-columns: 1fr; }
+}
+
+/* ------------------------------------------------------------------
+   Animated title backdrop
+   ------------------------------------------------------------------ */
+.title-video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    /* Both layers start hidden; TitleBackground fades the active one in, so a
+       missing or blocked video simply leaves the painted base showing. */
+    opacity: 0;
+    transition: opacity 0.9s ease-in-out;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.title-video.is-visible {
+    opacity: 1;
+}
+
+/* The overlay and content must sit above both video layers. */
+#titleScreen::before {
+    z-index: 1;
+}
+
+.title-content {
+    z-index: 2;
+}
+
+/* The gold lettering used to be baked into the old artwork. As DOM text it
+   stays sharp at any resolution and can be restyled without new art. */
+.game-title {
+    font-size: clamp(2.4rem, 8vw, 5.5rem);
+    line-height: 1;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.35em;
+    background: linear-gradient(180deg, #ffe89a 0%, #ffd700 45%, #b8860b 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: #ffd700;   /* fallback where background-clip: text is unsupported */
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.85))
+            drop-shadow(0 0 26px rgba(255, 215, 0, 0.35));
+}
+
+/* Honour a reduced-motion preference: the backdrop simply stays still. */
+@media (prefers-reduced-motion: reduce) {
+    .title-video {
+        display: none;
+    }
+}
+
+/* ------------------------------------------------------------------
+   Victory — the campaign now ends
+   ------------------------------------------------------------------ */
+.victory-panel {
+    background: linear-gradient(135deg, #2d2410 0%, #16213e 100%);
+    border: 3px solid #ffd700;
+    border-radius: 20px;
+    padding: 40px;
+    max-width: 640px;
+    width: 92%;
+    max-height: 92vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    text-align: center;
+    box-shadow: 0 0 60px rgba(255, 215, 0, 0.35);
+    animation: scaleIn 0.4s ease;
+}
+
+.victory-panel h2 {
+    font-size: 2.4em;
+    margin: 0 0 8px 0;
+    color: #ffd700;
+    text-shadow: 0 0 24px rgba(255, 215, 0, 0.5);
+}
+
+.victory-sub {
+    color: rgba(255, 255, 255, 0.75);
+    margin: 0 0 24px 0;
+    font-size: 0.98em;
+}
+
+#victoryStats {
+    margin-bottom: 26px;
+    font-size: 1.05em;
+}
+
+.endless-toggle-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #495057 0%, #212529 100%);
+    color: #fff;
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    border-radius: 25px;
+    font-size: 1em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    pointer-events: all;
+    z-index: 10;
+}
+
+.endless-toggle-btn.active {
+    background: linear-gradient(135deg, #ffd700 0%, #b8860b 100%);
+    border-color: #ffd700;
+    color: #1a1a2e;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.45);
+}
+
+.endless-toggle-btn:hover { transform: scale(1.06); }
+
+@media (max-height: 560px) {
+    .victory-panel   { padding: 22px; }
+    .victory-panel h2 { font-size: 1.6em; }
+    #victoryStats     { font-size: 0.9em; margin-bottom: 16px; }
+}
+
+/* ------------------------------------------------------------------
+   Boss entrance card
+   ------------------------------------------------------------------
+   The boss used to appear at the top of the screen mid-horde with no
+   more ceremony than a spitter. This is the two seconds that turns a
+   spawn into an arrival: field already swept, time running slow, camera
+   pushed onto the boss, and its name held on screen. */
+.boss-entrance {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.94);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 0 24px;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 60;
+    transition: opacity 0.45s ease, transform 0.45s ease;
+}
+
+.boss-entrance.active {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+.boss-entrance-rule {
+    width: min(420px, 70vw);
+    height: 2px;
+    background: linear-gradient(90deg,
+        transparent, rgba(255, 143, 60, 0.9) 30%,
+        rgba(255, 143, 60, 0.9) 70%, transparent);
+}
+
+.boss-entrance-name {
+    font-size: clamp(1.9rem, 6.5vw, 3.6rem);
+    font-weight: 900;
+    letter-spacing: 0.1em;
+    line-height: 1;
+    color: #ffe0b8;
+    text-shadow: 0 3px 0 rgba(0, 0, 0, 0.85),
+                 0 0 34px rgba(255, 143, 60, 0.55);
+}
+
+.boss-entrance-epithet {
+    font-size: clamp(0.78rem, 2.3vw, 1.05rem);
+    letter-spacing: 0.26em;
+    text-transform: uppercase;
+    color: rgba(255, 197, 140, 0.82);
+}
+
+/* The card is decorative; readers who asked for less motion still get it,
+   just without the scale-in. */
+@media (prefers-reduced-motion: reduce) {
+    .boss-entrance { transition: opacity 0.2s ease; transform: translate(-50%, -50%); }
+    .boss-entrance.active { transform: translate(-50%, -50%); }
+}
+
+/* ------------------------------------------------------------------
+   Mid-stage event banner
+   ------------------------------------------------------------------
+   Plays over a live fight, so unlike the stage card it must not dim the
+   field, block the centre, or take pointer events. It sits in the upper
+   third — below the HUD strip, above where the player usually is. */
+.event-banner {
+    position: absolute;
+    /* Clear of the HUD strip, which is 135px tall — a percentage alone put
+       this on top of the ultimate bar on a 720px viewport. */
+    top: max(24%, 158px);
+    left: 50%;
+    transform: translate(-50%, -12px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 0 20px;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 55;
+    transition: opacity 0.32s ease, transform 0.32s ease;
+}
+
+.event-banner.active {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+.event-banner-title {
+    font-size: clamp(1.1rem, 3.4vw, 1.9rem);
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    color: #ffe9c2;
+    text-shadow: 0 2px 0 rgba(0, 0, 0, 0.9),
+                 0 0 26px rgba(255, 180, 80, 0.5);
+}
+
+.event-banner-sub {
+    font-size: clamp(0.72rem, 1.9vw, 0.95rem);
+    letter-spacing: 0.1em;
+    color: rgba(255, 226, 190, 0.78);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .event-banner { transition: opacity 0.2s ease; transform: translate(-50%, 0); }
+}
+
+/* ------------------------------------------------------------------
+   Stage intro
+   ------------------------------------------------------------------
+   Paired with a short spawn-free hold, this is the breath between
+   stages that the old fading toast never gave. */
+.stage-intro {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 60;
+    background: radial-gradient(ellipse at center,
+        rgba(5, 9, 14, 0.55) 0%, rgba(5, 9, 14, 0.88) 100%);
+    transition: opacity 0.5s ease;
+}
+
+.stage-intro.active { opacity: 1; }
+
+.stage-intro-label {
+    font-size: clamp(0.72rem, 2.1vw, 0.95rem);
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: rgba(140, 200, 220, 0.75);
+    margin-left: 0.42em;   /* optical: cancel the trailing letter-space */
+}
+
+.stage-intro-number {
+    font-size: clamp(4rem, 16vw, 9rem);
+    font-weight: 900;
+    line-height: 0.9;
+    color: #eaf4f8;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 4px 0 rgba(0, 0, 0, 0.8),
+                 0 0 46px rgba(61, 220, 164, 0.4);
+}
+
+.stage-intro-sub {
+    margin-top: 10px;
+    font-size: clamp(0.8rem, 2.4vw, 1.05rem);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(61, 220, 164, 0.85);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .stage-intro { transition: opacity 0.2s ease; }
+}
+
+/* Diagnostic readout (F3, or three taps in the top-left corner).
+   pointer-events: none so it can never eat an input meant for the canvas. */
+.perf-overlay {
+    position: fixed;
+    top: calc(6px + env(safe-area-inset-top, 0px));
+    left: calc(6px + env(safe-area-inset-left, 0px));
+    margin: 0;
+    padding: 6px 9px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.72);
+    color: #7ed957;
+    font: 700 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: pre;
+    pointer-events: none;
+    z-index: 2000;
 }

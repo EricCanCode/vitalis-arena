@@ -27,8 +27,3 @@ node_modules/
 
 # Build output
 dist/
-
-# Release artifacts and backups — build output, not source
-vitalis-arena-patch-*.zip
-vitalis-arena-*.zip
-*.tgz

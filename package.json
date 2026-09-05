@@ -1,9 +1,0 @@
-{
-  "name": "vitalis-arena",
-  "version": "1.1.7",
-  "description": "Vitalis Arena - Roguelike Survival Game",
-  "scripts": {
-    "check": "node scripts/check-ids.js",
-    "dev": "python3 -m http.server 8000"
-  }
-}

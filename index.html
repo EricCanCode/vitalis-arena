@@ -15,264 +15,21 @@
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192.png">
     <title>Vitalis Arena - Roguelike Survival Game</title>
-    <!-- Versioned like script.js. Without a query the browser keeps the old
-     stylesheet on a return visit, so CSS-only fixes -- which is most of
-     the mobile ones -- never reach players who have been here before. -->
-    <link rel="stylesheet" href="styles.css?v=1.1.11">
+    <link rel="stylesheet" href="styles.css">
+    <!-- After styles.css: the hero card rules intentionally override the
+         original .character-card styling by cascade order, not weight. -->
+    <link rel="stylesheet" href="src/ui/heroes/heroCard.css">
 </head>
 <body>
     <!-- Title Screen -->
     <div id="titleScreen" class="screen active">
-        <div class="title-overlay"></div>
+        <!-- Two layers so the clip can cross-dissolve into itself; src is set
+             from JS so the file is never fetched on mobile or reduced-motion. -->
+        <video id="titleVideoA" class="title-video" muted playsinline preload="auto" poster="images/title-still.jpg"></video>
+        <video id="titleVideoB" class="title-video" muted playsinline preload="auto" poster="images/title-still.jpg"></video>
         <div class="title-content">
-            <div class="game-logo">
-                <div class="logo-text">VITALIS</div>
-                <div class="logo-subtitle">ARENA</div>
-            </div>
-            <div class="tagline">⚔️ Roguelike Survival Battle ⚔️</div>
-            
-            <div class="main-menu">
-                <button id="startGameBtn" class="menu-button menu-button-primary">
-                    <span class="button-icon">▶️</span>
-                    <span>START GAME</span>
-                </button>
-                <button id="howToPlayBtn" class="menu-button">
-                    <span class="button-icon">📖</span>
-                    <span>HOW TO PLAY</span>
-                </button>
-                <button id="settingsBtn" class="menu-button">
-                    <span class="button-icon">⚙️</span>
-                    <span>SETTINGS</span>
-                </button>
-                <button id="creditsBtn" class="menu-button">
-                    <span class="button-icon">🎬</span>
-                    <span>CREDITS</span>
-                </button>
-            </div>
-            
-            <div class="game-info">
-                <span class="version">v1.0</span>
-                <span class="separator">•</span>
-                <span class="info-text">Press Any Key or Click START to Begin</span>
-            </div>
-        </div>
-    </div>
-    
-    <!-- How to Play Panel -->
-    <div id="howToPlayPanel" class="overlay" role="dialog" aria-modal="true" aria-labelledby="howToPlayTitle">
-        <div class="modal-panel how-to-play-panel">
-            <div class="modal-header">
-                <h2 id="howToPlayTitle">📖 How to Play</h2>
-                <button id="closeHowToPlay" class="close-btn" aria-label="Close How To Play">✕</button>
-            </div>
-            <div class="modal-content">
-                <div class="instructions-section">
-                    <h3>🎮 Controls</h3>
-                    <ul class="instructions-list">
-                        <li><strong>Arrow Keys / WASD:</strong> Move your character</li>
-                        <li><strong>Mouse / Touch:</strong> Aim and attack</li>
-                        <li><strong>Q / Special Button:</strong> Use Ultimate ability</li>
-                        <li><strong>ESC:</strong> Pause game</li>
-                    </ul>
-                </div>
-                
-                <div class="instructions-section">
-                    <h3>🎯 Game Objectives</h3>
-                    <ul class="instructions-list">
-                        <li>Defeat waves of enemies to advance through stages</li>
-                        <li>Collect coins and equipment to become stronger</li>
-                        <li>Survive longer and defeat bosses</li>
-                        <li>Unlock achievements and climb the leaderboard</li>
-                    </ul>
-                </div>
-                
-                <div class="instructions-section">
-                    <h3>⚡ Special Mechanics</h3>
-                    <ul class="instructions-list">
-                        <li><strong>Level Up:</strong> Defeat enemies to gain experience. Every level-up grants a new ability!</li>
-                        <li><strong>Equipment:</strong> Find and equip weapons, armor, and accessories to boost stats</li>
-                        <li><strong>Ultimate Ability:</strong> Fill your ultimate meter and unleash devastating attacks</li>
-                        <li><strong>Bosses:</strong> Every 5th stage features a powerful boss enemy</li>
-                    </ul>
-                </div>
-                
-                <div class="instructions-section">
-                    <h3>💡 Tips & Tricks</h3>
-                    <ul class="instructions-list">
-                        <li>Keep moving to avoid enemy attacks</li>
-                        <li>Prioritize health upgrades early on</li>
-                        <li>Use your ultimate when surrounded by enemies</li>
-                        <li>Save coins to buy better equipment in the shop</li>
-                    </ul>
-                </div>
-            </div>
-            <button id="closeHowToPlayBtn" class="btn-primary">Close</button>
-        </div>
-    </div>
-    
-    <!-- Settings Panel -->
-    <div id="settingsPanel" class="overlay" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
-        <div class="modal-panel settings-panel">
-            <div class="modal-header">
-                <h2 id="settingsTitle">⚙️ Settings</h2>
-                <button id="closeSettings" class="close-btn" aria-label="Close Settings">✕</button>
-            </div>
-            <div class="modal-content">
-                <div class="settings-section">
-                    <label class="settings-label">
-                        <span>🔊 Sound Effects</span>
-                        <input type="checkbox" id="soundCheckbox" checked>
-                        <span class="toggle"></span>
-                    </label>
-                    <div class="settings-subsection">
-                        <label class="range-label">SFX Volume <span id="soundVolumeLabel">50%</span></label>
-                        <input id="soundVolume" type="range" min="0" max="100" value="50" aria-label="Sound Effects Volume">
-                    </div>
-                </div>
-                
-                <div class="settings-section">
-                    <label class="settings-label">
-                        <span>🎵 Background Music</span>
-                        <input type="checkbox" id="musicCheckbox" checked>
-                        <span class="toggle"></span>
-                    </label>
-                    <div class="settings-subsection">
-                        <label class="range-label">Music Volume <span id="musicVolumeLabel">30%</span></label>
-                        <input id="musicVolume" type="range" min="0" max="100" value="30" aria-label="Music Volume">
-                    </div>
-                </div>
-                
-                <div class="settings-section">
-                    <label class="settings-label">
-                        <span>✨ Visual Effects</span>
-                        <input type="checkbox" id="effectsCheckbox" checked>
-                        <span class="toggle"></span>
-                    </label>
-                </div>
-                
-                <div class="settings-section">
-                    <label class="settings-label">
-                        <span>🎯 Show Tutorial</span>
-                        <input type="checkbox" id="tutorialCheckbox" checked>
-                        <span class="toggle"></span>
-                    </label>
-                </div>
-
-                <div class="settings-section">
-                    <label class="settings-label">
-                        <span>♿ Reduced Motion</span>
-                        <input type="checkbox" id="reducedMotionCheckbox">
-                        <span class="toggle"></span>
-                    </label>
-                </div>
-
-                <div class="settings-section">
-                    <label class="settings-label">
-                        <span>🔆 High Contrast</span>
-                        <input type="checkbox" id="highContrastCheckbox">
-                        <span class="toggle"></span>
-                    </label>
-                </div>
-
-                <div class="settings-section">
-                    <button id="openKeybindsBtn" class="btn-secondary">🔁 Rebind Keys</button>
-                </div>
-                
-                <div class="settings-section difficulty-section">
-                    <h3>⚔️ Difficulty</h3>
-                    <div class="difficulty-options">
-                        <label class="radio-label">
-                            <input type="radio" name="difficulty" value="easy">
-                            <span>Easy</span>
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="difficulty" value="normal" checked>
-                            <span>Normal</span>
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="difficulty" value="hard">
-                            <span>Hard</span>
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="difficulty" value="insane">
-                            <span>Insane</span>
-                        </label>
-                    </div>
-                </div>
-            </div>
-            <button id="closeSettingsBtn" class="btn-primary">Close</button>
-        </div>
-    </div>
-
-        <!-- Keybinds Panel (inlined fallback for environments where fetch may fail) -->
-        <div id="keybindPanel" class="overlay" role="dialog" aria-modal="true" aria-labelledby="keybindTitle" style="display:none;">
-            <div class="modal-panel keybind-panel">
-                <div class="modal-header">
-                    <h2 id="keybindTitle">🔁 Rebind Keys</h2>
-                    <button id="closeKeybinds" class="close-btn" aria-label="Close Keybinds">✕</button>
-                </div>
-                <div class="modal-content">
-                    <p>Click an action, then press the desired key.</p>
-                    <div class="keybind-list">
-                        <div class="keybind-row" data-action="moveUp">
-                            <span class="action-label">Move Up</span>
-                            <button class="keybind-btn"> <span class="key-display">W</span> </button>
-                        </div>
-                        <div class="keybind-row" data-action="moveLeft">
-                            <span class="action-label">Move Left</span>
-                            <button class="keybind-btn"> <span class="key-display">A</span> </button>
-                        </div>
-                        <div class="keybind-row" data-action="moveDown">
-                            <span class="action-label">Move Down</span>
-                            <button class="keybind-btn"> <span class="key-display">S</span> </button>
-                        </div>
-                        <div class="keybind-row" data-action="moveRight">
-                            <span class="action-label">Move Right</span>
-                            <button class="keybind-btn"> <span class="key-display">D</span> </button>
-                        </div>
-                        <div class="keybind-row" data-action="ultimate">
-                            <span class="action-label">Ultimate</span>
-                            <button class="keybind-btn"> <span class="key-display">Q</span> </button>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button id="resetKeybinds" class="btn-secondary">Reset Defaults</button>
-                    <button id="closeKeybindsBtn" class="btn-primary">Done</button>
-                </div>
-            </div>
-        </div>
-
-    
-    <!-- Credits Panel -->
-    <div id="creditsPanel" class="overlay" role="dialog" aria-modal="true" aria-labelledby="creditsTitle">
-        <div class="modal-panel credits-panel">
-            <div class="modal-header">
-                <h2 id="creditsTitle">🎬 Credits</h2>
-                <button id="closeCredits" class="close-btn" aria-label="Close Credits">✕</button>
-            </div>
-            <div class="modal-content credits-content">
-                <div class="credits-section">
-                    <h3>Game Design & Development</h3>
-                    <p>Created with ❤️ for roguelike enthusiasts</p>
-                </div>
-                
-                <div class="credits-section">
-                    <h3>Special Thanks</h3>
-                    <p>To everyone who plays and provides feedback</p>
-                </div>
-                
-                <div class="credits-section">
-                    <h3>Technology</h3>
-                    <p>Built with HTML5, Canvas, and Web APIs</p>
-                </div>
-                
-                <div class="credits-section">
-                    <h3>© 2024 Vitalis Arena</h3>
-                    <p>All rights reserved</p>
-                </div>
-            </div>
-            <button id="closeCreditsBtn" class="btn-primary">Close</button>
+            <h1 class="game-title">Vitalis&nbsp;Arena</h1>
+            <div class="press-start">Press Start or Any Key</div>
         </div>
     </div>
     
@@ -280,6 +37,8 @@
     <div id="characterSelect" class="screen">
         <h1>Vitalis Arena</h1>
         <p class="game-subtitle">Select Your Hero</p>
+        <p class="progress-note">Coins, gear and upgrades carry over between runs.
+           <button id="resetProgressBtn" class="link-btn">Start fresh</button></p>
         
         <!-- Co-op Toggle -->
         <div class="coop-toggle-container">
@@ -295,89 +54,41 @@
             <span class="p2-hint">(P2: IJKL Move, U = Ultimate)</span>
         </div>
         
+        <!-- Both modes always visible. Endless was hidden until unlocked,
+             which meant a first-time player had no idea there was anything to
+             earn — a hidden reward motivates nobody. -->
+        <div class="mode-picker">
+            <button id="modeCampaignBtn" class="mode-btn active">
+                <span class="mode-name">⚔️ Campaign</span>
+                <span class="mode-desc">Six stages. Beat the last boss to win.</span>
+            </button>
+            <button id="modeEndlessBtn" class="mode-btn locked">
+                <span class="mode-name">♾️ Endless</span>
+                <span class="mode-desc" id="modeEndlessDesc">Clear the Campaign to unlock.</span>
+            </button>
+        </div>
+
         <button id="achievementsBtn" class="achievements-button">🏆 Achievements</button>
         <button id="menuShopBtn" class="menu-shop-button">🛒 Shop</button>
-        <!-- Legacy/optional shop button kept for compatibility -->
-        <button id="shopButton" style="display:none;">Shop</button>
         <button id="inventoryBtn" class="inventory-button">🎒 Inventory</button>
+        <button id="metaShopBtn" class="meta-shop-button">⭐ Upgrades</button>
+        <!-- Superseded by the mode picker above. Kept in the DOM because
+             refreshEndlessToggle still updates it and other code reads it;
+             permanently hidden rather than deleted mid-release-prep. -->
+        <button id="endlessToggleBtn" class="endless-toggle-btn" hidden style="display:none;">♾️ Endless: Off</button>
         <div class="character-grid">
-            <div class="character-card" data-character="warrior">
-                <div class="character-icon">
-                    <img src="images/warrior.png" alt="Warrior" class="character-sprite">
-                </div>
-                <h2>Warrior</h2>
-                <p class="character-ability">Whirlwind Attack + Heavy Armor</p>
-                <p class="character-desc">AOE damage + 25% damage reduction + knockback</p>
-                <div class="character-stats">
-                    <span>❤️ HP: 120</span>
-                    <span>⚡ Speed: Fast</span>
-                    <span>🗡️ Damage: High</span>
-                </div>
-            </div>
-
-            <div class="character-card" data-character="ranger">
-                <div class="character-icon">
-                    <img src="images/ranger.png" alt="Ranger" class="character-sprite">
-                </div>
-                <h2>Ranger</h2>
-                <p class="character-ability">Multi-Shot</p>
-                <p class="character-desc">Fires 3 arrows in a spread pattern</p>
-                <div class="character-stats">
-                    <span>❤️ HP: 80</span>
-                    <span>⚡ Speed: Fast</span>
-                    <span>🗡️ Damage: Medium</span>
-                </div>
-            </div>
-
-            <div class="character-card" data-character="mage">
-                <div class="character-icon">
-                    <img src="images/mage.png" alt="Mage" class="character-sprite">
-                </div>
-                <h2>Mage</h2>
-                <p class="character-ability">Arcane Missiles</p>
-                <p class="character-desc">Launches homing projectiles at enemies</p>
-                <div class="character-stats">
-                    <span>❤️ HP: 70</span>
-                    <span>⚡ Speed: Slow</span>
-                    <span>🗡️ Damage: Very High</span>
-                </div>
-            </div>
-
-            <div class="character-card" data-character="assassin">
-                <div class="character-icon">
-                    <img src="images/assassin.png" alt="Assassin" class="character-sprite">
-                </div>
-                <h2>Assassin</h2>
-                <p class="character-ability">Shadow Strike</p>
-                <p class="character-desc">Teleports behind enemies for critical hits</p>
-                <div class="character-stats">
-                    <span>❤️ HP: 75</span>
-                    <span>⚡ Speed: Very Fast</span>
-                    <span>🗡️ Damage: Critical</span>
-                </div>
-            </div>
-
-            <div class="character-card" data-character="tank">
-                <div class="character-icon">
-                    <img src="images/tank.png" alt="Tank" class="character-sprite">
-                </div>
-                <h2>Tank</h2>
-                <p class="character-ability">Shockwave</p>
-                <p class="character-desc">Ground pound that stuns nearby enemies</p>
-                <div class="character-stats">
-                    <span>❤️ HP: 150</span>
-                    <span>⚡ Speed: Very Slow</span>
-                    <span>🗡️ Damage: Low</span>
-                </div>
-            </div>
+            <!-- Cards are built by src/ui/heroes/HeroSelect.js from
+                 HERO_DATA. Kept out of the markup so the stats can be
+                 derived from the same numbers the game runs on instead
+                 of being retyped here and drifting from them. -->
         </div>
     </div>
 
     <!-- Achievements Panel -->
-    <div id="achievementsPanel" class="overlay" role="dialog" aria-modal="true" aria-labelledby="achievementsTitle">
+    <div id="achievementsPanel" class="overlay">
         <div class="achievements-panel">
             <div class="achievements-header">
-                <h2 id="achievementsTitle">🏆 Achievements</h2>
+                <h2>🏆 Achievements</h2>
                 <span id="achievementProgress" class="achievement-progress">0/0 Unlocked</span>
             </div>
             <div id="achievementsGrid" class="achievements-grid"></div>
@@ -388,23 +99,84 @@
     <!-- Game Screen -->
     <div id="gameScreen" class="screen">
         <canvas id="gameCanvas"></canvas>
-        
-        <!-- HUD -->
-        <div id="hud">
+
+            <!-- Minimap. Sits in #gameScreen, NOT #hud: #hud is a 135px top
+                 strip, so bottom-anchoring inside it puts this at the top of
+                 the screen. Bottom-left is the only free corner — the ultimate
+                 button owns bottom-centre, pause and the equipment panel own
+                 the right, and .hud-bottom-right is the co-op P2 panel. -->
             <!-- Diagnostic readout. Hidden unless toggled with F3, or three
                  taps in the top-left corner on a touchscreen. -->
             <pre id="perfOverlay" class="perf-overlay" hidden></pre>
-            <!-- Boss Warning -->
+
+            <!-- Boss Warning. In #gameScreen, NOT #hud: #hud is a 135px
+                 strip, so a percentage top inside it resolves against 135px
+                 and puts this straight through the HUD readouts. -->
             <div id="bossWarning" class="boss-warning">
                 <div class="boss-warning-content">
                     <div class="boss-warning-icon">⚠️</div>
                     <div id="bossWarningText" class="boss-warning-text">BOSS INCOMING IN 10...</div>
                 </div>
             </div>
+
+            <!-- Toasts stack here instead of each one being absolutely
+                 positioned at dead centre, where they covered the fight and
+                 piled on top of each other. -->
+            <div id="notificationStack" class="notification-stack"></div>
+
+            <div id="minimapWrap" class="minimap-wrap">
+                <canvas id="minimap" class="minimap" width="336" height="190"></canvas>
+                <div class="minimap-key">M</div>
+            </div>
+
+        <!-- Full-screen cinematic cards. These live outside #hud on purpose:
+             #hud is a short strip across the top, and a card centred inside it
+             lands on the health and XP bars instead of the middle of the arena. -->
+        <!-- Stage intro. The stage used to change with a toast that faded
+             out mid-fight; this holds the arena empty for a beat so the
+             player feels a chapter close and another open. -->
+        <div id="stageIntro" class="stage-intro">
+            <div id="stageIntroLabel" class="stage-intro-label">STAGE</div>
+            <div id="stageIntroNumber" class="stage-intro-number">2</div>
+            <div id="stageIntroSub" class="stage-intro-sub">The horde thickens</div>
+        </div>
+
+        <!-- Mid-stage event banner. Unlike the stage card this plays over a
+             live fight, so it never dims the field or blocks the view. -->
+        <div id="eventBanner" class="event-banner">
+            <div id="eventBannerTitle" class="event-banner-title">THE PACK</div>
+            <div id="eventBannerSub" class="event-banner-sub"></div>
+        </div>
+
+        <!-- Entrance card. Held for two seconds while the camera pushes to
+             the boss and time runs slow, so the arrival is an event rather
+             than another enemy appearing at the top of the screen. -->
+        <div id="bossEntrance" class="boss-entrance">
+            <div class="boss-entrance-rule"></div>
+            <div id="bossEntranceName" class="boss-entrance-name">THE COLOSSUS</div>
+            <div id="bossEntranceEpithet" class="boss-entrance-epithet">The Mountain That Walks</div>
+            <div class="boss-entrance-rule"></div>
+        </div>
+        
+        <!-- HUD -->
+        <div id="hud">
             
             <!-- Boss Health Bar -->
             <div id="bossHealthBar" class="boss-health-container">
-                <!-- Rendered in canvas -->
+                <div class="boss-hp-name">
+                    <span id="bossHpName">The Warden</span>
+                    <span id="bossHpEpithet" class="boss-hp-epithet"></span>
+                </div>
+                <div class="boss-hp-row">
+                    <div id="bossHpPips" class="boss-hp-pips">
+                        <span class="pip"></span><span class="pip"></span><span class="pip"></span>
+                    </div>
+                    <div id="bossHpTrack" class="boss-hp-track">
+                        <div id="bossHpChip" class="boss-hp-chip"></div>
+                        <div id="bossHpFill" class="boss-hp-fill"></div>
+                    </div>
+                </div>
+                <div id="bossHpValue" class="boss-hp-value"></div>
             </div>
             
             <!-- Pause Button -->
@@ -458,7 +230,6 @@
             <!-- Player 2 HUD (co-op mode) -->
             <div id="p2Hud" class="hud-bottom-right" style="display: none;">
                 <div class="p2-hud-label">🎮 P2</div>
-                <div id="p2ReviveStatus" class="p2-revive-status" aria-hidden="true"></div>
                 <div class="hud-item">
                     <span class="hud-label">❤️ P2 HP</span>
                     <div class="health-bar p2-health">
@@ -492,14 +263,21 @@
                 </div>
             </div>
             
-            <!-- Queued level-ups. Sits beside the ultimate because both are
-                 "you have something ready, spend it". -->
+            <!-- Weapons and passives owned this run -->
+            <div id="loadoutDisplay" class="loadout-display"></div>
+
+            <!-- Ultimate Button -->
+            <!-- Queued upgrades and the bomb both sit beside the ultimate,
+                 because all three are "you have something ready, spend it". -->
             <button id="levelUpBadge" class="action-badge levelup-badge" style="display:none;">
                 <span class="badge-count" id="levelUpCount">0</span>
                 <span class="badge-label">Upgrades &middot; L</span>
             </button>
+            <button id="bombButton" class="action-badge bomb-badge" style="display:none;">
+                <span class="badge-icon">💣</span>
+                <span class="badge-label" id="bombLabel">Bomb &middot; E</span>
+            </button>
 
-            <!-- Ultimate Button -->
             <button id="ultimateButton" class="ultimate-button">
                 <span class="ultimate-icon">💥</span>
                 <span class="ultimate-label">ULTIMATE!</span>
@@ -523,7 +301,7 @@
         </div>
 
         <!-- Level Up Screen -->
-        <div id="levelUpScreen" class="overlay" role="dialog" aria-modal="true" aria-labelledby="levelUpTitle">
+        <div id="levelUpScreen" class="overlay">
             <div class="level-up-panel">
                 <h2 id="levelUpTitle">🎉 Level Up!</h2>
                 <p>Choose an upgrade:</p>
@@ -531,18 +309,12 @@
             </div>
         </div>
 
-        <!-- Tutorial Panel -->
-        <div id="tutorialPanel" class="tutorial-overlay" role="dialog" aria-modal="true" aria-labelledby="tutorialTitle">
-            <div class="tutorial-panel">
-                <h2 id="tutorialTitle">🎓 Quick Tutorial</h2>
-                <div class="tutorial-steps">
-                    <div id="tutorialStepText">Loading...</div>
-                </div>
-                <div class="tutorial-controls">
-                    <button id="tutorialPrev" class="btn-secondary">◀ Prev</button>
-                    <button id="tutorialNext" class="btn-secondary">Next ▶</button>
-                    <button id="tutorialDone" class="btn-primary">Done</button>
-                </div>
+        <!-- Treasure Chest Reward -->
+        <div id="chestPanel" class="overlay">
+            <div class="chest-panel">
+                <div id="chestAnimation" class="chest-animation">🎁</div>
+                <div id="chestResult" class="chest-result"></div>
+                <div id="chestHint" class="chest-hint">Press SPACE or click to continue</div>
             </div>
         </div>
 
@@ -556,18 +328,28 @@
                         <span id="stageCoinsEarned" class="reward-value">+100 🪙</span>
                     </div>
                     <div class="reward-item">
+                        <span class="reward-label">Scrap:</span>
+                        <span id="stageScrapTotal" class="reward-value">0 ⚙️</span>
+                        <span class="reward-hint">sell gear to earn more</span>
+                    </div>
+                    <div class="reward-item">
                         <span class="reward-label">Equipment Reward:</span>
                         <div id="stageEquipmentInfo" class="equipment-reward-container"></div>
                     </div>
                 </div>
-                <button id="nextStageBtn" class="btn-primary btn-large">Continue to Next Stage</button>
+                <div class="stage-complete-actions">
+                    <button id="stageOptimizeBtn" class="btn-secondary"
+                            title="Equip the best item you own in every slot">⚡ Optimize Loadout</button>
+                    <div id="stageOptimizeResult" class="stage-optimize-result"></div>
+                    <button id="nextStageBtn" class="btn-primary btn-large">Continue to Next Stage</button>
+                </div>
             </div>
         </div>
 
         <!-- Pause Screen -->
-        <div id="pauseScreen" class="overlay" role="dialog" aria-modal="true" aria-labelledby="pauseTitle">
+        <div id="pauseScreen" class="overlay">
             <div class="pause-panel">
-                <h2 id="pauseTitle">⏸️ Game Paused</h2>
+                <h2>⏸️ Game Paused</h2>
                 <p class="pause-hint">Click Resume or press ESC to continue</p>
                 
                 <!-- Quick Inventory Access -->
@@ -599,10 +381,21 @@
             </div>
         </div>
         
+        <!-- Victory Screen -->
+        <div id="victoryScreen" class="overlay">
+            <div class="victory-panel">
+                <h2>🏆 Arena Cleared</h2>
+                <p class="victory-sub">You survived every stage. Endless Mode is now unlocked.</p>
+                <div id="victoryStats"></div>
+                <button id="victoryEndlessBtn" class="btn-primary">Enter Endless Mode</button>
+                <button id="victoryMenuBtn" class="btn-secondary">Back to Menu</button>
+            </div>
+        </div>
+
         <!-- Game Over Screen -->
-        <div id="gameOverScreen" class="overlay" role="dialog" aria-modal="true" aria-labelledby="gameOverTitle">
+        <div id="gameOverScreen" class="overlay">
             <div class="game-over-panel">
-                <h2 id="gameOverTitle">💀 Game Over</h2>
+                <h2>💀 Game Over</h2>
                 <div id="finalStats"></div>
                 <button id="restartBtn" class="btn-primary">Play Again</button>
                 <button id="backToSelectBtn" class="btn-secondary">Change Character</button>
@@ -611,10 +404,10 @@
     </div>
 
     <!-- Shop Panel -->
-    <div id="shopPanel" class="overlay" role="dialog" aria-modal="true" aria-labelledby="shopTitle">
+    <div id="shopPanel" class="overlay">
         <div class="shop-panel">
             <div class="shop-header">
-                <h2 id="shopTitle">🛒 Equipment Shop</h2>
+                <h2>🛒 Equipment Shop</h2>
                 <div class="shop-coins">
                     <span>Your Coins:</span>
                     <span id="playerCoins" class="coins-amount">0</span> 🪙
@@ -629,11 +422,14 @@
     </div>
 
     <!-- Inventory Panel -->
-    <div id="inventoryPanel" class="overlay" role="dialog" aria-modal="true" aria-labelledby="inventoryTitle">
+    <div id="inventoryPanel" class="overlay">
         <div class="inventory-panel">
-            <h2 id="inventoryTitle">🎒 Inventory</h2>
+            <h2>🎒 Inventory</h2>
             <div class="inventory-header">
                 <div class="coins-display">🪙 <span id="inventoryCoins">0</span></div>
+                <div class="scrap-display" title="Scrap upgrades gear. Sell what you have outgrown to earn it.">⚙️ <span id="inventoryScrap">0</span></div>
+                <button id="optimizeEquipmentBtn" class="optimize-button"
+                        title="Equip the best item you own in every slot">⚡ Optimize</button>
             </div>
             <div class="equipped-section">
                 <h3>Equipped Items</h3>
@@ -664,40 +460,73 @@
         </div>
     </div>
 
+    <!-- Permanent Upgrade Shop -->
+    <div id="metaShopPanel" class="overlay">
+        <div class="meta-shop-content">
+            <div class="shop-header">
+                <h2>⭐ Permanent Upgrades</h2>
+                <div class="shop-coins">
+                    <span id="metaShopCoins" class="coins-amount">0</span> 🪙
+                </div>
+            </div>
+            <p class="meta-shop-note">These carry over to every run.</p>
+            <div id="metaUpgradeGrid" class="meta-upgrade-grid"></div>
+            <div class="shop-footer">
+                <button id="resetSaveBtn" class="btn-danger">Reset Save Data</button>
+                <button id="closeMetaShopBtn" class="btn-primary">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Sound Toggle Button (top-right, global) -->
     <button id="soundToggleBtn" class="sound-toggle-btn" title="Toggle Sound" style="position:fixed;top:16px;right:16px;z-index:1000;display:flex;align-items:center;gap:4px;font-size:1.2em;">
         <span id="soundToggleIcon">🔊</span>
         <span id="soundToggleLabel">Sound On</span>
     </button>
 
-    <script src="script.js?v=1.1.11"></script>
+    <!-- Config and content data (plain scripts, loaded before the game) -->
+    <script src="src/config/GameConfig.js"></script>
+    <script src="src/core/Camera.js"></script>
+    <script src="src/data/Passives.js"></script>
+    <script src="src/data/Evolutions.js"></script>
+    <script src="src/data/Waves.js"></script>
+    <script src="src/data/Heroes.js"></script>
+    <script src="src/data/Bosses.js"></script>
+    <script src="src/data/MetaUpgrades.js"></script>
+    <script src="src/entities/Chest.js"></script>
+    <script src="src/entities/CoinPickup.js"></script>
+    <script src="src/systems/DamageNumbers.js"></script>
+    <script src="src/systems/Effects.js"></script>
+    <script src="src/data/Elites.js"></script>
+    <script src="src/systems/ArenaEvents.js"></script>
+    <script src="src/systems/TitleBackground.js"></script>
+
+    <!-- Hero select UI. Order matters twice over: TierSystem and
+         heroData before the components that read them, and the whole
+         group before script_v2.js, which binds its click listener to
+         each card element that exists at DOMContentLoaded. -->
+    <script src="src/ui/heroes/TierSystem.js"></script>
+    <script src="src/ui/heroes/heroData.js"></script>
+    <script src="src/ui/heroes/HeroAbility.js"></script>
+    <script src="src/ui/heroes/HeroStats.js"></script>
+    <script src="src/ui/heroes/HeroCard.js"></script>
+    <script src="src/ui/heroes/HeroSelect.js"></script>
+    <script src="script_v2.js"></script>
     <script>
-        // Register Service Worker for PWA -- but not on third-party hosts.
+        // Register Service Worker for PWA.
         //
-        // itch.io serves HTML5 games from a sandboxed iframe on a CDN
-        // subdomain. The worker caches same-origin assets cache-first, so a
-        // player who caches a bad build keeps being served it and has no way
-        // to clear it: no console, no devtools, and a reload does not help.
-        // Offline play is a nicety; a permanently broken build for someone
-        // who cannot debug it is not. Keep it where it is useful and
-        // reversible -- local development and GitHub Pages -- and off
-        // everywhere else.
-        //
-        // This bit us during development: the worker served a stale script.js
-        // for an hour while the server was serving the fix correctly.
-        // Local development is deliberately NOT here.
-        //
-        // A service worker on a dev server you are running yourself buys
-        // nothing -- there is no offline case -- and costs a great deal: it
-        // serves cached script.js while the server serves the fix, so correct
-        // builds look broken. That cost hours twice in one day, on the
-        // level-up queue and again on the frame-rate work.
-        //
-        // Clearing it by hand does not help either, which is the trap:
-        // unregister, reload, and an allowlisted host registers it again on
-        // the very next load. The only durable fix is to not register it here
-        // at all. GitHub Pages keeps it, because that is a real install
-        // target where offline play means something.
+        // Deliberately skipped on third-party hosts. itch.io serves HTML5 games
+        // from a sandboxed iframe on a CDN subdomain, where registration is
+        // unreliable and the failure mode is severe: a player who caches a bad
+        // build has no way to clear it and never receives an update. Offline
+        // play is a nicety; a permanently broken build is not.
+        // Local development is deliberately absent from this list. A worker on
+        // a dev server you run yourself has no offline case to serve, and it
+        // costs a great deal: it hands back a cached script while the server
+        // serves the fix, so a correct build looks broken. That cost hours on
+        // the other branch -- twice in one day -- and clearing it by hand does
+        // not help, because reloading an allowlisted host simply registers it
+        // again on the next load.
         const SW_HOSTS = ['ericcancode.github.io'];
         const swAllowed = SW_HOSTS.includes(location.hostname);
 
@@ -714,16 +543,15 @@
                     return;
                 }
 
-                // Not just "do not register": actively remove one that is
-                // already there. Anyone who loaded an earlier build on a host
-                // like itch still has a worker holding cached assets, and
-                // gating registration alone would leave them stuck on it
-                // forever. This is the only code that can free them.
+                // Actively remove one that is already installed. Gating
+                // registration alone would strand anyone who loaded an earlier
+                // build on a host like itch: their worker keeps serving its
+                // cache forever. This is the only code that can free them.
                 navigator.serviceWorker.getRegistrations()
                     .then(regs => Promise.all(regs.map(r => r.unregister())))
                     .then(() => caches.keys())
                     .then(keys => Promise.all(keys.map(k => caches.delete(k))))
-                    .catch(() => { /* nothing we can do; not worth breaking boot */ });
+                    .catch(() => { /* not worth breaking boot over */ });
             });
         }
     </script>
