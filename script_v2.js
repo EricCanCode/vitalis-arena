@@ -3175,8 +3175,16 @@ this.currentBoss = null;
         // fight the camera's follow-smoothing.
         this.ctx.save();
         if (this.screenShake > 0) {
-            const shakeX = (Math.random() - 0.5) * this.screenShake;
-            const shakeY = (Math.random() - 0.5) * this.screenShake;
+            // Deterministic, not random. A fresh random offset each frame is
+            // indistinguishable from dropped frames -- the screen simply jumps
+            // -- so a real stutter and a shake read the same to the player, and
+            // heavy moments feel broken rather than heavy. Two sinusoids at
+            // unrelated rates give continuous motion that still looks chaotic,
+            // and it stays smooth at any frame rate because it is a function of
+            // game time rather than of how often we happen to draw.
+            const shakePhase = this.gameTime * 42;
+            const shakeX = Math.sin(shakePhase) * this.screenShake * 0.35;
+            const shakeY = Math.cos(shakePhase * 1.31) * this.screenShake * 0.35;
             this.ctx.translate(shakeX, shakeY);
         }
 
