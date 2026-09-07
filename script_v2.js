@@ -52,6 +52,67 @@ const EQUIPMENT_RARITY = {
     LEGENDARY: { name: 'Legendary', color: '#FFD700', statMultiplier: 2.5, dropRate: 0.01 }
 };
 
+// Sets turn equipment into build choices rather than isolated stat rolls.
+// Dungeon reward tables can target a set later without changing combat code.
+const EQUIPMENT_SETS = {
+    blood_court: {
+        name: 'Blood Court',
+        icon: '🩸',
+        pieces: ['vampiric_blade', 'dragon_scale', 'phoenix_feather', 'ring_of_regeneration'],
+        bonuses: {
+            2: { effects: { lifesteal: 3 }, description: '+3% lifesteal' },
+            3: { effects: { health_regen: 2 }, description: '+2 HP/sec regeneration' },
+            4: { effects: { lifesteal: 5 }, description: '+5% lifesteal' }
+        }
+    },
+    frostbound: {
+        name: 'Frostbound',
+        icon: '❄️',
+        pieces: ['frost_bow', 'shadow_cloak', 'lucky_clover', 'ring_of_haste'],
+        bonuses: {
+            2: { effects: { slow_enemies: 10 }, description: '+10% enemy slow' },
+            3: { effects: { time_slow: 8 }, description: '+8% time slow' },
+            4: { effects: { dodge_chance: 8 }, description: '+8% dodge chance' }
+        }
+    },
+    stormcaller: {
+        name: 'Stormcaller',
+        icon: '⚡',
+        pieces: ['lightning_staff', 'emberbrand', 'scholars_sigil', 'ring_of_power'],
+        bonuses: {
+            2: { effects: { chain_lightning: 1 }, description: '+1 chain target' },
+            3: { effects: { ultimate_charge: 25 }, description: '+25% ultimate charge' },
+            4: { effects: { crit_chance: 10 }, description: '+10% critical chance' }
+        }
+    },
+    iron_bastion: {
+        name: 'Iron Bastion',
+        icon: '🛡️',
+        pieces: ['sword_of_fury', 'titan_plate', 'hollow_idol', 'loop_of_stone'],
+        bonuses: {
+            2: { effects: { dodge_chance: 5 }, description: '+5% dodge chance' },
+            3: { effects: { damage_boost_low_hp: 15 }, description: '+15% low-health damage' },
+            4: { effects: { health_regen: 3 }, description: '+3 HP/sec regeneration' }
+        }
+    }
+};
+
+const EQUIPMENT_SET_BY_ITEM = Object.fromEntries(
+    Object.entries(EQUIPMENT_SETS).flatMap(([setId, set]) =>
+        set.pieces.map(itemId => [itemId, setId]))
+);
+
+const TRIALS = [
+    { id: 'blood_rite', name: 'Blood Rite', icon: '🩸', objective: 'Defeat 2 bosses in one run.', targetSetId: 'blood_court', progress: 2 },
+    { id: 'storm_run', name: 'Storm Run', icon: '⚡', objective: 'Open 3 treasure chests in one run.', targetSetId: 'stormcaller', progress: 3 },
+    { id: 'iron_will', name: 'Iron Will', icon: '🛡️', objective: 'Defeat 4 bosses in one run.', targetSetId: 'iron_bastion', progress: 4 },
+    { id: 'frost_watch', name: 'Frost Watch', icon: '❄️', objective: 'Defeat 3 bosses in one run.', targetSetId: 'frostbound', progress: 3 }
+];
+
+function getEquipmentSetId(equipment) {
+    return equipment?.setId || EQUIPMENT_SET_BY_ITEM[equipment?.id] || null;
+}
+
 const EQUIPMENT_POOL = [
     // Weapons
     { id: 'sword_of_fury', name: 'Sword of Fury', type: EQUIPMENT_TYPES.WEAPON, baseStats: { damage: 15, attackSpeed: 0.1 }, effect: 'crit_chance', effectValue: 10, icon: '⚔️' },
@@ -564,6 +625,10 @@ this.currentBoss = null;
         this.pendingEquipment = null; // Equipment to show after boss defeat
         this.playerInventory = []; // All equipment owned by player
         this.savedEquipment = { weapon: null, armor: null, accessory: null, ring: null }; // Equipment loadout
+        this.loadoutPresets = { 'Blood Build': null, 'Storm Build': null, 'Iron Build': null };
+        this.activeTrialId = null;
+        this.trialProgress = 0;
+        this.inventoryFilters = { type: 'all', rarity: 'all', effect: 'all', set: 'all', sort: 'rarity' };
         
         // Separate spawn timers for each enemy type
         this.enemySpawnTimers = {
@@ -586,6 +651,7 @@ this.currentBoss = null;
 
         // Chest reward flow
         this.pendingChestReward = null;
+        this.pendingDuplicateEquipment = null;
 
         // Permanent (meta) upgrades bought between runs
         this.metaUpgradeLevels = this.loadMetaUpgrades();
@@ -610,6 +676,9 @@ this.currentBoss = null;
         this.loadCoins();
         this.loadScrap();
         this.loadSavedEquipment();
+        this.loadLoadoutPresets();
+        this.newEquipmentIds = this.loadNewEquipmentIds();
+        this.updateEquipmentNotification();
         
         window.addEventListener('resize', () => this.resizeCanvas());
         
@@ -792,9 +861,21 @@ this.currentBoss = null;
                 this.triggerBomb();
             }
 
-            // O equips the best owned item in every slot without opening a UI.
-            if (e.key.toLowerCase() === 'o' && this.isRunning && !this.isPaused) {
-                this.optimizeEquipment();
+            // I opens Inventory when newly collected gear is waiting. It is
+            // intentionally solo-only while the legacy co-op controls still
+            // use I for P2 movement.
+            if (e.key.toLowerCase() === 'i' && !this.coopMode && this.isRunning &&
+                !this.isPaused && (this.newEquipmentIds?.length || 0) > 0) {
+                e.preventDefault();
+                this.openInventory();
+            }
+
+            // Space advances any completed stage once its reward is visible.
+            if (e.code === 'Space' && this.isRunning &&
+                document.getElementById('stageCompletePanel')?.classList.contains('active') &&
+                !document.getElementById('inventoryPanel')?.classList.contains('active')) {
+                e.preventDefault();
+                this.advanceStage();
             }
 
             // M toggles the minimap. Some players want the screen clean, and
@@ -814,6 +895,11 @@ this.currentBoss = null;
 
             // ESC key toggles pause
             if (e.key === 'Escape' && this.isRunning) {
+                if (document.getElementById('inventoryPanel')?.classList.contains('active')) {
+                    e.preventDefault();
+                    this.closeInventory();
+                    return;
+                }
                 this.togglePause();
             }
         });
@@ -1163,6 +1249,7 @@ this.currentBoss = null;
         document.getElementById('viewFullInventoryBtn')?.addEventListener('click', () => {
             this.audioManager.playSound('button-click');
             this.openInventory();
+            this.selectInventoryType('all');
         });
         
         // Achievements button
@@ -1189,10 +1276,21 @@ this.currentBoss = null;
             this.openShop();
         });
 
-        // Menu shortcut for the same loadout optimizer used in the run HUD.
-        document.getElementById('menuOptimizeBtn')?.addEventListener('click', () => {
+        document.getElementById('evolutionCodexBtn')?.addEventListener('click', () => {
             this.audioManager.playSound('button-click');
-            this.optimizeEquipment();
+            this.showEvolutionCodex();
+        });
+        document.getElementById('trialsBtn')?.addEventListener('click', () => this.openTrials());
+        document.getElementById('closeTrialsBtn')?.addEventListener('click', () => {
+            document.getElementById('trialsPanel')?.classList.remove('active');
+        });
+        document.getElementById('trialsGrid')?.addEventListener('click', event => {
+            const button = event.target.closest('button[data-trial-id]');
+            if (button) this.selectTrial(button.dataset.trialId);
+        });
+        document.getElementById('closeEvolutionCodex')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
+            document.getElementById('evolutionCodexPanel')?.classList.remove('active');
         });
         
         // Close shop button
@@ -1223,27 +1321,44 @@ this.currentBoss = null;
         document.getElementById('bombButton')?.addEventListener('click', () => {
             this.triggerBomb();
         });
-        document.getElementById('optimizeBadge')?.addEventListener('click', () => {
-            this.optimizeEquipment();
+        document.getElementById('equipmentBadge')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
+            this.openInventory();
+        });
+        // Stage rewards open inventory so the player makes the loadout choice.
+        document.getElementById('manageLoadoutBtn')?.addEventListener('click', () => {
+            this.audioManager.playSound('button-click');
+            this.openInventory();
         });
 
-        // Optimise equipment button
-        document.getElementById('optimizeEquipmentBtn')?.addEventListener('click', () => {
-            this.audioManager.playSound('button-click');
-            this.optimizeEquipment();
+        ['inventoryTypeFilter', 'inventoryRarityFilter', 'inventoryEffectFilter', 'inventorySetFilter', 'inventorySort'].forEach(id => {
+            document.getElementById(id)?.addEventListener('change', () => this.renderInventoryItems());
         });
-
-        // Same optimiser, offered at the moment it is most useful: a stage has
-        // just handed you a new item, so the loadout is most likely stale here.
-        document.getElementById('stageOptimizeBtn')?.addEventListener('click', () => {
-            this.audioManager.playSound('button-click');
-            this.optimizeEquipment();
+        document.getElementById('inventoryAllBtn')?.addEventListener('click', () => {
+            this.selectInventoryType('all');
+        });
+        document.getElementById('loadoutPresets')?.addEventListener('click', (event) => {
+            const button = event.target.closest('button[data-preset-action]');
+            if (!button) return;
+            const name = button.dataset.presetName;
+            if (button.dataset.presetAction === 'save') this.saveLoadoutPreset(name);
+            if (button.dataset.presetAction === 'equip') this.equipLoadoutPreset(name);
         });
 
         // Close inventory button
         document.getElementById('closeInventoryBtn')?.addEventListener('click', () => {
             this.audioManager.playSound('button-click');
             this.closeInventory();
+        });
+
+        document.getElementById('keepDuplicateBtn')?.addEventListener('click', () => {
+            this.resolveDuplicateEquipment('keep');
+        });
+        document.getElementById('equipDuplicateBtn')?.addEventListener('click', () => {
+            this.resolveDuplicateEquipment('equip');
+        });
+        document.getElementById('salvageDuplicateBtn')?.addEventListener('click', () => {
+            this.resolveDuplicateEquipment('salvage');
         });
 
         // Victory screen
@@ -1361,20 +1476,6 @@ this.currentBoss = null;
         if (label) label.textContent = ready ? 'Bomb \u00b7 E' : `${Math.ceil(bomb.cooldown)}s`;
     }
 
-    refreshOptimizeBadge() {
-        const badge = document.getElementById('optimizeBadge');
-        if (!badge) return;
-
-        const best = this.getOptimalLoadout();
-        const currentLoadout = this.player ? this.player.equipment : this.savedEquipment;
-        const available = Object.entries(best).some(([slot, item]) => {
-            if (!item) return false;
-            const current = currentLoadout?.[slot];
-            return !current || current.name !== item.name || (current.level || 1) !== (item.level || 1);
-        });
-        badge.style.display = available ? '' : 'none';
-    }
-
     triggerBomb() {
         if (!this.isRunning || this.isPaused) return;
         const bomb = this.player?.weapons?.find(w => w.type === 'bomb');
@@ -1401,6 +1502,7 @@ this.currentBoss = null;
         document.getElementById('titleScreen').classList.remove('active');
         document.getElementById('characterSelect').classList.add('active');
         this.refreshModePicker();
+        this.updateActiveTrialBanner();
         
         // Start menu music
         this.audioManager.playMusic('menu-theme');
@@ -1489,6 +1591,9 @@ this.currentBoss = null;
         this.chestRewardReady = false;
         this.runStats = this.createRunStats();
         this._loadoutSignature = null;
+        this.endlessMilestone = 0;
+        this.endlessMutations = [];
+        this.trialProgress = 0;
 
         // Close any panel that could still be open from a previous run.
         // Those panels own the pause flag while they are up, and a run that ends
@@ -1573,6 +1678,15 @@ this.currentBoss = null;
         if (rawDelta > 0) this.fps = this.fps * 0.9 + (1 / rawDelta) * 0.1;
         this.lastTime = currentTime;
         this.lastFrameTime = currentTime;
+
+        // Pause must freeze the clock before gameTime, boss warnings, Endless
+        // milestones, or any other simulation timer can advance. Previously
+        // update() returned early, but this happened after gameTime changed.
+        if (this.isPaused) {
+            this.render();
+            this.animationFrameId = requestAnimationFrame((time) => this.gameLoop(time));
+            return;
+        }
         
         // Freeze the simulation, not the render loop. gameTime is held with
         // it, so waves, boss timers and stage length are unaffected by juice.
@@ -1588,6 +1702,7 @@ this.currentBoss = null;
         deltaTime *= this.timeScale;
 
         this.gameTime += deltaTime;
+        this.updateEndlessMilestones();
         
         // Throttle achievement checks - only run once per second
         if (!this.lastAchievementCheck) this.lastAchievementCheck = 0;
@@ -2457,6 +2572,7 @@ this.currentBoss = null;
         // Track boss defeat for achievements and the run summary
         this.sessionStats.bosses++;
         this.runStats.bossesDefeated++;
+        this.recordTrialProgress();
         
         // Victory rewards - defer level up until after stage complete screen
         this.pendingLevelUp = true;
@@ -2486,7 +2602,7 @@ this.currentBoss = null;
         }, 3000);
     }
     
-    generateEquipmentDrop(stage) {
+    generateEquipmentDrop(stage, options = {}) {
         // Higher stages have better drop rates
         const stagebonus = Math.min(stage * 0.05, 0.5); // Max 50% bonus
         const roll = Math.random() - stagebonus;
@@ -2499,7 +2615,10 @@ this.currentBoss = null;
         else rarity = 'COMMON';
         
         // Pick random equipment
-        const baseEquipment = EQUIPMENT_POOL[Math.floor(Math.random() * EQUIPMENT_POOL.length)];
+        const pool = options.targetSetId
+            ? EQUIPMENT_POOL.filter(item => getEquipmentSetId(item) === options.targetSetId)
+            : EQUIPMENT_POOL;
+        const baseEquipment = pool[Math.floor(Math.random() * pool.length)] || EQUIPMENT_POOL[0];
         const rarityData = EQUIPMENT_RARITY[rarity];
         
         // Create equipment with stats scaled by rarity
@@ -2507,7 +2626,12 @@ this.currentBoss = null;
             ...baseEquipment,
             rarity: rarity,
             rarityData: rarityData,
+            setId: getEquipmentSetId(baseEquipment),
             level: 1, // All equipment starts at level 1
+            baseEffectValue: baseEquipment.effectValue,
+            effectValue: baseEquipment.effectValue === undefined
+                ? undefined
+                : Math.round(baseEquipment.effectValue * rarityData.statMultiplier * 100) / 100,
             stats: this.scaleEquipmentStats(baseEquipment.baseStats, rarityData.statMultiplier)
         };
     }
@@ -2556,6 +2680,75 @@ this.currentBoss = null;
         // later levels a real commitment without making them theoretical.
         return Math.floor(baseCost * Math.pow(1.3, equipment.level - 1));
     }
+
+    getNextRarity(rarity) {
+        const rarities = ['COMMON', 'UNCOMMON', 'RARE', 'EPIC', 'LEGENDARY'];
+        const index = rarities.indexOf(rarity);
+        return index >= 0 && index < rarities.length - 1 ? rarities[index + 1] : null;
+    }
+
+    getRarityPromotionCost(equipment) {
+        const nextRarity = this.getNextRarity(equipment?.rarity);
+        if (!nextRarity) return null;
+
+        // Promotion is the reliable long-term path to Legendary. It is
+        // intentionally more expensive than a single star so drops still
+        // matter, while a favorite effect can always be pursued.
+        const costs = {
+            UNCOMMON: 350,
+            RARE: 750,
+            EPIC: 1500,
+            LEGENDARY: 3000
+        };
+        return costs[nextRarity] || null;
+    }
+
+    promoteEquipment(inventoryIndex) {
+        const equipment = this.playerInventory[inventoryIndex];
+        if (!equipment || equipment.level < 5) return;
+
+        const nextRarity = this.getNextRarity(equipment.rarity);
+        const cost = this.getRarityPromotionCost(equipment);
+        if (!nextRarity || !cost) return;
+        if (this.scrap < cost) {
+            this.showNotification(`Need ${cost - this.scrap} more scrap to promote this item.`);
+            return;
+        }
+
+        this.scrap -= cost;
+        this.saveScrap();
+
+        const wasEquipped = this.player &&
+            this.player.equipment[equipment.type] === equipment;
+        if (wasEquipped) this.player.unequipItem(equipment.type);
+
+        equipment.rarity = nextRarity;
+        equipment.rarityData = EQUIPMENT_RARITY[nextRarity];
+        equipment.stats = this.scaleEquipmentStats(
+            equipment.baseStats,
+            equipment.rarityData.statMultiplier * this.getLevelMultiplier(equipment.level)
+        );
+        if (equipment.effectValue !== undefined) {
+            const baseEffect = equipment.baseEffectValue ?? equipment.effectValue;
+            equipment.baseEffectValue = baseEffect;
+            equipment.effectValue = Math.round(
+                baseEffect * equipment.rarityData.statMultiplier *
+                this.getLevelMultiplier(equipment.level) * 100
+            ) / 100;
+        }
+
+        this.saveInventory();
+        if (wasEquipped) this.player.equipItem(equipment);
+        if (this.savedEquipment[equipment.type]?.name === equipment.name) {
+            this.savedEquipment[equipment.type] = equipment;
+            this.saveSavedEquipment();
+        }
+
+        this.audioManager.playSound('equip-item');
+        this.showNotification(`${equipment.name} promoted to ${EQUIPMENT_RARITY[nextRarity].name}!`, EQUIPMENT_RARITY[nextRarity].color);
+        this.updateInventoryEquippedSlots();
+        this.renderInventoryItems();
+    }
     
     levelUpEquipment(inventoryIndex) {
         const equipment = this.playerInventory[inventoryIndex];
@@ -2585,6 +2778,14 @@ this.currentBoss = null;
             equipment.baseStats,
             equipment.rarityData.statMultiplier * levelMultiplier
         );
+        if (equipment.effectValue !== undefined) {
+            const baseEffect = equipment.baseEffectValue ??
+                (equipment.effectValue / (equipment.rarityData.statMultiplier || 1));
+            equipment.baseEffectValue = baseEffect;
+            equipment.effectValue = Math.round(
+                baseEffect * equipment.rarityData.statMultiplier * levelMultiplier * 100
+            ) / 100;
+        }
 
         this.saveInventory();
         if (wasEquipped) this.player.equipItem(equipment);
@@ -2604,9 +2805,6 @@ this.currentBoss = null;
     showStageComplete(coinsEarned, equipment) {
         this.isPaused = true;
         this.audioManager.playSound('stage-complete');
-        const optResult = document.getElementById('stageOptimizeResult');
-        if (optResult) { optResult.textContent = ''; optResult.classList.remove('shown'); }
-        
         const panel = document.getElementById('stageCompletePanel');
         const stageNum = document.getElementById('stageCompleteNumber');
         const coinsText = document.getElementById('stageCoinsEarned');
@@ -2658,7 +2856,10 @@ this.currentBoss = null;
             case 'damage_boost_low_hp': return `+${v}% damage below half health`;
             case 'health_regen':        return `Regenerate ${v} health per second`;
             case 'ultimate_charge':     return `Ultimate charges ${v}% faster`;
-            case 'auto_revive':         return v > 1 ? `Cheat death ${v} times` : 'Cheat death once per run';
+            case 'auto_revive': {
+                const charges = Math.max(1, Math.round(Number(v) || 1));
+                return `Revive ${charges} time${charges === 1 ? '' : 's'} per stage`;
+            }
             case 'xp_boost':            return '';
             default:                    return '';
         }
@@ -2730,6 +2931,10 @@ this.currentBoss = null;
         this.stageStartTime = this.gameTime;
         this.bossWarning = false;
         this.bossWarningFired = false;
+        // Phoenix Feather is a stage resource: a stronger feather grants
+        // more tries, but every new stage refreshes its available charges.
+        if (this.player) this.player.autoRevivesUsed = 0;
+        if (this.player2) this.player2.autoRevivesUsed = 0;
         
         // Scale difficulty
         this.waveMultiplier = 1.0 + (this.currentStage * 0.2);
@@ -2778,6 +2983,20 @@ this.currentBoss = null;
         this.activeTimers.push(this._eventBannerTimer);
     }
 
+    updateEndlessMilestones() {
+        if (!this.endlessMode) return;
+        const cfg = GAME_CONFIG.endless;
+        const target = Math.floor(this.gameTime / cfg.milestoneSeconds);
+        while (this.endlessMilestone < target) {
+            const index = this.endlessMilestone++;
+            const base = cfg.mutations[index % cfg.mutations.length];
+            const level = Math.floor(index / cfg.mutations.length) + 1;
+            this.endlessMutations.push({ ...base, level });
+            this.announceEvent(`⚠️ ENDLESS MUTATION: ${base.name} ${level > 1 ? `II+${level - 1}` : ''}`.trim(), base.desc);
+            this.showNotification(`Endless pressure increased: ${base.name}`);
+        }
+    }
+
     showNotification(message) {
         // Into a stack down the left edge, not the middle of the arena. These
         // fire for pickups, duplicates and upgrades — routinely several at
@@ -2808,6 +3027,75 @@ this.currentBoss = null;
         this.isPaused = true;
         this.refreshShopInventory();
         document.getElementById('shopPanel').classList.add('active');
+    }
+
+    openTrials() {
+        const panel = document.getElementById('trialsPanel');
+        const grid = document.getElementById('trialsGrid');
+        if (!panel || !grid) return;
+        grid.innerHTML = TRIALS.map(trial => {
+            const active = this.activeTrialId === trial.id;
+            const progress = active ? this.trialProgress : 0;
+            return `<div class="trial-card${active ? ' active' : ''}">
+                <div class="trial-card-title">${trial.icon} ${trial.name}</div>
+                <div class="trial-card-objective">${trial.objective}</div>
+                <div class="trial-card-reward">Guaranteed ${EQUIPMENT_SETS[trial.targetSetId].name} gear</div>
+                <div class="trial-card-progress">${active ? `${Math.min(progress, trial.progress)}/${trial.progress}` : 'Not selected'}</div>
+                <button class="btn-secondary" type="button" data-trial-id="${trial.id}">${active ? 'Selected' : 'Choose Trial'}</button>
+            </div>`;
+        }).join('');
+        panel.classList.add('active');
+    }
+
+    selectTrial(id) {
+        const trial = TRIALS.find(entry => entry.id === id);
+        if (!trial) return;
+        this.activeTrialId = id;
+        this.trialProgress = 0;
+        document.getElementById('trialsPanel')?.classList.remove('active');
+        this.updateActiveTrialBanner();
+        this.showNotification(`${trial.name} selected for your next run.`);
+    }
+
+    updateActiveTrialBanner() {
+        const banner = document.getElementById('activeTrialBanner');
+        if (!banner) return;
+        const trial = TRIALS.find(entry => entry.id === this.activeTrialId);
+        if (!trial) {
+            banner.hidden = true;
+            banner.innerHTML = '';
+            return;
+        }
+        const set = EQUIPMENT_SETS[trial.targetSetId];
+        banner.hidden = false;
+        banner.innerHTML = `<span class="active-trial-kicker">ACTIVE TRIAL</span>
+            <strong>${trial.icon} ${trial.name}</strong>
+            <span>${trial.objective}</span>
+            <span class="active-trial-reward">Reward: ${set.icon} ${set.name} gear</span>`;
+    }
+
+    recordTrialProgress(amount = 1) {
+        if (!this.activeTrialId || !this.isRunning) return;
+        const trial = TRIALS.find(entry => entry.id === this.activeTrialId);
+        if (!trial || this.trialProgress >= trial.progress) return;
+        this.trialProgress += amount;
+        if (this.trialProgress < trial.progress) return;
+
+        const reward = this.generateEquipmentDrop(this.currentStage, { targetSetId: trial.targetSetId });
+        const existing = this.playerInventory.find(item => item.id === reward.id);
+        if (existing) {
+            this.scrap += this.getSellValue(reward);
+            this.saveScrap();
+            this.showNotification(`${trial.name} complete: duplicate converted to scrap.`);
+        } else {
+            this.playerInventory.push(reward);
+            this.saveInventory();
+            this.markEquipmentNew(reward);
+            this.showNotification(`${trial.name} complete: ${reward.name} earned!`);
+        }
+        this.activeTrialId = null;
+        this.trialProgress = 0;
+        this.updateActiveTrialBanner();
     }
     
     closeShop() {
@@ -2842,6 +3130,7 @@ this.currentBoss = null;
         
         this.availableEquipment.forEach((equipment, index) => {
             const canAfford = this.coins >= equipment.price;
+            const set = EQUIPMENT_SETS[getEquipmentSetId(equipment)];
             const div = document.createElement('div');
             div.className = `shop-item ${!canAfford ? 'unaffordable' : ''}`;
             div.style.borderColor = equipment.rarityData.color;
@@ -2851,6 +3140,7 @@ this.currentBoss = null;
                 <div class="shop-item-icon">${equipment.icon}</div>
                 <div class="shop-item-name" style="color: ${equipment.rarityData.color}">${equipment.name}</div>
                 <div class="shop-item-rarity">${equipment.rarityData.name}</div>
+                ${set ? `<div class="shop-item-set">${set.icon} ${set.name} Set</div>` : ''}
                 <div class="shop-item-stats">${this.formatEquipmentStats(equipment)}</div>
                 <button class="shop-buy-btn ${!canAfford ? 'disabled' : ''}" data-index="${index}">
                     Buy (${equipment.price} 🪙)
@@ -2897,8 +3187,11 @@ this.currentBoss = null;
     }
     
     openInventory() {
+        if (this.player) this.isPaused = true;
+        this.clearNewEquipmentNotice();
         // Counters are refreshed by renderInventoryItems() below.
         this.updateInventoryEquippedSlots();
+        this.renderLoadoutPresets();
         
         // Render inventory items
         this.renderInventoryItems();
@@ -2906,17 +3199,424 @@ this.currentBoss = null;
         // Show inventory panel
         document.getElementById('inventoryPanel').classList.add('active');
     }
+
+    getActiveLoadout() {
+        const source = this.player?.equipment || this.savedEquipment;
+        return Object.fromEntries(Object.entries(source || {}).map(([slot, item]) => [
+            slot, item ? (item.id || item.name) : null
+        ]));
+    }
+
+    renderLoadoutPresets() {
+        const container = document.getElementById('loadoutPresets');
+        if (!container) return;
+        container.innerHTML = Object.entries(this.loadoutPresets).map(([name, preset]) => {
+            const items = preset ? Object.values(preset).filter(Boolean).length : 0;
+            const equipped = preset && Object.entries(preset).every(([slot, id]) =>
+                (this.player?.equipment?.[slot]?.id || this.player?.equipment?.[slot]?.name || null) === id);
+            return `<div class="loadout-preset-card${equipped ? ' active' : ''}">
+                <strong>${name}</strong>
+                <span>${items ? `${items}/4 slots saved` : 'Empty preset'}</span>
+                <div class="loadout-preset-actions">
+                    <button class="item-flag-btn" type="button" data-preset-action="save" data-preset-name="${name}">Save Active</button>
+                    <button class="item-flag-btn" type="button" data-preset-action="equip" data-preset-name="${name}" ${preset ? '' : 'disabled'}>Equip</button>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    saveLoadoutPreset(name) {
+        if (!Object.prototype.hasOwnProperty.call(this.loadoutPresets, name)) return;
+        this.loadoutPresets[name] = this.getActiveLoadout();
+        this.saveLoadoutPresets();
+        this.renderLoadoutPresets();
+        this.showNotification(`${name} saved.`);
+    }
+
+    equipLoadoutPreset(name) {
+        const preset = this.loadoutPresets[name];
+        if (!preset) return;
+        const resolved = {};
+        for (const [slot, id] of Object.entries(preset)) {
+            if (!id) {
+                resolved[slot] = null;
+                continue;
+            }
+            const item = this.playerInventory.find(candidate =>
+                (candidate.id || candidate.name) === id
+            );
+            if (!item) {
+                this.showNotification(`${name} needs equipment you no longer own.`);
+                return;
+            }
+            resolved[slot] = item;
+        }
+        Object.keys(this.savedEquipment).forEach(slot => {
+            const item = resolved[slot];
+            if (this.player) {
+                if (item) this.player.equipItem(item);
+                else this.player.unequipItem(slot);
+            }
+            this.savedEquipment[slot] = item || null;
+        });
+        this.saveSavedEquipment();
+        this.updateInventoryEquippedSlots();
+        this.renderLoadoutPresets();
+        this.updateLoadoutHUD();
+        this.showNotification(`${name} equipped.`);
+    }
+
+    getEquippedSetCounts() {
+        const counts = {};
+        const equipped = this.player?.equipment || this.savedEquipment || {};
+        Object.values(equipped).forEach(item => {
+            const setId = getEquipmentSetId(item);
+            if (setId) counts[setId] = (counts[setId] || 0) + 1;
+        });
+        return counts;
+    }
+
+    renderSetBonuses() {
+        const container = document.getElementById('inventorySetBonuses');
+        if (!container) return;
+
+        const counts = this.getEquippedSetCounts();
+        const entries = Object.entries(EQUIPMENT_SETS).filter(([setId]) => counts[setId]);
+        if (!entries.length) {
+            container.innerHTML = '<div class="set-bonus-empty">Equip matching pieces to activate set bonuses.</div>';
+            return;
+        }
+
+        container.innerHTML = entries.map(([setId, set]) => {
+            const count = counts[setId];
+            const thresholds = Object.keys(set.bonuses).map(Number).sort((a, b) => a - b);
+            const active = thresholds.filter(threshold => count >= threshold);
+            const next = thresholds.find(threshold => count < threshold);
+            const bonusLines = active.map(threshold =>
+                `<div class="set-bonus-active">✓ ${set.bonuses[threshold].description}</div>`
+            ).join('');
+            const nextLine = next
+                ? `<div class="set-bonus-next">Next at ${next}/${set.pieces.length}: ${set.bonuses[next].description}</div>`
+                : '<div class="set-bonus-next">Full set bonus active</div>';
+            return `<div class="set-bonus-card">
+                <div class="set-bonus-title">${set.icon} ${set.name} <span>${count}/${set.pieces.length}</span></div>
+                ${bonusLines}${nextLine}
+            </div>`;
+        }).join('');
+    }
     
     closeInventory() {
         document.getElementById('inventoryPanel').classList.remove('active');
+        this.clearInventoryComparison();
+        if (document.getElementById('pauseScreen')?.classList.contains('active')) {
+            this.updatePauseMenuEquipment();
+        }
+        if (this.player &&
+            !document.getElementById('stageCompletePanel')?.classList.contains('active') &&
+            !document.getElementById('shopPanel')?.classList.contains('active')) {
+            this.isPaused = false;
+        }
+    }
+
+    selectInventoryType(type) {
+        this.clearInventoryComparison();
+        const typeFilter = document.getElementById('inventoryTypeFilter');
+        const rarityFilter = document.getElementById('inventoryRarityFilter');
+        const effectFilter = document.getElementById('inventoryEffectFilter');
+        const setFilter = document.getElementById('inventorySetFilter');
+        const sortFilter = document.getElementById('inventorySort');
+        if (typeFilter) typeFilter.value = type;
+        // A slot click is a focused browse mode, not an extra hidden filter.
+        // Clear the other selectors so every valid replacement is visible.
+        if (rarityFilter) rarityFilter.value = 'all';
+        if (effectFilter) effectFilter.value = 'all';
+        if (setFilter) setFilter.value = 'all';
+        this.inventoryFilters = { type, rarity: 'all', effect: 'all', set: 'all', sort: sortFilter?.value || 'rarity' };
+        this.renderInventoryItems();
+        document.getElementById('inventoryGrid')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    selectEquipmentForComparison(inventoryIndex) {
+        const equipment = this.playerInventory[inventoryIndex];
+        if (!equipment) return;
+
+        const current = this.player?.equipment?.[equipment.type] ||
+            this.savedEquipment?.[equipment.type] || null;
+        const comparison = document.getElementById('inventoryComparison');
+        if (!comparison) return;
+
+        const statChanges = this.getEquipmentStatChanges(current, equipment);
+        const effectChanges = this.getEquipmentEffectChanges(current, equipment);
+        const setChanges = this.getEquipmentSetChanges(current, equipment);
+        const buildSummary = this.getEquipmentBuildSummary(current, equipment, setChanges);
+
+        comparison.innerHTML = `
+            <div class="comparison-header">
+                <strong>Compare ${equipment.type}</strong>
+                <span>Choose Equip to replace the current item</span>
+            </div>
+            <div class="comparison-columns">
+                <div class="comparison-card comparison-current">
+                    <div class="comparison-label">Current</div>
+                    ${current ? `
+                        <div class="comparison-name" style="color: ${this.getRarityColor(current.rarity)}">${current.name}</div>
+                        <div class="comparison-stats">${this.formatEquipmentStats(current)}</div>
+                    ` : '<div class="comparison-empty">No item equipped</div>'}
+                </div>
+                <div class="comparison-arrow">→</div>
+                <div class="comparison-card comparison-new">
+                    <div class="comparison-label">Selected</div>
+                    <div class="comparison-name" style="color: ${this.getRarityColor(equipment.rarity)}">${equipment.name}</div>
+                    <div class="comparison-stats">${this.formatEquipmentStats(equipment)}</div>
+                </div>
+            </div>
+            <div class="comparison-changes">
+                <div class="comparison-changes-label">Stat Changes</div>
+                <div class="comparison-change-list">
+                    ${statChanges.length
+                        ? statChanges.map(change => `<span class="comparison-change ${change.className}">${change.text}</span>`).join('')
+                    : '<span class="comparison-no-change">No raw stat changes</span>'}
+                </div>
+            </div>
+            <div class="comparison-detail-section">
+                <div class="comparison-changes-label">Effect Changes</div>
+                <div class="comparison-detail-list">
+                    ${effectChanges.length
+                        ? effectChanges.map(change => `<div class="comparison-detail ${change.className}"><span class="comparison-detail-icon">${change.icon}</span>${change.text}</div>`).join('')
+                        : '<div class="comparison-no-change">No effect change</div>'}
+                </div>
+            </div>
+            <div class="comparison-detail-section">
+                <div class="comparison-changes-label">Set Impact</div>
+                <div class="comparison-detail-list">
+                    ${setChanges.length
+                        ? setChanges.map(change => `<div class="comparison-detail ${change.className}"><span class="comparison-detail-icon">${change.icon}</span>${change.text}</div>`).join('')
+                        : '<div class="comparison-no-change">No set progress change</div>'}
+                </div>
+            </div>
+            <div class="comparison-build-summary"><strong>Build Summary:</strong> ${buildSummary}</div>
+            <div class="comparison-actions">
+                ${current && current.name === equipment.name
+                    ? '<span class="comparison-equipped">Already equipped</span>'
+                    : '<button class="btn-primary comparison-equip-btn" type="button">Equip Selected</button>'}
+                <button class="btn-secondary comparison-close-btn" type="button">Keep Current</button>
+            </div>
+        `;
+        comparison.hidden = false;
+        comparison.querySelector('.comparison-equip-btn')?.addEventListener('click', () => {
+            this.equipFromInventory(inventoryIndex);
+            this.clearInventoryComparison();
+        });
+        comparison.querySelector('.comparison-close-btn')?.addEventListener('click', () => {
+            this.clearInventoryComparison();
+        });
+    }
+
+    getEquipmentStatChanges(current, selected) {
+        const currentStats = current?.stats || {};
+        const selectedStats = selected?.stats || {};
+        const keys = [...new Set([...Object.keys(currentStats), ...Object.keys(selectedStats)])];
+        const labelNames = {
+            attackSpeed: 'Attack Speed',
+            xpGain: 'XP Gain'
+        };
+
+        return keys.map(key => {
+            const before = Number(currentStats[key] || 0);
+            const after = Number(selectedStats[key] || 0);
+            const delta = Math.round((after - before) * 100) / 100;
+            if (delta === 0) return null;
+
+            const isNewStat = before === 0 && after !== 0;
+            const formattedDelta = key === 'attackSpeed'
+                ? `${delta > 0 ? '+' : ''}${Math.round(delta * 100)}%`
+                : `${delta > 0 ? '+' : ''}${delta}`;
+            const className = isNewStat ? 'comparison-change-new' :
+                delta > 0 ? 'comparison-change-up' : 'comparison-change-down';
+            return {
+                className,
+                text: `${formattedDelta} ${labelNames[key] || key.replace(/([A-Z])/g, ' $1')}`
+            };
+        }).filter(Boolean);
+    }
+
+    getEquipmentEffectChanges(current, selected) {
+        const before = current?.effect || null;
+        const after = selected?.effect || null;
+        if (before === after && (!before || Number(current.effectValue || 0) === Number(selected.effectValue || 0))) {
+            return [];
+        }
+
+        const names = {
+            crit_chance: 'Critical Chance',
+            chain_lightning: 'Chain Lightning',
+            slow_enemies: 'Enemy Slow',
+            time_slow: 'Time Slow',
+            dodge_chance: 'Dodge Chance',
+            lifesteal: 'Lifesteal',
+            damage_boost_low_hp: 'Low-Health Damage',
+            health_regen: 'Health Regeneration',
+            ultimate_charge: 'Ultimate Charge',
+            auto_revive: 'Auto Revive',
+            xp_boost: 'XP Boost'
+        };
+        const valueText = (effect, value) => {
+            if (!effect) return 'None';
+            if (effect === 'chain_lightning') return `${value} targets`;
+            if (effect === 'auto_revive') {
+                const charges = Math.max(1, Math.round(Number(value) || 1));
+                return `${charges} charge${charges === 1 ? '' : 's'}`;
+            }
+            return `${value}%`;
+        };
+        const text = before === after
+            ? `${names[after] || after}: ${valueText(after, current.effectValue)} → ${valueText(after, selected.effectValue)}`
+            : `${names[before] || 'None'} ${valueText(before, current?.effectValue)} → ${names[after] || 'None'} ${valueText(after, selected?.effectValue)}`;
+        return [{
+            className: !before ? 'comparison-change-new' : !after ? 'comparison-change-down' : 'comparison-change-up',
+            icon: !before ? '✦' : !after ? '↓' : '◆',
+            text
+        }];
+    }
+
+    getEquipmentSetChanges(current, selected) {
+        const beforeItems = Object.values(this.player?.equipment || this.savedEquipment || {});
+        const afterItems = beforeItems.filter(item => item && item.type !== selected.type);
+        if (!current || current.type === selected.type) afterItems.push(selected);
+
+        const countSets = (items) => items.reduce((counts, item) => {
+            const setId = getEquipmentSetId(item);
+            if (setId) counts[setId] = (counts[setId] || 0) + 1;
+            return counts;
+        }, {});
+        const beforeCounts = countSets(beforeItems);
+        const afterCounts = countSets(afterItems);
+        const affected = [...new Set([
+            ...Object.keys(beforeCounts),
+            ...Object.keys(afterCounts),
+            getEquipmentSetId(selected)
+        ])].filter(Boolean);
+        const changes = [];
+
+        affected.forEach(setId => {
+            const set = EQUIPMENT_SETS[setId];
+            if (!set) return;
+            const beforeCount = beforeCounts[setId] || 0;
+            const afterCount = afterCounts[setId] || 0;
+            if (beforeCount === afterCount) return;
+            const thresholds = Object.keys(set.bonuses).map(Number).sort((a, b) => a - b);
+            const activated = thresholds.filter(t => beforeCount < t && afterCount >= t);
+            const broken = thresholds.filter(t => beforeCount >= t && afterCount < t);
+            if (activated.length) {
+                activated.forEach(t => changes.push({
+                    className: 'comparison-change-up', icon: '✓',
+                    text: `${set.name} ${beforeCount}/${set.pieces.length} → ${afterCount}/${set.pieces.length}: activates ${set.bonuses[t].description}`
+                }));
+            } else if (broken.length) {
+                broken.forEach(t => changes.push({
+                    className: 'comparison-change-down', icon: '↓',
+                    text: `${set.name} ${beforeCount}/${set.pieces.length} → ${afterCount}/${set.pieces.length}: loses ${set.bonuses[t].description}`
+                }));
+            } else {
+                changes.push({
+                    className: afterCount > beforeCount ? 'comparison-change-up' : 'comparison-change-down',
+                    icon: afterCount > beforeCount ? '↑' : '↓',
+                    text: `${set.name}: ${beforeCount}/${set.pieces.length} → ${afterCount}/${set.pieces.length}`
+                });
+            }
+        });
+        return changes;
+    }
+
+    getEquipmentBuildSummary(current, selected, setChanges) {
+        const summaries = [];
+        const effectNames = {
+            lifesteal: 'sustain', chain_lightning: 'crowd control', slow_enemies: 'control',
+            time_slow: 'control', dodge_chance: 'evasion', crit_chance: 'critical damage',
+            health_regen: 'regeneration', ultimate_charge: 'ultimate cycling',
+            damage_boost_low_hp: 'high-risk damage'
+        };
+        const selectedEffect = effectNames[selected.effect];
+        const currentEffect = effectNames[current?.effect];
+        if (selectedEffect && selectedEffect !== currentEffect) summaries.push(`leans into ${selectedEffect}`);
+        if (selected.stats?.range && !current?.stats?.range) summaries.push('extends attack reach');
+        if (selected.stats?.attackSpeed > (current?.stats?.attackSpeed || 0)) summaries.push('attacks faster');
+        if (selected.stats?.health > (current?.stats?.health || 0)) summaries.push('adds durability');
+        if (setChanges.some(change => change.className === 'comparison-change-up')) summaries.push('advances a set bonus');
+        return summaries.length ? summaries.join(' · ') : 'a different stat profile';
+    }
+
+    clearInventoryComparison() {
+        const comparison = document.getElementById('inventoryComparison');
+        if (!comparison) return;
+        comparison.hidden = true;
+        comparison.innerHTML = '';
+    }
+
+    loadNewEquipmentIds() {
+        const saved = localStorage.getItem('vitalisArenaNewEquipmentIds');
+        if (saved) {
+            try {
+                const ids = JSON.parse(saved);
+                return Array.isArray(ids) ? ids.filter(Boolean) : [];
+            } catch (err) {}
+        }
+        // The old counter could survive after its items were equipped or
+        // reviewed. Drop it during migration rather than showing a stale
+        // notification forever.
+        localStorage.removeItem('vitalisArenaNewEquipmentCount');
+        return [];
+    }
+
+    saveNewEquipmentIds() {
+        localStorage.setItem('vitalisArenaNewEquipmentIds', JSON.stringify(this.newEquipmentIds));
+    }
+
+    updateEquipmentNotification() {
+        const count = this.newEquipmentIds?.length || 0;
+        const menuBadge = document.getElementById('inventoryNewBadge');
+        if (menuBadge) {
+            menuBadge.hidden = count === 0;
+            menuBadge.textContent = count > 1 ? `${count} New` : 'New';
+        }
+
+        const gameBadge = document.getElementById('equipmentBadge');
+        const gameLabel = document.getElementById('equipmentBadgeLabel');
+        if (gameBadge) gameBadge.style.display = count > 0 ? 'flex' : 'none';
+        if (gameLabel) gameLabel.textContent = `${count} Gear Ready · Press I`;
+    }
+
+    markEquipmentNew(equipment) {
+        const currentlyEquipped = this.player?.equipment?.[equipment.type]?.name === equipment.name ||
+            this.savedEquipment?.[equipment.type]?.name === equipment.name;
+        if (currentlyEquipped) return;
+
+        const id = equipment.id || equipment.name;
+        if (!this.newEquipmentIds.includes(id)) this.newEquipmentIds.push(id);
+        this.saveNewEquipmentIds();
+        this.updateEquipmentNotification();
+    }
+
+    clearNewEquipmentNotice() {
+        if (!this.newEquipmentIds?.length) return;
+        this.newEquipmentIds = [];
+        this.saveNewEquipmentIds();
+        this.updateEquipmentNotification();
     }
     
     updateInventoryEquippedSlots() {
         const slots = ['weapon', 'armor', 'accessory', 'ring'];
         slots.forEach(slot => {
             const slotElement = document.getElementById(`inv-${slot}`);
+            const slotCard = slotElement?.parentElement;
             // Check active player first, then saved equipment
             const equippedItem = this.player?.equipment?.[slot] || this.savedEquipment?.[slot];
+            const hasAlternative = this.playerInventory.some(item =>
+                item && item.type === slot && (!equippedItem || item.name !== equippedItem.name));
+            // The IDs point to the content div; the visual card is its parent.
+            // Applying the state to the wrong element made the hint appear
+            // without the promised glowing equipment box.
+            slotCard?.classList.toggle('has-available', hasAlternative);
             
             if (equippedItem) {
                 // Ensure equipment has level property
@@ -2937,7 +3637,12 @@ this.currentBoss = null;
                     // Worn but not owned — nothing to level up against.
                     action = '';
                 } else if (maxed) {
-                    action = '<div class="slot-maxed">MAX</div>';
+                    const promotionCost = this.getRarityPromotionCost(equippedItem);
+                    const canPromote = Boolean(promotionCost);
+                    action = canPromote
+                        ? `<button class="slot-promote-btn${this.scrap >= promotionCost ? '' : ' unaffordable'}"
+                            title="Promote this five-star item to the next tier">⬆️ ${promotionCost} ⚙️</button>`
+                        : '<div class="slot-maxed">LEGENDARY</div>';
                 } else {
                     action = `<button class="slot-upgrade-btn${affordable ? '' : ' unaffordable'}"
                         title="${affordable ? 'Upgrade this item' : `Need ${cost - this.scrap} more scrap`}">⬆️ ${cost} ⚙️</button>`;
@@ -2948,9 +3653,10 @@ this.currentBoss = null;
                     <div style="color: ${this.getRarityColor(equippedItem.rarity)}; font-weight: bold;">${equippedItem.name}</div>
                     <div style="font-size: 0.85em; color: rgba(255,255,255,0.6);">${this.formatEquipmentStats(equippedItem)}</div>
                     ${action}
+                    ${invIndex !== -1 ? '<button class="slot-unequip-btn" type="button">Unequip</button>' : ''}
                 `;
-                slotElement.style.cursor = 'pointer';
-                slotElement.onclick = () => this.unequipFromInventory(slot);
+                slotCard.style.cursor = 'pointer';
+                slotCard.onclick = () => this.selectInventoryType(slot);
 
                 // The slot itself unequips on click, so the button has to stop
                 // the event or upgrading would strip the slot at the same time.
@@ -2961,12 +3667,41 @@ this.currentBoss = null;
                         this.levelUpEquipment(invIndex);
                     };
                 }
+                const promoteBtn = slotElement.querySelector('.slot-promote-btn');
+                if (promoteBtn) {
+                    promoteBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        this.promoteEquipment(invIndex);
+                    };
+                }
+                const unequipBtn = slotElement.querySelector('.slot-unequip-btn');
+                if (unequipBtn) {
+                    unequipBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        this.unequipFromInventory(slot);
+                    };
+                }
+                const browseHint = document.createElement('div');
+                browseHint.className = 'slot-browse-hint';
+                browseHint.textContent = hasAlternative
+                    ? 'New option available · Click to browse'
+                    : 'Click to browse this slot';
+                slotElement.appendChild(browseHint);
             } else {
-                slotElement.innerHTML = 'Empty';
-                slotElement.style.cursor = 'default';
-                slotElement.onclick = null;
+                slotElement.innerHTML = `<div>Empty</div><div class="slot-browse-hint">${hasAlternative ? 'Gear available · Click to equip' : 'Click to browse this slot'}</div>`;
+                slotCard.style.cursor = 'pointer';
+                slotCard.onclick = () => this.selectInventoryType(slot);
             }
         });
+        const notice = document.getElementById('inventoryEquipmentNotice');
+        if (notice) {
+            const availableSlots = slots.filter(slot =>
+                document.getElementById(`inv-${slot}`)?.parentElement?.classList.contains('has-available'));
+            notice.hidden = availableSlots.length === 0;
+            notice.textContent = availableSlots.length
+                ? `Equipment available: click the glowing ${availableSlots.join(', ')} slot${availableSlots.length > 1 ? 's' : ''} to compare.`
+                : '';
+        }
     }
     
     renderInventoryItems() {
@@ -2984,13 +3719,47 @@ this.currentBoss = null;
 
         const inventoryGrid = document.getElementById('inventoryGrid');
         inventoryGrid.innerHTML = '';
+        this.renderSetBonuses();
+
+        const typeFilter = document.getElementById('inventoryTypeFilter');
+        const rarityFilter = document.getElementById('inventoryRarityFilter');
+        const effectFilter = document.getElementById('inventoryEffectFilter');
+        const setFilter = document.getElementById('inventorySetFilter');
+        const sortFilter = document.getElementById('inventorySort');
+        const filters = {
+            type: typeFilter?.value || this.inventoryFilters.type,
+            rarity: rarityFilter?.value || this.inventoryFilters.rarity,
+            effect: effectFilter?.value || this.inventoryFilters.effect,
+            set: setFilter?.value || this.inventoryFilters.set,
+            sort: sortFilter?.value || this.inventoryFilters.sort
+        };
+        this.inventoryFilters = filters;
+        const visibleItems = this.playerInventory
+            .map((equipment, index) => ({ equipment, index }))
+            .filter(({ equipment }) =>
+                (filters.type === 'all' || equipment.type === filters.type) &&
+                (filters.rarity === 'all' || equipment.rarity === filters.rarity) &&
+                (filters.effect === 'all' || equipment.effect === filters.effect) &&
+                (filters.set === 'all' || getEquipmentSetId(equipment) === filters.set))
+            .sort((a, b) => {
+                if (filters.sort === 'name') return a.equipment.name.localeCompare(b.equipment.name);
+                if (filters.sort === 'level') return (b.equipment.level || 1) - (a.equipment.level || 1);
+                if (filters.sort === 'set') return (getEquipmentSetId(a.equipment) || 'zzz').localeCompare(getEquipmentSetId(b.equipment) || 'zzz');
+                const rarityOrder = ['LEGENDARY', 'EPIC', 'RARE', 'UNCOMMON', 'COMMON'];
+                return rarityOrder.indexOf(a.equipment.rarity) - rarityOrder.indexOf(b.equipment.rarity);
+            });
         
         if (this.playerInventory.length === 0) {
             inventoryGrid.innerHTML = '<p style="text-align: center; color: rgba(255,255,255,0.5); grid-column: 1/-1;">No equipment yet. Defeat bosses or visit the shop!</p>';
             return;
         }
+
+        if (visibleItems.length === 0) {
+            inventoryGrid.innerHTML = '<p class="inventory-empty-filter">No equipment matches these filters.</p>';
+            return;
+        }
         
-        this.playerInventory.forEach((equipment, index) => {
+        visibleItems.forEach(({ equipment, index }) => {
             // Ensure equipment has level property (for old saves)
             if (!equipment.level) equipment.level = 1;
             
@@ -3000,27 +3769,38 @@ this.currentBoss = null;
             
             const levelUpCost = this.getLevelUpCost(equipment);
             const canLevelUp = equipment.level < 5;
+            const promotionCost = this.getRarityPromotionCost(equipment);
+            const canPromote = !canLevelUp && Boolean(promotionCost);
             
             const itemDiv = document.createElement('div');
-            itemDiv.className = `inventory-item ${isEquipped ? 'equipped' : ''}`;
+            itemDiv.className = `inventory-item ${isEquipped ? 'equipped' : ''}${equipment.favorite ? ' favorite' : ''}${equipment.locked ? ' locked' : ''}`;
             itemDiv.style.borderColor = this.getRarityColor(equipment.rarity);
-            itemDiv.onclick = () => this.equipFromInventory(index);
+            itemDiv.onclick = () => this.selectEquipmentForComparison(index);
             
             const sellValue = this.getSellValue(equipment);
             const affordable = this.scrap >= levelUpCost;
+            const set = EQUIPMENT_SETS[getEquipmentSetId(equipment)];
 
             itemDiv.innerHTML = `
                 <div class="inventory-item-level">${this.getStarsDisplay(equipment.level)}</div>
                 <div class="inventory-item-name" style="color: ${this.getRarityColor(equipment.rarity)};">${equipment.name}</div>
                 <div class="inventory-item-type">${equipment.type}</div>
+                ${set ? `<div class="inventory-item-set">${set.icon} ${set.name} Set</div>` : ''}
                 <div class="inventory-item-stats">${this.formatEquipmentStats(equipment)}</div>
                 <div class="inventory-item-actions">
+                    <button class="item-flag-btn favorite-btn" data-index="${index}" type="button" title="Keep this item visible as a favorite">${equipment.favorite ? '★ Favorite' : '☆ Favorite'}</button>
+                    <button class="item-flag-btn lock-btn" data-index="${index}" type="button" title="Protect this item from salvage">${equipment.locked ? '🔒 Locked' : '🔓 Lock'}</button>
                     ${canLevelUp ? `
                         <button class="level-up-btn${affordable ? '' : ' unaffordable'}" data-index="${index}"
                                 title="${affordable ? 'Spend scrap to raise this item a level' : 'Not enough scrap yet'}">
                             ⬆️ ${levelUpCost} ⚙️
                         </button>
-                    ` : '<div class="max-level">MAX LEVEL</div>'}
+                    ` : canPromote ? `
+                        <button class="promote-btn${this.scrap >= promotionCost ? '' : ' unaffordable'}" data-index="${index}"
+                                title="Promote this five-star item to the next rarity">
+                            ✨ Promote: ${promotionCost} ⚙️
+                        </button>
+                    ` : '<div class="max-level">LEGENDARY</div>'}
                     ${isEquipped
                         ? '<div class="sell-locked" title="Unequip it before selling">In use</div>'
                         : `<button class="sell-btn" data-index="${index}"
@@ -3034,6 +3814,21 @@ this.currentBoss = null;
                     this.levelUpEquipment(index);
                 };
             }
+            const promoteBtn = itemDiv.querySelector('.promote-btn');
+            if (promoteBtn) {
+                promoteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.promoteEquipment(index);
+                };
+            }
+            itemDiv.querySelector('.favorite-btn').onclick = (e) => {
+                e.stopPropagation();
+                this.toggleEquipmentFlag(index, 'favorite');
+            };
+            itemDiv.querySelector('.lock-btn').onclick = (e) => {
+                e.stopPropagation();
+                this.toggleEquipmentFlag(index, 'locked');
+            };
             const sellBtn = itemDiv.querySelector('.sell-btn');
             if (sellBtn) {
                 sellBtn.onclick = (e) => {
@@ -3045,62 +3840,101 @@ this.currentBoss = null;
             inventoryGrid.appendChild(itemDiv);
         });
     }
+
+    toggleEquipmentFlag(inventoryIndex, flag) {
+        const equipment = this.playerInventory[inventoryIndex];
+        if (!equipment) return;
+        equipment[flag] = !equipment[flag];
+        this.saveInventory();
+        this.renderInventoryItems();
+    }
     
-    // Resolve a picked-up item against what is already owned.
-    //
-    // The old rule matched on name alone, so a Legendary 5-star was thrown away
-    // if you happened to hold the Common level-1 of the same item. Now the
-    // better one is kept, and a genuine duplicate is converted to coins rather
-    // than silently evaporating.
+    // Resolve a picked-up item against what is already owned. Duplicate drops
+    // pause the arena and ask the player to keep, equip, or salvage instead of
+    // silently replacing a build decision.
     collectEquipment(equipment) {
         const index = this.playerInventory.findIndex(item => item.name === equipment.name);
 
         if (index === -1) {
             this.playerInventory.push({ ...equipment });
             this.saveInventory();
+            this.markEquipmentNew(equipment);
             this.showNotification(`Found: ${equipment.name}!`, this.getRarityColor(equipment.rarity));
             return;
         }
 
         const owned = this.playerInventory[index];
-        if (this.scoreEquipment(equipment) > this.scoreEquipment(owned)) {
-            this.playerInventory[index] = { ...equipment };
-            this.saveInventory();
+        this.showDuplicateEquipmentChoice(equipment, owned, index);
+    }
 
-            // If the weaker copy was equipped, swap the upgrade straight in.
-            for (const slot of ['weapon', 'armor', 'accessory', 'ring']) {
-                const worn = this.player ? this.player.equipment[slot] : this.savedEquipment[slot];
-                if (worn && worn.name === equipment.name) {
-                    if (this.player) this.player.equipItem(equipment);
-                    this.savedEquipment[slot] = equipment;
-                    this.saveSavedEquipment();
-                    break;
-                }
-            }
-            this.showNotification(`Upgraded: ${equipment.name}!`, this.getRarityColor(equipment.rarity));
-            return;
+    showDuplicateEquipmentChoice(equipment, owned, inventoryIndex) {
+        this.pendingDuplicateEquipment = { equipment, owned, inventoryIndex };
+        const comparison = document.getElementById('duplicateEquipmentComparison');
+        if (comparison) {
+            const changes = this.getEquipmentStatChanges(owned, equipment);
+            comparison.innerHTML = `
+                <div class="duplicate-equipment-card">
+                    <div class="comparison-label">Current</div>
+                    <div class="comparison-name" style="color: ${this.getRarityColor(owned.rarity)}">${owned.name}</div>
+                    <div class="comparison-stats">${this.formatEquipmentStats(owned)}</div>
+                </div>
+                <div class="duplicate-equipment-arrow">→</div>
+                <div class="duplicate-equipment-card duplicate-equipment-new">
+                    <div class="comparison-label">New Drop</div>
+                    <div class="comparison-name" style="color: ${this.getRarityColor(equipment.rarity)}">${equipment.name}</div>
+                    <div class="comparison-stats">${this.formatEquipmentStats(equipment)}</div>
+                </div>
+                <div class="duplicate-equipment-changes">
+                    ${changes.length
+                        ? changes.map(change => `<span class="comparison-change ${change.className}">${change.text}</span>`).join('')
+                        : '<span class="comparison-no-change">No raw stat changes; compare the effect and tier above.</span>'}
+                </div>
+            `;
+        }
+        this.isPaused = true;
+        document.getElementById('duplicateEquipmentPanel')?.classList.add('active');
+    }
+
+    resolveDuplicateEquipment(action) {
+        const pending = this.pendingDuplicateEquipment;
+        if (!pending) return;
+        const { equipment, inventoryIndex } = pending;
+        this.pendingDuplicateEquipment = null;
+        document.getElementById('duplicateEquipmentPanel')?.classList.remove('active');
+
+        if (action === 'equip') {
+            this.playerInventory[inventoryIndex] = { ...equipment };
+            this.saveInventory();
+            if (this.player) this.player.equipItem(this.playerInventory[inventoryIndex]);
+            this.savedEquipment[equipment.type] = this.playerInventory[inventoryIndex];
+            this.saveSavedEquipment();
+            this.showNotification(`Equipped new ${equipment.name}!`, this.getRarityColor(equipment.rarity));
+        } else if (action === 'salvage') {
+            const value = this.getSellValue(equipment);
+            this.scrap += value;
+            this.saveScrap();
+            this.showNotification(`Salvaged ${equipment.name} → ${value} scrap`);
+        } else {
+            this.showNotification(`Kept your current ${equipment.name}.`);
         }
 
-        // Strictly worse copy — auto-sell it. This used to pay COINS, which
-        // upgrade nothing: the one path in the game that converts unwanted
-        // gear was handing out the wrong currency. It pays the same scrap
-        // selling it by hand would, so ignoring a duplicate costs you nothing.
-        const value = this.getSellValue(equipment);
-        this.scrap += value;
-        this.saveScrap();
-        this.showNotification(`Duplicate ${equipment.name} \u2192 ${value} scrap`);
+        this.updateInventoryEquippedSlots();
+        this.renderInventoryItems();
+        this.isPaused = false;
     }
 
     // ---- Equipment optimiser ------------------------------------------
 
-    // Score an item by what it is actually worth in play. Weights are per point
-    // of the stat, calibrated against how each one is applied in
-    // Player.applyEquipmentBonuses:
+    // Score an item for duplicate resolution only. Player-facing loadout
+    // decisions happen in the inventory, where effect and rarity are visible.
+    // Weights are per point of the stat, calibrated against how each one is
+    // applied in Player.applyEquipmentBonuses:
     //   armor       value/100 -> a point is 1% damage reduction (very strong)
     //   attackSpeed added to a base of 1.0 -> a point is +100% attack rate
     //   speed       added to a base of 120-300 -> a point is worth little
-    // `lifesteal` and `range` are deliberately weighted 0: neither is wired up
-    // to anything yet, so scoring them would produce confidently wrong picks.
+    // Effect values are intentionally ignored here. Duplicate resolution may
+    // replace a clearly weaker copy, but loadout choices belong to the player:
+    // a smaller raw-stat item can still be the right strategic build.
     scoreEquipment(equipment) {
         if (!equipment || !equipment.stats) return 0;
         const WEIGHTS = {
@@ -3120,69 +3954,6 @@ this.currentBoss = null;
         return score;
     }
 
-    // Best owned item for each slot, by score.
-    getOptimalLoadout() {
-        const best = { weapon: null, armor: null, accessory: null, ring: null };
-        const bestScore = { weapon: -1, armor: -1, accessory: -1, ring: -1 };
-
-        this.playerInventory.forEach(item => {
-            if (!item || !(item.type in best)) return;
-            const score = this.scoreEquipment(item);
-            if (score > bestScore[item.type]) {
-                bestScore[item.type] = score;
-                best[item.type] = item;
-            }
-        });
-        return best;
-    }
-
-    // Equip the best owned item in every slot. Works both in a run (applies to
-    // the live player) and from the menu (writes the saved loadout only).
-    optimizeEquipment() {
-        if (this.playerInventory.length === 0) {
-            this.showNotification('No equipment to optimise yet.');
-            return;
-        }
-
-        const best = this.getOptimalLoadout();
-        const changed = [];
-
-        for (const slot of ['weapon', 'armor', 'accessory', 'ring']) {
-            const item = best[slot];
-            if (!item) continue;
-
-            // Skip slots already holding the best item, so the summary only
-            // reports real changes.
-            const current = this.player ? this.player.equipment[slot] : this.savedEquipment[slot];
-            if (current && current.name === item.name && (current.level || 1) === (item.level || 1)) continue;
-
-            if (this.player) this.player.equipItem(item);
-            this.savedEquipment[slot] = item;
-            changed.push(item.name);
-        }
-
-        this.saveSavedEquipment();
-        this.updateInventoryEquippedSlots();
-        this.renderInventoryItems();
-        if (this.updatePauseMenuEquipment) this.updatePauseMenuEquipment();
-
-        const message = changed.length === 0
-            ? 'Already wearing your best gear.'
-            : `Equipped ${changed.join(', ')}`;
-
-        if (changed.length > 0) this.audioManager.playSound('equip-item');
-        this.showNotification(changed.length === 0 ? message : `Optimised: ${changed.join(', ')}`);
-
-        // The stage-complete panel has its own inline readout, because a
-        // toast that appears behind a full-screen panel is a toast nobody sees.
-        const out = document.getElementById('stageOptimizeResult');
-        if (out) {
-            out.textContent = message;
-            out.classList.add('shown');
-        }
-        return changed;
-    }
-
     equipFromInventory(index) {
         const equipment = this.playerInventory[index];
         if (this.player) {
@@ -3193,6 +3964,7 @@ this.currentBoss = null;
             this.saveSavedEquipment();
             this.showNotification(`Equipped ${equipment.name}!`);
             this.updateInventoryEquippedSlots();
+            this.updatePauseMenuEquipment();
             this.renderInventoryItems();
         } else {
             // In menu: save to loadout
@@ -3200,6 +3972,7 @@ this.currentBoss = null;
             this.saveSavedEquipment();
             this.showNotification(`${equipment.name} will be equipped on game start!`);
             this.updateInventoryEquippedSlots();
+            this.updatePauseMenuEquipment();
             this.renderInventoryItems();
         }
     }
@@ -3234,23 +4007,35 @@ this.currentBoss = null;
         slots.forEach(slot => {
             const slotElement = document.getElementById(`pause-${slot}`);
             const equippedItem = this.player?.equipment?.[slot];
+            const hasOptions = this.playerInventory.some(item => item && item.type === slot);
             
             if (equippedItem) {
                 slotElement.innerHTML = `
                     <div style="color: ${this.getRarityColor(equippedItem.rarity)}; font-weight: bold; font-size: 0.9em;">${equippedItem.name}</div>
-                    <div style="font-size: 0.75em; color: rgba(255,255,255,0.5);">(Click to unequip)</div>
+                    <div style="font-size: 0.75em; color: rgba(255,255,255,0.5);">Click to browse alternatives</div>
+                    <button class="pause-unequip-btn" type="button">Unequip</button>
                 `;
                 slotElement.classList.add('equipped');
                 slotElement.style.cursor = 'pointer';
                 slotElement.onclick = () => {
+                    this.openInventory();
+                    this.selectInventoryType(slot);
+                };
+                slotElement.querySelector('.pause-unequip-btn').onclick = (e) => {
+                    e.stopPropagation();
                     this.unequipFromInventory(slot);
                     this.updatePauseMenuEquipment();
                 };
             } else {
-                slotElement.innerHTML = 'Empty';
+                slotElement.innerHTML = hasOptions
+                    ? '<div class="pause-slot-available">Gear available</div><div>Click to equip</div>'
+                    : '<div>Empty</div><div class="pause-slot-hint">No gear yet</div>';
                 slotElement.classList.remove('equipped');
-                slotElement.style.cursor = 'default';
-                slotElement.onclick = null;
+                slotElement.style.cursor = hasOptions ? 'pointer' : 'default';
+                slotElement.onclick = hasOptions ? () => {
+                    this.openInventory();
+                    this.selectInventoryType(slot);
+                } : null;
             }
         });
     }
@@ -3878,8 +4663,14 @@ drawAchievementNotifications() {
         const cfg = GAME_CONFIG;
         const minutes = this.gameTime / 60;
 
-        // Enemy health drifts up with elapsed time (used as the Enemy multiplier).
+        // Enemy health and ordinary damage drift up with elapsed time. The
+        // multiplier is passed into each enemy so every spawned threat shares
+        // the same readable difficulty curve.
         this.waveMultiplier = 1 + minutes * cfg.enemy.healthGrowthPerMinute;
+        if (this.endlessMode) {
+            const baseline = GAME_CONFIG.endless.baselineScalePerStage || 0;
+            this.waveMultiplier *= 1 + Math.max(0, this.currentStage - 1) * baseline;
+        }
 
         // Wave director: which enemies spawn, and how fast, is a function of time.
         const wave = getWaveForTime(this.gameTime);
@@ -4223,7 +5014,6 @@ drawAchievementNotifications() {
         this.updateBossHealthBar();
         this.refreshLevelUpBadge();
         this.refreshBombButton();
-        this.refreshOptimizeBadge();
         
         // Health
         const healthPercent = (this.player.health / this.player.maxHealth) * 100;
@@ -4656,6 +5446,7 @@ drawAchievementNotifications() {
     updateLoadoutHUD() {
         const container = document.getElementById('loadoutDisplay');
         if (!container || !this.player) return;
+        this.updateBuildSummaryHUD();
 
         const weapons = this.player.weapons;
         const passives = this.player.passives || {};
@@ -4693,6 +5484,32 @@ drawAchievementNotifications() {
         container.innerHTML =
             `<div class="loadout-row">${weaponHTML}</div>` +
             (passiveHTML ? `<div class="loadout-row">${passiveHTML}</div>` : '');
+    }
+
+    updateBuildSummaryHUD() {
+        const container = document.getElementById('buildSummaryHUD');
+        if (!container || !this.player) return;
+        const counts = {};
+        Object.values(this.player.equipment || {}).forEach(item => {
+            const setId = getEquipmentSetId(item);
+            if (setId) counts[setId] = (counts[setId] || 0) + 1;
+        });
+        const setText = Object.entries(counts).map(([setId, count]) => {
+            const set = EQUIPMENT_SETS[setId];
+            const pieceCount = set.pieces?.length || 4;
+            return `${set.icon} ${set.name} ${count}/${pieceCount}`;
+        });
+        const effectLabels = {
+            lifesteal: 'Lifesteal', health_regen: 'Regen', dodge_chance: 'Dodge',
+            crit_chance: 'Crit', chain_lightning: 'Chain', slow_enemies: 'Slow',
+            time_slow: 'Time Slow', ultimate_charge: 'Ult Charge', damage_boost_low_hp: 'Low HP Damage'
+        };
+        const effects = Object.keys(effectLabels).map(effect => {
+            const value = this.player.getEffectValue(effect);
+            return value > 0 ? `${effectLabels[effect]} ${effect === 'chain_lightning' ? Math.floor(value) : Math.round(value) + '%'}` : '';
+        }).filter(Boolean);
+        container.innerHTML = `<span>${setText.length ? setText.join(' · ') : 'No set active'}</span>` +
+            (effects.length ? `<span class="build-summary-effects">${effects.join(' · ')}</span>` : '');
     }
 
     // ---- Permanent upgrade shop ------------------------------------------
@@ -4764,7 +5581,7 @@ drawAchievementNotifications() {
             'vitalisArenaSavedEquipment', 'vitalisArenaTotalBosses',
             'vitalisArenaCharacterWins', 'vitalisArenaMetaUpgrades',
             'vitalisArenaScrap', 'vitalisArenaMinimap',
-            'vitalisArenaEndlessUnlocked'
+            'vitalisArenaEndlessUnlocked', 'vitalisArenaLoadoutPresets'
         ];
         keys.forEach(k => localStorage.removeItem(k));
         window.location.reload();
@@ -4814,9 +5631,10 @@ drawAchievementNotifications() {
         if (chest.collected) return;
         chest.collected = true;
         this.runStats.chestsOpened++;
+        this.recordTrialProgress();
         this.audioManager.playSound('chest-open');
         this.screenShake = GAME_CONFIG.juice.shake.chestOpen;
-        this.showChestScreen(this.rollChestReward(chest));
+        this.showChestScreen(this.rollChestRewards(chest));
     }
 
     // A weapon evolves when it is at max level AND its required passive is owned.
@@ -4835,25 +5653,67 @@ drawAchievementNotifications() {
 
     // Decide what a chest gives. Evolution wins whenever it is possible — it is
     // the headline reward and the reason to hold a weapon at max level.
-    rollChestReward(chest) {
+    rollChestRewards(chest) {
+        const rewards = [];
+        const signatures = new Set();
+        const add = reward => {
+            const signature = reward.type === 'weapon_level'
+                ? `${reward.type}:${reward.weapon.type}`
+                : reward.type === 'passive_level' || reward.type === 'new_passive'
+                    ? `${reward.type}:${reward.passive.id}`
+                    : `${reward.type}:${reward.weaponType || reward.amount || ''}`;
+            if (!signatures.has(signature)) {
+                signatures.add(signature);
+                rewards.push(reward);
+            }
+        };
+
+        // Evolution is always the first choice when the player has earned it.
+        const evolvable = this.getEvolvableWeapons(this.player);
+        if (evolvable.length) {
+            const pick = evolvable[Math.floor(Math.random() * evolvable.length)];
+            add({ type: 'evolution', weapon: pick.weapon, evolution: pick.evolution });
+        }
+
+        // Fill the remaining slots with distinct meaningful choices. The
+        // fallback is only used after every weapon and passive is complete.
+        let attempts = 0;
+        while (rewards.length < 3 && attempts++ < 16) {
+            const reward = this.rollChestReward(chest, false);
+            add(reward);
+            if (reward.type === 'coins' || reward.type === 'heal') {
+                // Once the pool is exhausted, stop searching for distinct
+                // rewards and fill the remaining cards with the fallback pool.
+                if (rewards.length >= 3) break;
+            }
+        }
+        while (rewards.length < 3) {
+            rewards.push({ type: rewards.length % 2 ? 'heal' : 'coins', amount: 150 });
+        }
+        return rewards.slice(0, 3);
+    }
+
+    rollChestReward(chest, allowEvolution = true) {
         const player = this.player;
         const luck = player.getLuck ? player.getLuck() : 0;
 
         const evolvable = this.getEvolvableWeapons(player);
-        if (evolvable.length > 0) {
+        if (allowEvolution && evolvable.length > 0) {
             const pick = evolvable[Math.floor(Math.random() * evolvable.length)];
             return { type: 'evolution', weapon: pick.weapon, evolution: pick.evolution };
         }
 
         const weapons = player.weapons.filter(w => !w.isMaxLevel);
-        const passives = PASSIVE_POOL.filter(p => {
-            const l = player.getPassiveLevel(p.id);
-            return l > 0 && l < PASSIVE_MAX_LEVEL;
-        });
+        const ownedWeapons = player.weapons.map(w => w.type);
+        const newWeapons = Object.keys(SpecialWeapon.NAMES)
+            .filter(type => !ownedWeapons.includes(type));
+        const passives = PASSIVE_POOL.filter(p => player.getPassiveLevel(p.id) < PASSIVE_MAX_LEVEL);
 
         const options = [];
         if (weapons.length) options.push('weapon');
-        if (passives.length) options.push('passive');
+        if (newWeapons.length) options.push('new_weapon');
+        if (passives.some(p => player.getPassiveLevel(p.id) > 0)) options.push('passive');
+        if (passives.some(p => player.getPassiveLevel(p.id) === 0)) options.push('new_passive');
 
         // Nothing left to upgrade — fall back to coins or a full heal.
         if (options.length === 0) {
@@ -4864,10 +5724,21 @@ drawAchievementNotifications() {
             return { type: 'heal' };
         }
 
-        if (options[Math.floor(Math.random() * options.length)] === 'weapon') {
+        const choice = options[Math.floor(Math.random() * options.length)];
+        if (choice === 'weapon') {
             return { type: 'weapon_level', weapon: weapons[Math.floor(Math.random() * weapons.length)] };
         }
-        return { type: 'passive_level', passive: passives[Math.floor(Math.random() * passives.length)] };
+        if (choice === 'new_weapon') {
+            const type = newWeapons[Math.floor(Math.random() * newWeapons.length)];
+            return { type: 'new_weapon', weaponType: type };
+        }
+        const passivePool = passives.filter(p => choice === 'new_passive'
+            ? player.getPassiveLevel(p.id) === 0
+            : player.getPassiveLevel(p.id) > 0);
+        return {
+            type: choice === 'new_passive' ? 'new_passive' : 'passive_level',
+            passive: passivePool[Math.floor(Math.random() * passivePool.length)]
+        };
     }
 
     applyChestReward(reward) {
@@ -4883,7 +5754,13 @@ drawAchievementNotifications() {
             case 'weapon_level':
                 reward.weapon.levelUpWeapon();
                 break;
+            case 'new_weapon':
+                player.addWeapon(reward.weaponType);
+                break;
             case 'passive_level':
+                player.addPassive(reward.passive.id);
+                break;
+            case 'new_passive':
                 player.addPassive(reward.passive.id);
                 break;
             case 'coins':
@@ -4909,12 +5786,25 @@ drawAchievementNotifications() {
                 return `<div class="chest-reward-icon">${reward.weapon.getIcon()}</div>
                     <div class="chest-reward-name">${reward.weapon.getDisplayName()}</div>
                     <div class="chest-reward-desc">Weapon level ${reward.weapon.level} \u00b7 ${reward.weapon.getDisplayTier().name}</div>`;
+            case 'new_weapon': {
+                const icon = SpecialWeapon.ICONS[reward.weaponType];
+                const name = SpecialWeapon.NAMES[reward.weaponType];
+                return `<div class="chest-reward-icon">${icon}</div>
+                    <div class="chest-reward-name">${name}</div>
+                    <div class="chest-reward-desc">New weapon added to your arsenal.</div>`;
+            }
             case 'passive_level': {
                 const p = reward.passive;
                 const lvl = this.player.getPassiveLevel(p.id);
                 return `<div class="chest-reward-icon">${p.icon}</div>
                     <div class="chest-reward-name" style="color:${p.color}">${p.name}</div>
                     <div class="chest-reward-desc">Level ${lvl} \u00b7 ${p.format(passiveValue(p, lvl))}</div>`;
+            }
+            case 'new_passive': {
+                const p = reward.passive;
+                return `<div class="chest-reward-icon">${p.icon}</div>
+                    <div class="chest-reward-name" style="color:${p.color}">${p.name}</div>
+                    <div class="chest-reward-desc">New passive · ${p.format(passiveValue(p, 1))}</div>`;
             }
             case 'coins':
                 return `<div class="chest-reward-icon">🪙</div>
@@ -4930,8 +5820,9 @@ drawAchievementNotifications() {
     // Chest flow: shake, burst, reveal. The reward is applied at the reveal so
     // the animation and the effect land together.
     showChestScreen(reward) {
+        const rewards = Array.isArray(reward) ? reward : [reward];
         const panel = document.getElementById('chestPanel');
-        if (!panel) { this.applyChestReward(reward); return; }
+        if (!panel) { this.applyChestReward(rewards[0]); return; }
 
         this.isPaused = true;
         const anim = document.getElementById('chestAnimation');
@@ -4947,20 +5838,26 @@ drawAchievementNotifications() {
 
         const revealTimer = setTimeout(() => {
             anim.className = 'chest-animation burst';
-            this.applyChestReward(reward);
-            result.innerHTML = this.formatChestReward(reward);
+            result.innerHTML = `<div class="chest-choice-prompt">Choose one reward</div>` +
+                rewards.map((item, index) => `<button class="chest-choice" data-choice="${index}">
+                    ${this.formatChestReward(item)}
+                    <span class="chest-choice-cta">Take this reward</span>
+                </button>`).join('');
             result.classList.add('visible');
             hint.classList.add('visible');
             this.chestRewardReady = true;
         }, 900);
         this.activeTimers.push(revealTimer);
 
-        const close = () => {
+        const choose = index => {
             if (!this.chestRewardReady) return;   // let the reveal finish first
+            const selected = rewards[index];
+            if (!selected) return;
             this.chestRewardReady = false;
+            this.applyChestReward(selected);
             panel.classList.remove('active');
             document.removeEventListener('keydown', keyHandler);
-            panel.removeEventListener('click', close);
+            panel.removeEventListener('click', panelClick);
 
             if (!this.isRunning) return;          // run ended while the chest was open
             // Queued level-ups are no longer chained automatically; the badge
@@ -4968,11 +5865,15 @@ drawAchievementNotifications() {
             this.isPaused = false;
             this.refreshLevelUpBadge();
         };
+        const panelClick = e => {
+            const choice = e.target.closest?.('.chest-choice');
+            if (choice) choose(Number(choice.dataset.choice));
+        };
         const keyHandler = (e) => {
-            if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); close(); }
+            if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); choose(0); }
         };
         document.addEventListener('keydown', keyHandler);
-        panel.addEventListener('click', close);
+        panel.addEventListener('click', panelClick);
     }
 
     createRunStats() {
@@ -5051,6 +5952,9 @@ drawAchievementNotifications() {
             // Ensure all items have level property (for old saves)
             this.playerInventory.forEach(item => {
                 if (!item.level) item.level = 1;
+                if (!item.setId) item.setId = getEquipmentSetId(item);
+                item.favorite = Boolean(item.favorite);
+                item.locked = Boolean(item.locked);
             });
         }
     }
@@ -5093,6 +5997,11 @@ drawAchievementNotifications() {
         const equipment = this.playerInventory[inventoryIndex];
         if (!equipment) return;
 
+        if (equipment.locked || equipment.favorite) {
+            this.showNotification('Unlock and unfavorite this item before salvaging it.');
+            return;
+        }
+
         // Selling what you are wearing is almost always a misclick, and it
         // silently strips a slot mid-run. Compared by name and slot, matching
         // both the card that renders the button and every other equipment
@@ -5124,12 +6033,32 @@ drawAchievementNotifications() {
             // Ensure all items have level property (for old saves)
             Object.values(this.savedEquipment).forEach(item => {
                 if (item && !item.level) item.level = 1;
+                if (item && !item.setId) item.setId = getEquipmentSetId(item);
             });
         }
     }
     
     saveSavedEquipment() {
         localStorage.setItem('vitalisArenaSavedEquipment', JSON.stringify(this.savedEquipment));
+    }
+
+    loadLoadoutPresets() {
+        const saved = localStorage.getItem('vitalisArenaLoadoutPresets');
+        if (!saved) return;
+        try {
+            const parsed = JSON.parse(saved);
+            Object.keys(this.loadoutPresets).forEach(name => {
+                if (parsed[name] && typeof parsed[name] === 'object') {
+                    this.loadoutPresets[name] = parsed[name];
+                }
+            });
+        } catch (error) {
+            console.warn('Could not load loadout presets', error);
+        }
+    }
+
+    saveLoadoutPresets() {
+        localStorage.setItem('vitalisArenaLoadoutPresets', JSON.stringify(this.loadoutPresets));
     }
     
     checkAchievements() {
@@ -5255,6 +6184,35 @@ drawAchievementNotifications() {
         
         panel.classList.add('active');
     }
+
+    showEvolutionCodex() {
+        const panel = document.getElementById('evolutionCodexPanel');
+        const grid = document.getElementById('evolutionCodexGrid');
+        if (!panel || !grid) return;
+
+        const player = this.player;
+        grid.innerHTML = EVOLUTIONS.map(evolution => {
+            const weapon = player?.weapons?.find(w => w.type === evolution.base);
+            const weaponLevel = weapon?.level || 0;
+            const passiveLevel = player?.getPassiveLevel(evolution.requires) || 0;
+            const evolved = !!weapon?.isEvolved;
+            const ready = weaponLevel >= GAME_CONFIG.weapons.maxLevel && passiveLevel > 0;
+            const weaponName = SpecialWeapon.NAMES[evolution.base] || evolution.base;
+            const passive = getPassiveById(evolution.requires);
+            const status = evolved ? 'EVOLVED' : ready ? 'READY: open a treasure chest' : 'IN PROGRESS';
+
+            return `<div class="evolution-codex-card ${evolved ? 'evolved' : ready ? 'ready' : ''}">
+                <div class="evolution-codex-icon">${evolution.icon}</div>
+                <div class="evolution-codex-name">${evolution.name}</div>
+                <div class="evolution-codex-desc">${evolution.desc}</div>
+                <div class="evolution-codex-status">${status}</div>
+                <div class="evolution-codex-progress">${weaponName}: ${weaponLevel}/${GAME_CONFIG.weapons.maxLevel}</div>
+                <div class="evolution-codex-progress">${passive?.name || evolution.requires}: ${passiveLevel}/${PASSIVE_MAX_LEVEL}</div>
+            </div>`;
+        }).join('');
+
+        panel.classList.add('active');
+    }
 }
 
 // Player Class
@@ -5311,7 +6269,7 @@ class Player {
         this.invulnerable = false;
         this.iframeTimer = 0;
         this.iframeDuration = 2.0; // 2 seconds of invulnerability after being hit
-        this.autoRevivesUsed = 0;  // Phoenix Feather charges spent this run
+        this.autoRevivesUsed = 0;  // Phoenix Feather charges spent this stage
         
         // Special weapons
         this.weapons = [];
@@ -6019,7 +6977,9 @@ class Player {
             .find(e => e && e.effect === 'auto_revive');
         if (!item) return false;
 
-        const charges = item.effectValue || 1;
+        // Effect values scale with rarity and stars, so normalize to an
+        // integer charge count instead of allowing fractional revives.
+        const charges = Math.max(1, Math.round(Number(item.effectValue) || 1));
         if ((this.autoRevivesUsed || 0) >= charges) return false;
         this.autoRevivesUsed = (this.autoRevivesUsed || 0) + 1;
 
@@ -6051,8 +7011,8 @@ class Player {
         }));
         const left = charges - this.autoRevivesUsed;
         g.showNotification(left > 0
-            ? `\u{1F525} Phoenix Feather! ${left} left`
-            : '\u{1F525} Phoenix Feather burns out');
+            ? `\u{1F525} Phoenix Feather! ${left} left this stage`
+            : '\u{1F525} Phoenix Feather is spent this stage');
         return true;
     }
 
@@ -6073,8 +7033,9 @@ class Player {
         if (this.game) this.game.refreshLevelUpBadge();
     }
 
-    // Show one queued level-up screen. Only one screen may be open at a time
-    // across both players, so the rest stay queued until it is dismissed.
+    // Show one queued level-up screen. Choosing an upgrade immediately opens
+    // the next queued choice, so a large XP pickup is one uninterrupted visit
+    // instead of requiring the player to press L once per level.
     processPendingLevelUps() {
         const game = this.game || window.game;
         if (!game || !game.isRunning) return;
@@ -6113,10 +7074,27 @@ class Player {
     // and is rebuilt on every equip change rather than walked per hit.
     rebuildEffectValues() {
         this._effectValues = Object.create(null);
-        Object.values(this.equipment || {}).forEach(item => {
+        const equippedItems = Object.values(this.equipment || {});
+        equippedItems.forEach(item => {
             if (!item || !item.effect) return;
             this._effectValues[item.effect] =
                 (this._effectValues[item.effect] || 0) + (Number(item.effectValue) || 0);
+        });
+
+        const setCounts = {};
+        equippedItems.forEach(item => {
+            const setId = getEquipmentSetId(item);
+            if (setId) setCounts[setId] = (setCounts[setId] || 0) + 1;
+        });
+        Object.entries(setCounts).forEach(([setId, count]) => {
+            const set = EQUIPMENT_SETS[setId];
+            if (!set) return;
+            Object.entries(set.bonuses).forEach(([threshold, bonus]) => {
+                if (count < Number(threshold)) return;
+                Object.entries(bonus.effects || {}).forEach(([effect, value]) => {
+                    this._effectValues[effect] = (this._effectValues[effect] || 0) + value;
+                });
+            });
         });
     }
 
@@ -6400,7 +7378,11 @@ class Player {
         const title = document.getElementById('levelUpTitle');
         if (title) {
             const who = this.isP2 ? 'Player 2' : (game.coopMode ? 'Player 1' : '');
-            title.textContent = who ? `🎉 ${who} \u2014 Level ${this.level}!` : `🎉 Level ${this.level}!`;
+            const queued = this.pendingLevelUps + 1;
+            const queueLabel = queued > 1 ? ` · ${queued} upgrades queued` : '';
+            title.textContent = who
+                ? `🎉 ${who} \u2014 Level ${this.level}${queueLabel}`
+                : `🎉 Level ${this.level}${queueLabel}`;
         }
 
         upgradeOptions.innerHTML = '';
@@ -6432,10 +7414,18 @@ class Player {
             game.levelUpScreenOwner = null;
             if (game.updateLoadoutHUD) game.updateLoadoutHUD();
 
-            // No longer chains into the next queued level-up — the badge says
-            // how many are waiting and the player opens them deliberately.
-            game.isPaused = false;
             game.refreshLevelUpBadge();
+
+            // Stay in the level-up flow while this player has more choices.
+            // If co-op's other player is waiting, hand the same screen over
+            // to them before returning control to the arena.
+            game.levelUpScreenOwner = null;
+            if (self.pendingLevelUps > 0) {
+                self.processPendingLevelUps();
+            } else {
+                game.isPaused = false;
+                game.openQueuedLevelUp();
+            }
         }
 
         // Keyboard picks: 1, 2, 3.
@@ -7273,6 +8263,27 @@ class Enemy {
         
         this.health = this.maxHealth * multiplier;
         this.maxHealth = this.health;
+        // Health was already using the time multiplier, but ordinary contact
+        // and enemy projectile damage stayed at base values indefinitely.
+        const damageMultiplier = 1 + ((game?.gameTime || 0) / 60) * GAME_CONFIG.enemy.damageGrowthPerMinute;
+        this.damage *= damageMultiplier;
+        if (this.stats.projectileDamage) this.projectileDamage = this.stats.projectileDamage * damageMultiplier;
+        if (this.stats.blastDamage) this.blastDamage = this.stats.blastDamage * damageMultiplier;
+        if (game?.endlessMode && this.type !== 'boss') {
+            for (const mutation of game.endlessMutations || []) {
+                const level = mutation.level || 1;
+                if (mutation.healthScale) {
+                    this.maxHealth *= Math.pow(mutation.healthScale, level);
+                    this.health = this.maxHealth;
+                }
+                if (mutation.damageScale) {
+                    this.damage *= Math.pow(mutation.damageScale, level);
+                    if (this.projectileDamage) this.projectileDamage *= Math.pow(mutation.damageScale, level);
+                    if (this.blastDamage) this.blastDamage *= Math.pow(mutation.damageScale, level);
+                }
+                if (mutation.speedScale) this.baseSpeed *= Math.pow(mutation.speedScale, level);
+            }
+        }
         this.stunned = 0;
         this.hitFlash = 0;   // seconds remaining on the white damage flash
 
@@ -7496,7 +8507,7 @@ class Enemy {
             this.fireTimer = s.fireCooldown;
             const angle = Math.atan2(player.y - this.y, player.x - this.x);
             const shot = new BossProjectile(
-                this.x, this.y, angle, s.projectileSpeed, s.projectileDamage, this.game
+                this.x, this.y, angle, s.projectileSpeed, this.projectileDamage || s.projectileDamage, this.game
             );
             shot.color = this.color;
             shot.radius = 7;
@@ -7581,7 +8592,7 @@ class Enemy {
         this.hasDetonated = true;
         const s = this.stats;
         const radius = s.blastRadius || 100;
-        const damage = s.blastDamage || 20;
+        const damage = this.blastDamage || s.blastDamage || 20;
 
         for (const p of [this.game.player, this.game.player2]) {
             if (!p || p.health <= 0 || p.downed) continue;

@@ -39,6 +39,7 @@
         <p class="game-subtitle">Select Your Hero</p>
         <p class="progress-note">Coins, gear and upgrades carry over between runs.
            <button id="resetProgressBtn" class="link-btn">Start fresh</button></p>
+        <div id="activeTrialBanner" class="active-trial-banner" hidden aria-live="polite"></div>
         
         <!-- Co-op Toggle -->
         <div class="coop-toggle-container">
@@ -70,8 +71,11 @@
 
         <button id="achievementsBtn" class="achievements-button">🏆 Achievements</button>
         <button id="menuShopBtn" class="menu-shop-button">🛒 Shop</button>
-        <button id="menuOptimizeBtn" class="menu-optimize-button" title="Equip the best item you own in every slot">⚡ Optimize</button>
-        <button id="inventoryBtn" class="inventory-button">🎒 Inventory</button>
+        <button id="evolutionCodexBtn" class="evolution-codex-button">📜 Evolutions</button>
+        <button id="trialsBtn" class="trials-button">⚔️ Trials</button>
+        <button id="inventoryBtn" class="inventory-button">
+            🎒 Inventory <span id="inventoryNewBadge" class="inventory-new-badge" hidden>New</span>
+        </button>
         <button id="metaShopBtn" class="meta-shop-button">⭐ Upgrades</button>
         <!-- Superseded by the mode picker above. Kept in the DOM because
              refreshEndlessToggle still updates it and other code reads it;
@@ -82,6 +86,28 @@
                  HERO_DATA. Kept out of the markup so the stats can be
                  derived from the same numbers the game runs on instead
                  of being retyped here and drifting from them. -->
+        </div>
+    </div>
+
+    <!-- Evolution Codex -->
+    <div id="evolutionCodexPanel" class="overlay">
+        <div class="evolution-codex-panel">
+            <div class="codex-header">
+                <h2>📜 Evolution Codex</h2>
+                <p>Reach weapon level 8 and own the required passive. The next treasure chest evolves it.</p>
+            </div>
+            <div id="evolutionCodexGrid" class="evolution-codex-grid"></div>
+            <button id="closeEvolutionCodex" class="btn-primary">Close</button>
+        </div>
+    </div>
+
+    <!-- Achievements Panel -->
+    <div id="trialsPanel" class="overlay">
+        <div class="trials-panel">
+            <h2>⚔️ Trials</h2>
+            <p class="trials-intro">Choose one challenge before a run. Complete it to earn a guaranteed piece from the matching set.</p>
+            <div id="trialsGrid" class="trials-grid"></div>
+            <button id="closeTrialsBtn" class="btn-primary">Close</button>
         </div>
     </div>
 
@@ -263,6 +289,7 @@
                         <div class="empty-slot">💍</div>
                     </div>
                 </div>
+                <div id="buildSummaryHUD" class="build-summary-hud" aria-live="polite"></div>
             </div>
             
             <!-- Weapons and passives owned this run -->
@@ -279,9 +306,9 @@
                 <span class="badge-icon">💣</span>
                 <span class="badge-label" id="bombLabel">Bomb &middot; E</span>
             </button>
-            <button id="optimizeBadge" class="action-badge optimize-badge" style="display:none;" title="Equip the best item you own in every slot">
-                <span class="badge-icon">⚡</span>
-                <span class="badge-label">Optimize &middot; O</span>
+            <button id="equipmentBadge" class="action-badge equipment-badge" style="display:none;">
+                <span class="badge-icon">🎒</span>
+                <span class="badge-label" id="equipmentBadgeLabel">Gear Ready · I</span>
             </button>
 
             <button id="ultimateButton" class="ultimate-button">
@@ -310,7 +337,7 @@
         <div id="levelUpScreen" class="overlay">
             <div class="level-up-panel">
                 <h2 id="levelUpTitle">🎉 Level Up!</h2>
-                <p>Choose an upgrade:</p>
+                <p>Choose an upgrade. Your remaining level-ups will follow automatically.</p>
                 <div id="upgradeOptions" class="upgrade-grid"></div>
             </div>
         </div>
@@ -320,7 +347,21 @@
             <div class="chest-panel">
                 <div id="chestAnimation" class="chest-animation">🎁</div>
                 <div id="chestResult" class="chest-result"></div>
-                <div id="chestHint" class="chest-hint">Press SPACE or click to continue</div>
+                <div id="chestHint" class="chest-hint">Choose one reward, or press SPACE to take the first</div>
+            </div>
+        </div>
+
+        <!-- Duplicate equipment choice -->
+        <div id="duplicateEquipmentPanel" class="overlay">
+            <div class="duplicate-equipment-panel">
+                <h2>Equipment Duplicate</h2>
+                <p>This drop is another copy of an item you own. Choose what to do with it.</p>
+                <div id="duplicateEquipmentComparison" class="duplicate-equipment-comparison"></div>
+                <div class="duplicate-equipment-actions">
+                    <button id="keepDuplicateBtn" class="btn-secondary" type="button">Keep Current</button>
+                    <button id="equipDuplicateBtn" class="btn-primary" type="button">Equip New</button>
+                    <button id="salvageDuplicateBtn" class="btn-secondary" type="button">Salvage for Scrap</button>
+                </div>
             </div>
         </div>
 
@@ -344,10 +385,10 @@
                     </div>
                 </div>
                 <div class="stage-complete-actions">
-                    <button id="stageOptimizeBtn" class="btn-secondary"
-                            title="Equip the best item you own in every slot">⚡ Optimize Loadout</button>
-                    <div id="stageOptimizeResult" class="stage-optimize-result"></div>
+                    <button id="manageLoadoutBtn" class="btn-secondary"
+                            title="Open your inventory to choose equipment">🎒 Manage Loadout</button>
                     <button id="nextStageBtn" class="btn-primary btn-large">Continue to Next Stage</button>
+                    <div class="stage-continue-hint">Press SPACE to continue</div>
                 </div>
             </div>
         </div>
@@ -434,8 +475,14 @@
             <div class="inventory-header">
                 <div class="coins-display">🪙 <span id="inventoryCoins">0</span></div>
                 <div class="scrap-display" title="Scrap upgrades gear. Sell what you have outgrown to earn it.">⚙️ <span id="inventoryScrap">0</span></div>
-                <button id="optimizeEquipmentBtn" class="optimize-button"
-                        title="Equip the best item you own in every slot">⚡ Optimize</button>
+            </div>
+            <div id="inventoryEquipmentNotice" class="inventory-equipment-notice" hidden></div>
+            <div class="loadout-presets-section">
+                <div class="inventory-section-heading">
+                    <h3>Build Presets</h3>
+                    <span class="inventory-browse-hint">Save effect-focused builds for quick swaps.</span>
+                </div>
+                <div id="loadoutPresets" class="loadout-presets"></div>
             </div>
             <div class="equipped-section">
                 <h3>Equipped Items</h3>
@@ -457,9 +504,62 @@
                         <div id="inv-ring" class="inventory-slot-content">Empty</div>
                     </div>
                 </div>
+                <div class="set-bonuses-section">
+                    <h3>Set Bonuses</h3>
+                    <div id="inventorySetBonuses" class="set-bonuses-list"></div>
+                </div>
             </div>
             <div class="inventory-section">
-                <h3>All Equipment</h3>
+                <div class="inventory-section-heading">
+                    <h3>Equipment</h3>
+                    <button id="inventoryAllBtn" class="inventory-view-all-btn" type="button">View All</button>
+                </div>
+                <p class="inventory-browse-hint">Click an equipped slot above to browse replacements for that slot.</p>
+                <div class="inventory-filters" aria-label="Filter equipment">
+                    <select id="inventoryTypeFilter" aria-label="Filter by equipment type">
+                        <option value="all">All Slots</option>
+                        <option value="weapon">Weapons</option>
+                        <option value="armor">Armor</option>
+                        <option value="accessory">Accessories</option>
+                        <option value="ring">Rings</option>
+                    </select>
+                    <select id="inventoryRarityFilter" aria-label="Filter by rarity">
+                        <option value="all">All Tiers</option>
+                        <option value="COMMON">Common</option>
+                        <option value="UNCOMMON">Uncommon</option>
+                        <option value="RARE">Rare</option>
+                        <option value="EPIC">Epic</option>
+                        <option value="LEGENDARY">Legendary</option>
+                    </select>
+                    <select id="inventoryEffectFilter" aria-label="Filter by effect">
+                        <option value="all">All Effects</option>
+                        <option value="crit_chance">Critical</option>
+                        <option value="lifesteal">Lifesteal</option>
+                        <option value="chain_lightning">Chain Lightning</option>
+                        <option value="slow_enemies">Slow Enemies</option>
+                        <option value="time_slow">Time Slow</option>
+                        <option value="dodge_chance">Dodge</option>
+                        <option value="damage_boost_low_hp">Low-Health Damage</option>
+                        <option value="health_regen">Health Regen</option>
+                        <option value="ultimate_charge">Ultimate Charge</option>
+                        <option value="auto_revive">Auto Revive</option>
+                    </select>
+                    <select id="inventorySetFilter" aria-label="Filter by set">
+                        <option value="all">All Sets</option>
+                        <option value="blood_court">Blood Court</option>
+                        <option value="frostbound">Frostbound</option>
+                        <option value="stormcaller">Stormcaller</option>
+                        <option value="iron_bastion">Iron Bastion</option>
+                    </select>
+                    <select id="inventorySort" aria-label="Sort inventory">
+                        <option value="rarity">Sort: Rarity</option>
+                        <option value="level">Sort: Level</option>
+                        <option value="name">Sort: Name</option>
+                        <option value="set">Sort: Set</option>
+                    </select>
+                </div>
+                <p class="inventory-strategy-note">Build around effects you enjoy. Raise an item to 5 stars, then promote it through the tiers toward Legendary.</p>
+                <div id="inventoryComparison" class="inventory-comparison" hidden></div>
                 <div id="inventoryGrid" class="inventory-grid"></div>
             </div>
             <button id="closeInventoryBtn" class="btn-primary">Close</button>

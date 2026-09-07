@@ -77,8 +77,9 @@ const GAME_CONFIG = {
     },
 
     enemy: {
-        // Health/speed drift upward the longer a run lasts.
+        // Health, damage, and speed drift upward the longer a run lasts.
         healthGrowthPerMinute: 0.18,
+        damageGrowthPerMinute: 0.10,
         speedGrowthPerMinute: 0.06,
         speedGrowthPerPlayerLevel: 0.05,
         maxSpeedMultiplier: 2.2,
@@ -358,6 +359,18 @@ const GAME_CONFIG = {
             { threshold: 0,  value: 1,  color: '#4a90e2', glow: 'rgba(74,144,226,',  radius: 7 },
             { threshold: 8,  value: 5,  color: '#51cf66', glow: 'rgba(81,207,102,',  radius: 9 },
             { threshold: 20, value: 10, color: '#ff6b6b', glow: 'rgba(255,107,107,', radius: 11 }
+        ]
+    },
+
+    endless: {
+        // Every milestone adds a new readable pressure instead of only making
+        // the same wave numbers larger.
+        milestoneSeconds: 180,
+        baselineScalePerStage: 0.08,
+        mutations: [
+            { id: 'reinforced', name: 'Reinforced', desc: 'Enemies have 25% more health.', healthScale: 1.25 },
+            { id: 'ravenous', name: 'Ravenous', desc: 'Enemies deal 18% more damage.', damageScale: 1.18 },
+            { id: 'swift', name: 'Swift', desc: 'Enemies move 14% faster.', speedScale: 1.14 }
         ]
     },
 

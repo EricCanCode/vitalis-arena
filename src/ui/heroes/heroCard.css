@@ -260,3 +260,21 @@
     .vh-card:hover { transform: none; }
     .vh-card:hover .vh-card__sprite { transform: none; }
 }
+
+/* The selection screen is a launch surface, not a gallery. Keep the full
+   roster visible in a normal laptop viewport; the narrow-screen rules above
+   still allow horizontal browsing when five cards cannot physically fit. */
+@media (min-width: 901px) and (min-height: 760px) {
+    #characterSelect h1 { font-size: 2.7em; margin-bottom: 4px; }
+    #characterSelect .game-subtitle { font-size: 1.2em; margin-bottom: 10px; }
+    #characterSelect .progress-note { margin-bottom: 8px; }
+    #characterSelect .mode-picker { margin-bottom: 10px; }
+    #characterSelect .character-grid { gap: 14px; }
+    #characterSelect .vh-card { gap: 7px; padding: 14px 12px 12px; }
+    #characterSelect .vh-card__sprite { width: 72px; height: 72px; padding: 5px; }
+    #characterSelect .vh-card__name { font-size: 1.12rem; }
+    #characterSelect .vh-ability__name { font-size: 0.84rem; }
+    #characterSelect .vh-ability__desc { font-size: 0.75rem; line-height: 1.25; }
+    #characterSelect .vh-stats { gap: 5px; }
+    #characterSelect .vh-stat { font-size: 0.74rem; }
+}
